@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stage0-simulation"
+version = "0.1.0"
+description = "Stage 0 agent primitives simulation sandbox"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.116,<1",
+    "pydantic-settings>=2.10,<3",
+    "uvicorn[standard]>=0.35,<1",
+]
+
+[project.scripts]
+stage0-sim = "stage0_sim.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28,<1",
+    "mypy>=1.17,<2",
+    "pytest>=8.4,<9",
+    "pytest-asyncio>=1.1,<2",
+    "ruff>=0.12,<1",
+]
+
+[tool.setuptools]
+package-dir = {"" = "backend"}
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+
+[tool.setuptools.package-data]
+stage0_sim = ["web/*.css", "web/*.html", "web/*.js", "web/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["backend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["backend/stage0_sim"]

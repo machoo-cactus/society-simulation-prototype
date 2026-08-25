@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "name": "browser-survival-demo",
+  "seed": 20260824,
+  "dt": 1,
+  "speed": 1,
+  "world": {
+    "width": 8,
+    "height": 5,
+    "blocked": [{"x": 3, "y": 0}, {"x": 3, "y": 2}, {"x": 3, "y": 4}],
+    "zones": [
+      {"id": "kitchen", "name": "Kitchen", "type": "KITCHEN", "bounds": {"x": 0, "y": 0, "width": 3, "height": 3}},
+      {"id": "bedroom", "name": "Bedroom", "type": "BEDROOM", "bounds": {"x": 0, "y": 3, "width": 3, "height": 2}},
+      {"id": "office", "name": "Office", "type": "OFFICE", "bounds": {"x": 4, "y": 0, "width": 4, "height": 3}},
+      {"id": "lounge", "name": "Lounge", "type": "LOUNGE", "bounds": {"x": 4, "y": 3, "width": 4, "height": 2}}
+    ],
+    "stations": [
+      {"id": "fridge-1", "name": "Fridge", "position": {"x": 1, "y": 1}, "actions": [{"action": "EAT", "duration": 5, "effect": {"satiety_delta": 60}}]},
+      {"id": "bed-1", "name": "Bed", "position": {"x": 1, "y": 4}, "actions": [{"action": "SLEEP", "duration": 10, "effect": {"energy_target": 100}}]},
+      {"id": "desk-1", "name": "Desk", "position": {"x": 6, "y": 1}, "supported_actions": ["WORK"]},
+      {"id": "sofa-1", "name": "Sofa", "position": {"x": 6, "y": 4}, "actions": [{"action": "RELAX", "duration": 10, "effect": {"stress_delta": -40}}]}
+    ]
+  },
+  "entities": [
+    {
+      "id": "agent-001",
+      "components": {
+        "position": {"x": 6, "y": 1},
+        "homeostasis": {"satiety": 10, "energy": 80, "stress": 20},
+        "activity": {"type": "WORKING"},
+        "plan": {"current": {"action": "WORK", "duration": 3600}},
+        "memory": {"top_k": 3},
+        "metadata": {"display_name": "Alex"}
+      }
+    }
+  ]
+}

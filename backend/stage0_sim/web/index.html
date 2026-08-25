@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Stage 0 Simulation</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Stage 0 telemetry</p>
+        <h1>Agent Primitives Sandbox</h1>
+      </div>
+      <div class="connection" aria-live="polite">
+        <span id="connection-dot" class="connection__dot"></span>
+        <span id="connection-label">No run connected</span>
+        <span id="sequence-label">seq --</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel world-panel">
+        <div class="panel__header">
+          <div>
+            <h2>World</h2>
+            <p id="clock-label">tick 0 / 0.0s</p>
+          </div>
+          <div id="protocol-warning" class="warning" hidden></div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="world-canvas" aria-label="Simulation world"></canvas>
+          <div id="empty-world" class="empty-state">
+            Start the demo or load a scenario to inspect the world.
+          </div>
+        </div>
+        <div class="legend">
+          <span><i class="legend__agent"></i>Agent</span>
+          <span><i class="legend__path"></i>Path</span>
+          <span><i class="legend__blocked"></i>Blocked</span>
+        </div>
+      </section>
+
+      <aside class="panel inspector">
+        <div class="panel__header">
+          <div>
+            <h2>Agent inspector</h2>
+            <p id="agent-location">No agent selected</p>
+          </div>
+          <select id="agent-select" aria-label="Select agent">
+            <option value="">No agents</option>
+          </select>
+        </div>
+
+        <div class="gauges">
+          <div class="gauge">
+            <div><span>Satiety</span><strong id="satiety-value">--</strong></div>
+            <progress id="satiety-gauge" max="100" value="0"></progress>
+            <small>critical at 15 or below</small>
+          </div>
+          <div class="gauge">
+            <div><span>Energy</span><strong id="energy-value">--</strong></div>
+            <progress id="energy-gauge" max="100" value="0"></progress>
+            <small>critical at 15 or below</small>
+          </div>
+          <div class="gauge gauge--stress">
+            <div><span>Stress</span><strong id="stress-value">--</strong></div>
+            <progress id="stress-gauge" max="100" value="0"></progress>
+            <small>critical at 85 or above</small>
+          </div>
+        </div>
+
+        <dl class="facts">
+          <div><dt>Activity</dt><dd id="activity-value">--</dd></div>
+          <div><dt>System 1</dt><dd id="system1-value">--</dd></div>
+          <div><dt>Drive</dt><dd id="drive-value">--</dd></div>
+          <div><dt>Destination</dt><dd id="destination-value">--</dd></div>
+          <div><dt>Memories</dt><dd id="memory-value">--</dd></div>
+        </dl>
+
+        <section class="plan">
+          <h3>System 2 plan</h3>
+          <ol id="plan-list"><li class="muted">No plan available</li></ol>
+        </section>
+
+        <form id="vitals-form" class="vitals-form">
+          <h3>Controlled vital mutation</h3>
+          <label>Satiety <input id="mutate-satiety" type="number" min="0" max="100"></label>
+          <label>Energy <input id="mutate-energy" type="number" min="0" max="100"></label>
+          <label>Stress <input id="mutate-stress" type="number" min="0" max="100"></label>
+          <button type="submit">Apply supplied values</button>
+        </form>
+      </aside>
+
+      <section class="panel controls-panel">
+        <div class="panel__header">
+          <div><h2>Simulation controls</h2><p id="run-label">No active run</p></div>
+          <label class="file-button">
+            Load JSON
+            <input id="scenario-file" type="file" accept=".json,application/json">
+          </label>
+        </div>
+        <div class="controls">
+          <button id="demo-button" class="primary">Start survival demo</button>
+          <button id="pause-button" disabled>Pause</button>
+          <button id="resume-button" disabled>Resume</button>
+          <button id="step-button" disabled>Single step</button>
+          <button id="stop-button" disabled>Stop</button>
+          <label class="speed-control">
+            Speed
+            <select id="speed-select" disabled>
+              <option value="0.5">0.5x</option>
+              <option value="1" selected>1x</option>
+              <option value="2">2x</option>
+              <option value="4">4x</option>
+              <option value="10">10x</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="panel__header">
+          <div><h2>Event and dialogue log</h2><p id="event-count">0 events</p></div>
+          <div class="log-tools">
+            <select id="event-filter" aria-label="Filter events">
+              <option value="all">All events</option>
+              <option value="system1">System 1</option>
+              <option value="plan">Plans</option>
+              <option value="affordance">Affordances</option>
+              <option value="dialogue">Dialogue</option>
+              <option value="errors">Failures</option>
+            </select>
+            <button id="clear-log">Clear</button>
+          </div>
+        </div>
+        <div id="event-log" class="event-log" role="log" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/ui/app.js"></script>
+  </body>
+</html>

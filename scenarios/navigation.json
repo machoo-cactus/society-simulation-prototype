@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "name": "phase-2-four-zone-navigation",
+  "seed": 20260824,
+  "dt": 1.0,
+  "speed": 1.0,
+  "world": {
+    "width": 12,
+    "height": 8,
+    "blocked": [
+      {"x": 5, "y": 0},
+      {"x": 5, "y": 2},
+      {"x": 5, "y": 3},
+      {"x": 5, "y": 4},
+      {"x": 5, "y": 5},
+      {"x": 5, "y": 7}
+    ],
+    "zones": [
+      {
+        "id": "kitchen",
+        "name": "Kitchen",
+        "type": "KITCHEN",
+        "bounds": {"x": 0, "y": 0, "width": 5, "height": 4}
+      },
+      {
+        "id": "office",
+        "name": "Office",
+        "type": "OFFICE",
+        "bounds": {"x": 6, "y": 0, "width": 6, "height": 4}
+      },
+      {
+        "id": "bedroom",
+        "name": "Bedroom",
+        "type": "BEDROOM",
+        "bounds": {"x": 0, "y": 4, "width": 5, "height": 4}
+      },
+      {
+        "id": "lounge",
+        "name": "Lounge",
+        "type": "LOUNGE",
+        "bounds": {"x": 6, "y": 4, "width": 6, "height": 4}
+      }
+    ],
+    "stations": [
+      {
+        "id": "fridge-1",
+        "name": "Kitchen Fridge",
+        "position": {"x": 1, "y": 1},
+        "supported_actions": ["EAT"]
+      },
+      {
+        "id": "desk-1",
+        "name": "Office Desk",
+        "position": {"x": 10, "y": 1},
+        "supported_actions": ["WORK"]
+      },
+      {
+        "id": "bed-1",
+        "name": "Bedroom Bed",
+        "position": {"x": 1, "y": 6},
+        "supported_actions": ["SLEEP"]
+      },
+      {
+        "id": "sofa-1",
+        "name": "Lounge Sofa",
+        "position": {"x": 10, "y": 6},
+        "supported_actions": ["RELAX"]
+      }
+    ]
+  },
+  "entities": [
+    {
+      "id": "agent-001",
+      "components": {
+        "position": {"x": 1, "y": 1},
+        "movement": {"destination": {"x": 10, "y": 6}},
+        "metadata": {"display_name": "Alex"}
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "name": "phase-3-homeostasis",
+  "seed": 20260824,
+  "dt": 1.0,
+  "speed": 1.0,
+  "homeostasis": {
+    "activity_coefficients": {
+      "IDLE": {"satiety": -0.02, "energy": -0.01, "stress": -0.01},
+      "WALKING": {"satiety": -0.05, "energy": -0.04, "stress": 0.01},
+      "WORKING": {"satiety": -0.03, "energy": -0.05, "stress": 0.04},
+      "EATING": {"satiety": 1.0, "energy": -0.005, "stress": -0.01},
+      "SLEEPING": {"satiety": -0.01, "energy": 0.2, "stress": -0.05},
+      "RELAXING": {"satiety": -0.015, "energy": 0.01, "stress": -0.1}
+    }
+  },
+  "entities": [
+    {
+      "id": "agent-001",
+      "components": {
+        "homeostasis": {"satiety": 80.0, "energy": 75.0, "stress": 20.0},
+        "activity": {"type": "WORKING"},
+        "metadata": {"display_name": "Alex"}
+      }
+    }
+  ]
+}

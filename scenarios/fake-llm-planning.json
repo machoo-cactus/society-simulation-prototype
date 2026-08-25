@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "name": "phase-6-fake-llm-planning",
+  "seed": 20260824,
+  "dt": 1.0,
+  "speed": 1.0,
+  "world": {
+    "width": 6,
+    "height": 2,
+    "zones": [
+      {
+        "id": "home",
+        "name": "Home",
+        "type": "LOUNGE",
+        "bounds": {"x": 0, "y": 0, "width": 2, "height": 2}
+      },
+      {
+        "id": "office",
+        "name": "Office",
+        "type": "OFFICE",
+        "bounds": {"x": 4, "y": 0, "width": 2, "height": 2}
+      }
+    ],
+    "stations": [
+      {
+        "id": "desk-1",
+        "name": "Office Desk",
+        "position": {"x": 5, "y": 0},
+        "supported_actions": ["WORK"]
+      },
+      {
+        "id": "fridge-1",
+        "name": "Fridge",
+        "position": {"x": 0, "y": 1},
+        "supported_actions": ["EAT"]
+      },
+      {
+        "id": "bed-1",
+        "name": "Bed",
+        "position": {"x": 1, "y": 1},
+        "supported_actions": ["SLEEP"]
+      },
+      {
+        "id": "sofa-1",
+        "name": "Sofa",
+        "position": {"x": 4, "y": 1},
+        "supported_actions": ["RELAX"]
+      }
+    ]
+  },
+  "entities": [
+    {
+      "id": "agent-001",
+      "components": {
+        "position": {"x": 0, "y": 0},
+        "homeostasis": {"satiety": 80, "energy": 80, "stress": 20},
+        "planner": {
+          "daily_goals": ["Complete focused work at the office"]
+        },
+        "memory": {
+          "top_k": 3,
+          "initial_episodes": [
+            {
+              "text": "Yesterday's focused work session at the office was productive.",
+              "importance": 0.7
+            },
+            {
+              "text": "The office desk is a reliable place for uninterrupted work.",
+              "importance": 0.6
+            }
+          ]
+        },
+        "metadata": {"display_name": "Alex"}
+      }
+    }
+  ]
+}

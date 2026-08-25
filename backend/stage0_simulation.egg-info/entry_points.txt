@@ -1,0 +1,2 @@
+[console_scripts]
+stage0-sim = stage0_sim.cli:main

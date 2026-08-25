@@ -1,0 +1,258 @@
+from dataclasses import dataclass
+
+from stage0_sim.adapters.persistence import SQLiteDatasetStore
+from stage0_sim.application.dataset import AgentStateProjector, DatasetRecord
+from stage0_sim.application.memory import EpisodicMemoryStore
+from stage0_sim.application.runner import SimulationRunner
+from stage0_sim.domain.components import ActivityComponent, PositionComponent
+from stage0_sim.domain.events import DomainEvent, JsonValue
+
+
+@dataclass(slots=True)
+class _ActivityInterval:
+    activity: str
+    start_tick: int
+    start_time: float
+
+
+class RunDataCollector:
+    def __init__(
+        self,
+        *,
+        store: SQLiteDatasetStore,
+        runner: SimulationRunner,
+        scenario: dict[str, JsonValue],
+        projector: AgentStateProjector | None = None,
+    ) -> None:
+        self.store = store
+        self.runner = runner
+        self.projector = projector or AgentStateProjector()
+        self.run_id = runner.events.run_id
+        self._sequence = 0
+        self._finalized = False
+        self._activities: dict[str, _ActivityInterval] = {}
+        store.begin_run(
+            run_id=self.run_id,
+            seed=runner.configuration.seed,
+            dt=runner.configuration.dt,
+            initial_speed=runner.configuration.speed,
+            scenario=scenario,
+        )
+        runner.events.subscribe(self._collect)
+
+    def finalize(self, status: str = "completed") -> None:
+        if self._finalized:
+            return
+        for agent_id in sorted(self._activities):
+            self._close_activity(
+                agent_id,
+                self.runner.clock.tick,
+                self.runner.clock.simulation_time,
+                source_event_id=None,
+            )
+        self.store.complete_run(
+            self.run_id,
+            status=status,
+            final_tick=self.runner.clock.tick,
+            final_simulation_time=self.runner.clock.simulation_time,
+        )
+        self._finalized = True
+
+    def _collect(self, event: DomainEvent) -> None:
+        if self._finalized:
+            return
+        self._append(
+            "event",
+            event.simulation_tick,
+            event.simulation_time,
+            event.agent_id,
+            {
+                "event_type": event.event_type,
+                "wall_time": event.wall_time.isoformat(),
+                "payload": dict(event.payload),
+                "causation_id": event.causation_id,
+                "correlation_id": event.correlation_id,
+            },
+            event.event_id,
+        )
+        self._collect_specialized(event)
+        if event.event_type == "simulation.started":
+            self._initialize_activities(event)
+            self._collect_tick_state(event)
+        elif event.event_type == "activity.changed" and event.agent_id is not None:
+            self._change_activity(event)
+        elif event.event_type == "simulation.tick":
+            self._collect_tick_state(event)
+        elif event.event_type == "simulation.stopped":
+            self.finalize("stopped")
+        if event.event_type in {
+            "simulation.started",
+            "simulation.paused",
+            "simulation.resumed",
+            "simulation.tick",
+        }:
+            self.store.flush()
+
+    def _collect_specialized(self, event: DomainEvent) -> None:
+        record_type: str | None = None
+        if event.event_type == "threshold.breached":
+            record_type = "threshold_crossing"
+        elif event.event_type.startswith(("plan.", "planner.")):
+            record_type = "plan_transition"
+        elif event.event_type.startswith("affordance."):
+            record_type = "affordance"
+        elif event.event_type.startswith("dialogue."):
+            record_type = "dialogue"
+        elif event.event_type.startswith("memory."):
+            record_type = "memory_reference"
+        if record_type is not None:
+            payload = {
+                "event_type": event.event_type,
+                **dict(event.payload),
+            }
+            if event.event_type == "memory.recorded":
+                payload.update(self._memory_payload(event))
+            self._append(
+                record_type,
+                event.simulation_tick,
+                event.simulation_time,
+                event.agent_id,
+                payload,
+                event.event_id,
+            )
+        if event.event_type in {"planner.completed", "planner.failed"}:
+            self._append(
+                "llm_request",
+                event.simulation_tick,
+                event.simulation_time,
+                event.agent_id,
+                {
+                    "operation": "plan",
+                    "status": (
+                        "completed"
+                        if event.event_type == "planner.completed"
+                        else "failed"
+                    ),
+                    **dict(event.payload),
+                },
+                event.event_id,
+            )
+
+    def _collect_tick_state(self, event: DomainEvent) -> None:
+        for agent_id in self.runner.registry.entities():
+            state = self.projector.project(self.runner.registry, agent_id)
+            if not state:
+                continue
+            self._append(
+                "state_vector",
+                event.simulation_tick,
+                event.simulation_time,
+                agent_id,
+                state,
+                event.event_id,
+            )
+            if self.runner.registry.has_component(agent_id, PositionComponent):
+                position = self.runner.registry.get_component(
+                    agent_id, PositionComponent
+                )
+                self._append(
+                    "trajectory",
+                    event.simulation_tick,
+                    event.simulation_time,
+                    agent_id,
+                    {"position": position.coordinate.to_payload()},
+                    event.event_id,
+                )
+
+    def _initialize_activities(self, event: DomainEvent) -> None:
+        for agent_id, activity in self.runner.registry.query(ActivityComponent):
+            self._activities[agent_id] = _ActivityInterval(
+                activity=activity.current.value,
+                start_tick=event.simulation_tick,
+                start_time=event.simulation_time,
+            )
+
+    def _change_activity(self, event: DomainEvent) -> None:
+        agent_id = event.agent_id
+        if agent_id is None:
+            return
+        self._close_activity(
+            agent_id,
+            event.simulation_tick,
+            event.simulation_time,
+            source_event_id=event.event_id,
+        )
+        current = event.payload.get("current")
+        if isinstance(current, str):
+            self._activities[agent_id] = _ActivityInterval(
+                activity=current,
+                start_tick=event.simulation_tick,
+                start_time=event.simulation_time,
+            )
+
+    def _close_activity(
+        self,
+        agent_id: str,
+        end_tick: int,
+        end_time: float,
+        *,
+        source_event_id: str | None,
+    ) -> None:
+        interval = self._activities.pop(agent_id, None)
+        if interval is None:
+            return
+        self._append(
+            "activity_interval",
+            end_tick,
+            end_time,
+            agent_id,
+            {
+                "activity": interval.activity,
+                "start_tick": interval.start_tick,
+                "end_tick": end_tick,
+                "start_time": interval.start_time,
+                "end_time": end_time,
+                "duration": round(max(0.0, end_time - interval.start_time), 12),
+            },
+            source_event_id,
+        )
+
+    def _memory_payload(self, event: DomainEvent) -> dict[str, JsonValue]:
+        memory_id = event.payload.get("memory_id")
+        if not isinstance(memory_id, str):
+            return {}
+        store = self.runner.registry.get_resource(EpisodicMemoryStore)
+        record = next(
+            (candidate for candidate in store.records if candidate.id == memory_id),
+            None,
+        )
+        if record is None:
+            return {}
+        return {
+            "text": record.text,
+            "embedding": list(record.embedding),
+            "memory_metadata": record.metadata,
+        }
+
+    def _append(
+        self,
+        record_type: str,
+        tick: int,
+        simulation_time: float,
+        agent_id: str | None,
+        payload: dict[str, JsonValue],
+        source_event_id: str | None,
+    ) -> None:
+        self._sequence += 1
+        self.store.append(
+            DatasetRecord(
+                run_id=self.run_id,
+                sequence=self._sequence,
+                record_type=record_type,
+                simulation_tick=tick,
+                simulation_time=simulation_time,
+                agent_id=agent_id,
+                payload=payload,
+                source_event_id=source_event_id,
+            )
+        )

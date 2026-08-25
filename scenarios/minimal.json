@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "phase-1-minimal",
+  "seed": 20260824,
+  "dt": 1.0,
+  "speed": 1.0,
+  "entities": [
+    {
+      "id": "agent-001",
+      "components": {
+        "metadata": {
+          "display_name": "Alex"
+        }
+      }
+    }
+  ]
+}

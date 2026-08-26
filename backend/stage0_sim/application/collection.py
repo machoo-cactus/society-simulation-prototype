@@ -38,11 +38,32 @@ class RunDataCollector:
             initial_speed=runner.configuration.speed,
             scenario=scenario,
         )
+        if runner.registry.has_resource(EpisodicMemoryStore):
+            memory_store = runner.registry.get_resource(EpisodicMemoryStore)
+            memory_store.bind_persistence(store, self.run_id)
+            for record in memory_store.records:
+                self._append(
+                    "memory_reference",
+                    0,
+                    record.simulation_time,
+                    record.agent_id,
+                    {
+                        "event_type": "memory.initial",
+                        "memory_id": record.id,
+                        "importance": record.importance,
+                        "text": record.text,
+                        "embedding": list(record.embedding),
+                        "memory_metadata": record.metadata,
+                    },
+                    None,
+                )
         runner.events.subscribe(self._collect)
+        runner.subscribe_tick_completed(self._commit_tick)
 
     def finalize(self, status: str = "completed") -> None:
         if self._finalized:
             return
+        self.runner.flush_pending_memory()
         for agent_id in sorted(self._activities):
             self._close_activity(
                 agent_id,
@@ -81,17 +102,20 @@ class RunDataCollector:
             self._collect_tick_state(event)
         elif event.event_type == "activity.changed" and event.agent_id is not None:
             self._change_activity(event)
-        elif event.event_type == "simulation.tick":
-            self._collect_tick_state(event)
         elif event.event_type == "simulation.stopped":
             self.finalize("stopped")
         if event.event_type in {
             "simulation.started",
             "simulation.paused",
             "simulation.resumed",
-            "simulation.tick",
         }:
             self.store.flush()
+
+    def _commit_tick(self, event: DomainEvent) -> None:
+        if self._finalized:
+            return
+        self._collect_tick_state(event)
+        self.store.flush()
 
     def _collect_specialized(self, event: DomainEvent) -> None:
         record_type: str | None = None
@@ -120,19 +144,24 @@ class RunDataCollector:
                 payload,
                 event.event_id,
             )
-        if event.event_type in {"planner.completed", "planner.failed"}:
+        request_events = {
+            "planner.completed": ("plan", "completed"),
+            "planner.failed": ("plan", "failed"),
+            "planner.cancelled": ("plan", "cancelled"),
+            "dialogue.generated": ("dialogue", "completed"),
+            "dialogue.failed": ("dialogue", "failed"),
+            "dialogue.cancelled": ("dialogue", "cancelled"),
+        }
+        if event.event_type in request_events:
+            operation, status = request_events[event.event_type]
             self._append(
                 "llm_request",
                 event.simulation_tick,
                 event.simulation_time,
                 event.agent_id,
                 {
-                    "operation": "plan",
-                    "status": (
-                        "completed"
-                        if event.event_type == "planner.completed"
-                        else "failed"
-                    ),
+                    "operation": operation,
+                    "status": status,
                     **dict(event.payload),
                 },
                 event.event_id,

@@ -6,6 +6,7 @@ from stage0_sim.domain.components import (
     ActivityType,
     AffordanceExecutionComponent,
     AffordanceRequestComponent,
+    ConversationComponent,
     DriveComponent,
     MovementComponent,
     PlanAction,
@@ -14,9 +15,55 @@ from stage0_sim.domain.components import (
     PositionComponent,
     System1State,
 )
+from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.world import Coordinate, WorldMap, find_path
+
+
+def is_dialogue_capable(registry: Registry, entity_id: str) -> bool:
+    if entity_id not in registry.entities():
+        return False
+    return registry.has_component(
+        entity_id, ConversationComponent
+    ) and registry.has_component(entity_id, DriveComponent)
+
+
+def fail_social_action(
+    context: SystemContext,
+    agent_id: str,
+    target_id: str,
+    reason: str,
+) -> None:
+    if (
+        not context.registry.has_component(agent_id, PlanComponent)
+        or not context.registry.has_component(agent_id, ActivityComponent)
+    ):
+        return
+    plan = context.registry.get_component(agent_id, PlanComponent)
+    action = plan.current
+    if (
+        action is None
+        or action.action is not ActionType.SOCIALIZE
+        or action.target != target_id
+    ):
+        return
+    activity = context.registry.get_component(agent_id, ActivityComponent)
+    previous_activity = activity.current
+    activity.current = plan.previous_activity or ActivityType.IDLE
+    if previous_activity is not activity.current:
+        context.events.emit(
+            "activity.changed",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "previous": previous_activity.value,
+                "current": activity.current.value,
+                "reason": "plan_action_failed",
+            },
+        )
+    PlanExecutionSystem()._fail(context, agent_id, plan, reason)
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +117,13 @@ class PlanExecutionSystem:
     ) -> None:
         action = plan.current
         if action is None:
+            return
+        if action.action is ActionType.SOCIALIZE and (
+            action.target is None
+            or action.target == agent_id
+            or not is_dialogue_capable(context.registry, action.target)
+        ):
+            self._fail(context, agent_id, plan, "invalid_social_target")
             return
         plan.current_started = True
         self._emit_action(context, "plan.action_started", agent_id, action)

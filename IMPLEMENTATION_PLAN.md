@@ -1,5 +1,21 @@
 # Stage 0 Implementation Plan
 
+## Implementation status (2026-08-26)
+
+All ten Stage 0 phases and milestones M1-M5 are implemented and verified in the
+current repository. Provider work uses deterministic macro-work queues: ordered
+micro-tick systems only enqueue planning, embedding, and dialogue work, and the
+runner drains those queues after system execution at an explicit post-tick
+boundary. Survival ticks cancel or defer cognitive work, so System 1 correction
+never calls a provider. The acceptance, capacity fallback, integrated dialogue,
+durable memory, provider-stack isolation, browser telemetry contract, and
+accelerated two-hour stability paths have automated coverage.
+
+Live run/scenario objects remain intentionally process-local. SQLite persists the
+canonical dataset and episodic-memory rows and exposes a rehydration boundary,
+but a stopped simulation cannot be resumed and API restart does not reconstruct
+live runners.
+
 ## 1. Baseline decisions
 
 The prototype will be a single-process, deterministic simulation backend with a browser-based telemetry UI. LLM usage must be isolated behind the macro-clock planner so physical movement, physiology, arbitration, and affordance execution run with zero model calls.
@@ -27,16 +43,16 @@ Additional decisions:
 
 ## 2. Technical architecture
 
-### Proposed stack
+### Implemented stack
 
 - Backend: Python, FastAPI, and asyncio
 - Simulation: typed Python components and ordered systems
 - Pathfinding: deterministic A*
 - Persistence: SQLite for runs, events, plans, and memory metadata
 - Vector memory: in-memory cosine index with embeddings persisted in SQLite
-- Frontend: TypeScript, Vite, and HTML Canvas
+- Frontend: package-data HTML, CSS, plain JavaScript, and HTML Canvas
 - Realtime transport: WebSocket
-- Tests and quality: pytest, Ruff, mypy, and Vitest
+- Tests and quality: pytest, Ruff, and strict mypy
 
 Keep the simulation domain independent of FastAPI, storage, WebSockets, and any particular LLM provider.
 
@@ -57,12 +73,11 @@ backend/
     api/
   tests/
 
-frontend/
-  src/
-    canvas/
-    inspector/
-    event-log/
-    websocket/
+backend/stage0_sim/web/
+  index.html
+  styles.css
+  app.js
+  demo.json
 ```
 
 ### Runtime flow
@@ -80,11 +95,11 @@ Fixed micro-tick
   9. Record domain events and trajectory samples
 
 Macro-clock
-  - Runs only when an agent needs a new deliberative plan or dialogue
-  - Retrieves relevant episodic memories
-  - Calls the configured LLM
-  - Validates output into a constrained plan schema
-  - Never directly mutates positions, vitals, or world state
+  - Ordered systems enqueue bounded memory, plan, and dialogue requests
+  - The runner drains queued work only after the ordered system pass
+  - Survival/correction ticks defer memory work and cancel cognitive work
+  - Results are validated and applied at the explicit post-tick boundary
+  - Provider work never directly mutates positions, vitals, or world state
 
 Telemetry clock
   - Publishes snapshots at 10 Hz
@@ -157,6 +172,11 @@ Initial event types:
 - `planner.failed`
 - `memory.recorded`
 - `dialogue.generated`
+- `dialogue.requested`
+- `dialogue.failed`
+- `dialogue.cancelled`
+- `memory.requested`
+- `memory.failed`
 
 ## 4. Ordered implementation phases
 
@@ -272,7 +292,7 @@ Prefer time-based recovery during activities over instantaneous mutation where p
 
 ### Phase 6: System 2 planner and LLM isolation
 
-Create provider-neutral interfaces:
+Create provider-neutral interfaces and a deterministic queued coordinator:
 
 - `Planner`
 - `DialogueGenerator`
@@ -289,6 +309,10 @@ Planner context is bounded and structured:
 Require schema-constrained output and validate proposed actions against the world model. Add a deterministic scripted planner for development and CI so physical behavior never requires API credentials.
 
 **Gate:** Non-critical agents follow generated routines while System 1 can always clear them.
+
+**Implemented:** Planner requests are queued by `MacroPlanningSystem`; provider
+execution and result application occur at the runner's post-tick boundary.
+Failed and cancelled work carries provider/token/latency metadata when known.
 
 ### Phase 7: Episodic memory and retrieval
 
@@ -312,6 +336,11 @@ score =
 Use deterministic tie-breaking and configurable `top_k`. Embedding generation must remain off the micro-tick path.
 
 **Gate:** Planning and dialogue prompts include relevant recent and semantically related memories.
+
+**Implemented:** Episodic rows are also persisted in SQLite and can rehydrate a
+fresh in-memory index. Initial scenario episodes and generated dialogue episodes
+are included in canonical export. This is memory rehydration, not simulation
+checkpoint/resume.
 
 ### Phase 8: Telemetry backend and WebSocket protocol
 
@@ -415,4 +444,6 @@ The main end-to-end acceptance test is:
 | M4: Observable prototype | Phases 8-9 | Browser reflects authoritative state and events at 10 Hz |
 | M5: Research baseline | Phase 10 and full verification | Long-run data export is reproducible and success metrics pass |
 
-The critical path is M1 -> M2 -> M3 -> M4 -> M5. UI and real LLM integration should begin only after the headless survival loop is deterministic and tested.
+The critical path M1 -> M2 -> M3 -> M4 -> M5 is complete for the deterministic
+fake/scripted-provider baseline. External real-LLM adapters and restart-safe live
+run checkpointing remain optional future work rather than Stage 0 claims.

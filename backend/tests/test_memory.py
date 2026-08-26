@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from stage0_sim.adapters.llm import FakeEmbeddingProvider
+from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.application.cognition import (
     DialogueContext,
     DialogueResult,
@@ -127,6 +128,35 @@ def test_retrieval_ties_are_deterministic() -> None:
     assert [result.record.id for result in results] == [first.id, second.id]
 
 
+def test_saved_memory_survives_close_without_run_finalization(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "durable-memory.sqlite3"
+    persistence = SQLiteDatasetStore(database)
+    persistence.begin_run(
+        run_id="durable-memory",
+        seed=1,
+        dt=1,
+        initial_speed=1,
+        scenario={"name": "durability"},
+    )
+    memory = EpisodicMemoryStore(FakeEmbeddingProvider())
+    memory.bind_persistence(persistence, "durable-memory")
+    recorded = memory.record(
+        agent_id="agent",
+        text="Persist this before the run finalizes.",
+        simulation_time=0,
+        importance=0.8,
+    )
+    persistence.close()
+
+    reopened = SQLiteDatasetStore(database)
+    persisted = reopened.load_memories("durable-memory")
+    reopened.close()
+
+    assert persisted == (recorded,)
+
+
 def test_meaningful_events_are_recorded_but_routine_ticks_are_not() -> None:
     scenario_path = Path(__file__).parents[2] / "scenarios" / "system1-preemption.json"
     embedding_provider = FakeEmbeddingProvider()
@@ -136,7 +166,7 @@ def test_meaningful_events_are_recorded_but_routine_ticks_are_not() -> None:
     )
     store = runner.registry.get_resource(EpisodicMemoryStore)
 
-    runner.run_for(10)
+    runner.run_for(11)
 
     event_types = [record.metadata["event_type"] for record in store.records]
     assert "threshold.breached" in event_types
@@ -213,9 +243,9 @@ def test_embedding_failure_is_observable_and_does_not_stop_ticks() -> None:
         embedding_provider=FailingEmbeddingProvider(),
     )
 
-    runner.run_for(2)
+    runner.run_for(11)
 
-    assert runner.clock.tick == 2
+    assert runner.clock.tick == 11
     failures = [
         event for event in runner.events.events if event.event_type == "memory.failed"
     ]

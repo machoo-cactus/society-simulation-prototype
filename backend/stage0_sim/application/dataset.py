@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from stage0_sim.domain.components import (
     ActivityComponent,
+    ConversationComponent,
     DriveComponent,
     HomeostasisComponent,
     MovementComponent,
@@ -97,6 +98,18 @@ class AgentStateProjector:
                 "request_count": planner.request_count,
                 "failure_count": planner.failure_count,
                 "last_planned_at": planner.last_planned_at,
+                "request_pending": planner.request_pending,
+            }
+        if registry.has_component(agent_id, ConversationComponent):
+            conversation = registry.get_component(
+                agent_id, ConversationComponent
+            )
+            state["conversation"] = {
+                "turn_count": len(conversation.turns),
+                "latest_turn": (
+                    conversation.turns[-1] if conversation.turns else None
+                ),
+                "request_pending": conversation.request_pending,
             }
         return state
 

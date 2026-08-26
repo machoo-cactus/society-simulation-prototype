@@ -5,9 +5,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from stage0_sim.application.dataset import DATASET_SCHEMA_VERSION, DatasetRecord
+from stage0_sim.application.memory import MemoryRecord
 from stage0_sim.domain.events import JsonValue
 
-_DATABASE_SCHEMA_VERSION = 1
+_DATABASE_SCHEMA_VERSION = 2
 
 
 class SQLiteDatasetStore:
@@ -201,6 +202,52 @@ class SQLiteDatasetStore:
             },
         }
 
+    def save_memory(self, run_id: str, record: MemoryRecord) -> None:
+        self._connection.execute(
+            """
+            INSERT OR REPLACE INTO episodic_memories (
+                run_id, memory_id, agent_id, simulation_time, importance,
+                text, embedding_json, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                record.id,
+                record.agent_id,
+                record.simulation_time,
+                record.importance,
+                record.text,
+                _json(list(record.embedding)),
+                _json(record.metadata),
+            ),
+        )
+        self._connection.commit()
+
+    def load_memories(self, run_id: str) -> tuple[MemoryRecord, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT * FROM episodic_memories
+            WHERE run_id = ?
+            ORDER BY memory_id
+            """,
+            (run_id,),
+        )
+        return tuple(
+            MemoryRecord(
+                id=str(row["memory_id"]),
+                agent_id=str(row["agent_id"]),
+                text=str(row["text"]),
+                simulation_time=float(row["simulation_time"]),
+                importance=float(row["importance"]),
+                embedding=tuple(
+                    float(value)
+                    for value in json.loads(str(row["embedding_json"]))
+                ),
+                metadata=json.loads(str(row["metadata_json"])),
+            )
+            for row in rows
+        )
+
     def close(self) -> None:
         self._connection.close()
 
@@ -245,6 +292,28 @@ class SQLiteDatasetStore:
                 CREATE INDEX IF NOT EXISTS records_run_agent_tick
                 ON records(run_id, agent_id, simulation_tick);
                 PRAGMA user_version = 1;
+                """
+            )
+            self._connection.commit()
+            current = 1
+        if current < 2:
+            self._connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS episodic_memories (
+                    run_id TEXT NOT NULL,
+                    memory_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    simulation_time REAL NOT NULL,
+                    importance REAL NOT NULL,
+                    text TEXT NOT NULL,
+                    embedding_json TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    PRIMARY KEY (run_id, memory_id),
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+                );
+                CREATE INDEX IF NOT EXISTS memories_run_agent_time
+                ON episodic_memories(run_id, agent_id, simulation_time);
+                PRAGMA user_version = 2;
                 """
             )
             self._connection.commit()

@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass
+from typing import Protocol
 
 from stage0_sim.application.cognition import EmbeddingProvider
 from stage0_sim.domain.events import JsonValue
@@ -45,6 +46,12 @@ class RetrievedMemory:
     recency_score: float
 
 
+class MemoryPersistence(Protocol):
+    def save_memory(self, run_id: str, record: MemoryRecord) -> None: ...
+
+    def load_memories(self, run_id: str) -> tuple[MemoryRecord, ...]: ...
+
+
 class EpisodicMemoryStore:
     def __init__(
         self,
@@ -55,10 +62,42 @@ class EpisodicMemoryStore:
         self.configuration = configuration or MemoryConfiguration()
         self._records: list[MemoryRecord] = []
         self._next_id = 1
+        self._persistence: MemoryPersistence | None = None
+        self._run_id: str | None = None
 
     @property
     def records(self) -> tuple[MemoryRecord, ...]:
         return tuple(self._records)
+
+    def bind_persistence(
+        self,
+        persistence: MemoryPersistence,
+        run_id: str,
+        *,
+        rehydrate: bool = False,
+    ) -> None:
+        if self._persistence is not None:
+            raise RuntimeError("memory persistence is already bound")
+        self._persistence = persistence
+        self._run_id = run_id
+        if rehydrate:
+            self.rehydrate(persistence.load_memories(run_id))
+        for record in self._records:
+            persistence.save_memory(run_id, record)
+
+    def rehydrate(self, records: tuple[MemoryRecord, ...]) -> None:
+        existing_ids = {record.id for record in self._records}
+        for record in sorted(records, key=lambda item: item.id):
+            if record.id not in existing_ids:
+                self._records.append(record)
+                existing_ids.add(record.id)
+        numeric_ids = [
+            int(record.id.removeprefix("memory-"))
+            for record in self._records
+            if record.id.startswith("memory-")
+            and record.id.removeprefix("memory-").isdigit()
+        ]
+        self._next_id = max(numeric_ids, default=0) + 1
 
     def record(
         self,
@@ -85,6 +124,8 @@ class EpisodicMemoryStore:
         )
         self._next_id += 1
         self._records.append(record)
+        if self._persistence is not None and self._run_id is not None:
+            self._persistence.save_memory(self._run_id, record)
         return record
 
     def retrieve(

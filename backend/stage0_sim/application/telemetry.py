@@ -5,6 +5,7 @@ from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import SimulationRunner
 from stage0_sim.domain.components import (
     ActivityComponent,
+    ConversationComponent,
     DriveComponent,
     HomeostasisComponent,
     MemoryComponent,
@@ -206,6 +207,13 @@ def build_agent_snapshot(
             "count": sum(
                 record.agent_id == agent_id for record in store.records
             )
+        }
+    if registry.has_component(agent_id, ConversationComponent):
+        conversation = registry.get_component(agent_id, ConversationComponent)
+        payload["conversation"] = {
+            "turn_count": len(conversation.turns),
+            "latest_turn": conversation.turns[-1] if conversation.turns else None,
+            "request_pending": conversation.request_pending,
         }
     return payload
 

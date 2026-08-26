@@ -23,11 +23,19 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     with TestClient(app) as client:
         script = client.get("/ui/app.js")
         styles = client.get("/ui/styles.css")
+        telemetry_hz = app.state.simulation_manager.telemetry_hz
 
     assert script.status_code == 200
     assert "javascript" in script.headers["content-type"]
     assert "function normalizeEnvelope" in script.text
     assert "function normalizeSnapshot" in script.text
+    assert 'if (message.type === "world_snapshot")' in script.text
+    assert "state.snapshot = normalizeSnapshot" in script.text
+    assert "renderInspector();" in script.text
+    assert "drawWorld();" in script.text
+    assert 'setGauge("satiety", agent?.homeostasis.satiety);' in script.text
+    assert 'elements[`${name}-gauge`].value = value;' in script.text
+    assert telemetry_hz == 10.0
     assert "Telemetry gap" in script.text
     assert "scheduleReconnect" in script.text
     assert styles.status_code == 200

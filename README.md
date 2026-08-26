@@ -86,8 +86,11 @@ The preemption scenario now continues through `affordance.started`,
 Station-driven meter updates also use the canonical `homeostasis.changed` event and replace normal
 activity integration for that tick, preventing recovery effects from being counted twice.
 
-Phase 6 adds an event-driven macro planner with provider-neutral planner, dialogue, and embedding
-interfaces. Since no external LLM is required, the default provider is deterministic and local:
+Phase 6 adds an event-driven macro-work coordinator with provider-neutral planner, dialogue, and
+embedding interfaces. Ordered micro-tick systems only enqueue requests. Providers are drained
+after the system pass at an explicit post-tick boundary; survival ticks cancel cognitive work and
+defer memory embedding until a later normal tick. Since no external LLM is required, the default
+provider is deterministic and local:
 
 ```powershell
 .\.venv\Scripts\stage0-sim.exe run .\scenarios\fake-llm-planning.json --ticks 10
@@ -107,9 +110,13 @@ These endpoints return deterministic structured responses and require no API key
 connection to an external model provider.
 
 Phase 7 adds per-agent episodic memory with raw text, structured event metadata, simulation time,
-importance, and provider-generated embeddings. Retrieval ranks candidates by configurable cosine
-similarity, recency decay, and importance, with deterministic tie-breaking. Planner and dialogue
-contexts receive only the configured `top_k` memories.
+importance, and provider-generated embeddings. The active cosine index remains in memory, while
+every initial and generated episode is also stored in a dedicated SQLite table. Persisted rows can
+rehydrate a fresh index through the memory-store boundary. This does not checkpoint positions,
+clocks, queued actions, or providers and therefore does not make stopped simulations resumable.
+Retrieval ranks candidates by configurable cosine similarity, recency decay, and importance, with
+deterministic tie-breaking. Planner and dialogue contexts receive only the configured `top_k`
+memories.
 
 ```json
 {
@@ -121,6 +128,11 @@ contexts receive only the configured `top_k` memories.
   }
 }
 ```
+
+`SOCIALIZE(target, duration)` validates a real agent target, queues a dialogue request, emits
+`dialogue.requested`, `dialogue.generated`/`dialogue.failed`, updates both agents' conversation
+state, and records generated dialogue as an episodic memory on a later macro boundary. Dialogue
+events flow through WebSocket telemetry and canonical datasets.
 
 The fake embedding provider remains the default during prototype development. Memory and cognition
 depend only on provider protocols, so the final local llama.cpp integration can use its
@@ -192,8 +204,9 @@ The ECS-aware projection is isolated in `AgentStateProjector`; adding an interna
 not alter or break the versioned dataset contract. SQLite migrations reject newer unsupported
 schemas explicitly, while JSON payloads preserve additive fields for forward-compatible analysis.
 
-Headless CLI runs persist automatically under `data/runs`. A custom database and versioned JSONL
-export can be selected explicitly:
+Headless CLI runs persist automatically under `data/runs`. API run/scenario management is
+process-local; restarting the API does not recreate live or stopped runners. A custom database and
+versioned JSONL export can be selected explicitly:
 
 ```powershell
 .\.venv\Scripts\stage0-sim.exe run .\scenarios\system1-preemption.json `

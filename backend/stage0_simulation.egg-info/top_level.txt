@@ -1,2 +1,0 @@
-stage0_sim
-tests

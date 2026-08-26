@@ -16,6 +16,7 @@ class FakePlanner:
 
     def __init__(self) -> None:
         self.call_count = 0
+        self.provider_name = "fake"
 
     def plan(self, context: PlannerContext) -> PlanResult:
         self.call_count += 1
@@ -67,6 +68,7 @@ class ScriptedPlanner:
     actions: tuple[PlanAction, ...]
     rationale: str = "Deterministic scripted plan."
     call_count: int = 0
+    provider_name: str = "scripted"
 
     def plan(self, context: PlannerContext) -> PlanResult:
         del context
@@ -81,12 +83,14 @@ class ScriptedPlanner:
 class FakeDialogueGenerator:
     def __init__(self) -> None:
         self.call_count = 0
+        self.provider_name = "fake"
 
     def generate(self, context: DialogueContext) -> DialogueResult:
         self.call_count += 1
         prompt = " ".join(context.prompt.split())
         return DialogueResult(
-            text=f"{context.agent_id} responds at t={context.simulation_time:g}: {prompt}"
+            text=f"{context.agent_id} responds at t={context.simulation_time:g}: {prompt}",
+            provider="fake",
         )
 
 
@@ -96,6 +100,7 @@ class FakeEmbeddingProvider:
             raise ValueError("embedding dimensions must be greater than zero")
         self.dimensions = dimensions
         self.call_count = 0
+        self.provider_name = "fake"
 
     def embed(self, texts: tuple[str, ...]) -> tuple[tuple[float, ...], ...]:
         self.call_count += 1

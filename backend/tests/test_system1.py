@@ -221,6 +221,9 @@ def test_system1_hysteresis_holds_until_recovery_threshold() -> None:
 
     state.satiety = 30
     runner.run_for(1)
+    assert drive.state is System1State.EXECUTING_CORRECTION
+
+    runner.run_for(2)
     assert drive.state is System1State.NORMAL
     assert drive.active_drive is None
     assert sum(

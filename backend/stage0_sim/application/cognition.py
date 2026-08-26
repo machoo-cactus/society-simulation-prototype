@@ -68,10 +68,27 @@ class DialogueContext:
 @dataclass(frozen=True, slots=True)
 class DialogueResult:
     text: str
+    provider: str = "unknown"
+    latency_ms: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 class PlannerError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: str | None = None,
+        latency_ms: float | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.latency_ms = latency_ms
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
 
 
 class PlanValidationError(ValueError):
@@ -79,7 +96,20 @@ class PlanValidationError(ValueError):
 
 
 class DialogueError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: str | None = None,
+        latency_ms: float | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.latency_ms = latency_ms
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
 
 
 class EmbeddingError(RuntimeError):

@@ -1,8 +1,6 @@
 import json
 from dataclasses import dataclass
 
-from stage0_sim.application.cognition import EmbeddingError
-from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.domain.components import MemoryComponent
 from stage0_sim.domain.events import DomainEvent, JsonValue
 from stage0_sim.domain.systems import SystemContext
@@ -21,12 +19,17 @@ _EVENT_IMPORTANCE = {
 
 @dataclass(slots=True)
 class MemoryRecordingSystem:
-    store: EpisodicMemoryStore
     name: str = "memory_recording"
     order: int = 290
     _event_cursor: int = 0
 
     def update(self, context: SystemContext) -> None:
+        from stage0_sim.application.macro_work import (
+            MacroWorkCoordinator,
+            MemoryWork,
+        )
+
+        coordinator = context.registry.get_resource(MacroWorkCoordinator)
         events = context.events.events
         pending = events[self._event_cursor :]
         self._event_cursor = len(events)
@@ -40,8 +43,20 @@ class MemoryRecordingSystem:
             ):
                 continue
             text = _event_text(event)
-            try:
-                record = self.store.record(
+            requested = context.events.emit(
+                "memory.requested",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=event.agent_id,
+                payload={
+                    "source_event_type": event.event_type,
+                    "importance": _EVENT_IMPORTANCE[event.event_type],
+                },
+                causation_id=event.event_id,
+                correlation_id=event.correlation_id,
+            )
+            coordinator.enqueue_memory(
+                MemoryWork(
                     agent_id=event.agent_id,
                     text=text,
                     simulation_time=event.simulation_time,
@@ -51,33 +66,9 @@ class MemoryRecordingSystem:
                         "event_type": event.event_type,
                         "payload": dict(event.payload),
                     },
-                )
-            except EmbeddingError as error:
-                context.events.emit(
-                    "memory.failed",
-                    simulation_tick=context.clock.tick,
-                    simulation_time=context.clock.simulation_time,
-                    agent_id=event.agent_id,
-                    payload={
-                        "source_event_type": event.event_type,
-                        "message": str(error),
-                    },
-                    causation_id=event.event_id,
+                    requested_event_id=requested.event_id,
                     correlation_id=event.correlation_id,
                 )
-                continue
-            context.events.emit(
-                "memory.recorded",
-                simulation_tick=context.clock.tick,
-                simulation_time=context.clock.simulation_time,
-                agent_id=event.agent_id,
-                payload={
-                    "memory_id": record.id,
-                    "source_event_type": event.event_type,
-                    "importance": record.importance,
-                },
-                causation_id=event.event_id,
-                correlation_id=event.correlation_id,
             )
 
 

@@ -10,6 +10,7 @@ from stage0_sim.domain.components import (
     HomeostasisComponent,
     MovementComponent,
     PlanComponent,
+    PlannerComponent,
     PositionComponent,
     System1Configuration,
     System1State,
@@ -72,6 +73,10 @@ class System1ArbitrationSystem:
                 elif drive.active_drive is not None and self._is_recovered(
                     homeostasis, drive.active_drive, configuration
                 ):
+                    if context.registry.has_component(
+                        agent_id, AffordanceExecutionComponent
+                    ):
+                        continue
                     self._resolve(context, agent_id, drive)
                     continue
 
@@ -203,6 +208,23 @@ class System1ArbitrationSystem:
         candidates: list[tuple[int, str, AffordanceStation]] = []
         for station in world.stations:
             if not station.available or corrective_action not in station.supported_actions:
+                continue
+            active_count = sum(
+                execution.station_id == station.id
+                for other_id, execution in context.registry.query(
+                    AffordanceExecutionComponent
+                )
+                if other_id != agent_id
+            )
+            reserved_count = sum(
+                other_drive.target_station_id == station.id
+                for other_id, other_drive in context.registry.query(DriveComponent)
+                if other_id != agent_id
+                and not context.registry.has_component(
+                    other_id, AffordanceExecutionComponent
+                )
+            )
+            if active_count + reserved_count >= station.capacity:
                 continue
             path = find_path(world.grid, origin, station.position, occupied)
             if path is not None:
@@ -343,6 +365,10 @@ class System1ArbitrationSystem:
                 {"reason": "system1_preemption", "cleared_actions": cleared_count},
             )
             System1ArbitrationSystem._clear_activity(context, agent_id)
+            if context.registry.has_component(agent_id, PlannerComponent):
+                context.registry.get_component(
+                    agent_id, PlannerComponent
+                ).needs_plan = True
 
     @staticmethod
     def _clear_affordance_request(context: SystemContext, agent_id: str) -> None:

@@ -6,8 +6,18 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from stage0_sim.adapters.llm import FakeEmbeddingProvider, FakePlanner
-from stage0_sim.application.cognition import EmbeddingProvider, Planner
+from stage0_sim.adapters.llm import (
+    FakeDialogueGenerator,
+    FakeEmbeddingProvider,
+    FakePlanner,
+)
+from stage0_sim.application.cognition import (
+    DialogueGenerator,
+    EmbeddingProvider,
+    Planner,
+)
+from stage0_sim.application.dialogue import MacroDialogueSystem
+from stage0_sim.application.macro_work import MacroWorkCoordinator
 from stage0_sim.application.memory import EpisodicMemoryStore, MemoryConfiguration
 from stage0_sim.application.memory_recording import (
     MemoryRecordingSystem,
@@ -20,6 +30,7 @@ from stage0_sim.domain.components import (
     ActivityComponent,
     ActivityRates,
     ActivityType,
+    ConversationComponent,
     DriveComponent,
     DriveThreshold,
     DriveType,
@@ -319,6 +330,7 @@ def create_runner(
     speed: float | None = None,
     run_id: str | None = None,
     planner: Planner | None = None,
+    dialogue_generator: DialogueGenerator | None = None,
     embedding_provider: EmbeddingProvider | None = None,
 ) -> SimulationRunner:
     registry = Registry()
@@ -327,20 +339,22 @@ def create_runner(
         embedding_provider or FakeEmbeddingProvider(),
         scenario.memory.to_domain(),
     )
+    macro_work = MacroWorkCoordinator(
+        planner=planner or FakePlanner(),
+        dialogue_generator=dialogue_generator or FakeDialogueGenerator(),
+        memory_store=memory_store,
+    )
     registry.set_resource(memory_store)
+    registry.set_resource(macro_work)
     registry.set_resource(scenario.homeostasis.to_domain())
     registry.set_resource(scenario.system1.to_domain())
     systems.add(MovementActivitySystem())
     systems.add(HomeostasisSystem())
     systems.add(TimedPlanActionSystem())
     systems.add(System1ArbitrationSystem())
-    systems.add(MemoryRecordingSystem(store=memory_store))
-    systems.add(
-        MacroPlanningSystem(
-            planner=planner or FakePlanner(),
-            memory_store=memory_store,
-        )
-    )
+    systems.add(MemoryRecordingSystem())
+    systems.add(MacroDialogueSystem())
+    systems.add(MacroPlanningSystem())
     world = _build_world(scenario.world) if scenario.world is not None else None
     if world is not None:
         registry.set_resource(world)
@@ -469,6 +483,19 @@ def create_runner(
                     metadata=observation_metadata("scenario"),
                 )
 
+        if "conversation" in raw_components:
+            conversation_definition = _validate_component(
+                ConversationComponentDefinition,
+                raw_components.pop("conversation"),
+                entity_id,
+            )
+            registry.add_component(
+                entity_id,
+                ConversationComponent(turns=list(conversation_definition.turns)),
+            )
+        elif not registry.has_component(entity_id, ConversationComponent):
+            registry.add_component(entity_id, ConversationComponent())
+
         if (
             "homeostasis" in entity_definition.components
             and "position" in entity_definition.components
@@ -559,6 +586,12 @@ class MemoryComponentDefinition(BaseModel):
 
     top_k: int = Field(default=5, gt=0)
     initial_episodes: list[InitialMemoryDefinition] = Field(default_factory=list)
+
+
+class ConversationComponentDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    turns: list[str] = Field(default_factory=list)
 
 
 def _validate_component[DefinitionT: BaseModel](

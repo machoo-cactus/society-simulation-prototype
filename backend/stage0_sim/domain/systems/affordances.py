@@ -277,6 +277,24 @@ class AffordanceExecutionSystem:
             request.status = "completed"
         _restore_activity(context, agent_id, execution, "affordance_completed")
         context.registry.remove_component(agent_id, AffordanceExecutionComponent)
+        if execution.source == "system1":
+            from stage0_sim.domain.systems.system1 import System1ArbitrationSystem
+
+            drive = context.registry.get_component(agent_id, DriveComponent)
+            configuration = context.registry.get_resource(System1Configuration)
+            if (
+                drive.active_drive is not None
+                and System1ArbitrationSystem._is_recovered(
+                    homeostasis,
+                    drive.active_drive,
+                    configuration,
+                )
+            ):
+                System1ArbitrationSystem()._resolve(
+                    context,
+                    agent_id,
+                    drive,
+                )
 
     @staticmethod
     def _precondition_failure(

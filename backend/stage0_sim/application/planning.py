@@ -1,18 +1,14 @@
 from dataclasses import dataclass
 
 from stage0_sim.application.cognition import (
-    EmbeddingError,
     LocationContext,
-    Planner,
     PlannerContext,
-    PlannerError,
     PlanResult,
     PlanValidationError,
     StationContext,
     VitalContext,
     ZoneContext,
 )
-from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.domain.components import (
     ActionType,
     AffordanceExecutionComponent,
@@ -25,22 +21,28 @@ from stage0_sim.domain.components import (
     PositionComponent,
     System1State,
 )
+from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.systems.plans import is_dialogue_capable
 from stage0_sim.domain.world import WorldMap
 
 
 @dataclass(slots=True)
 class MacroPlanningSystem:
-    planner: Planner
-    memory_store: EpisodicMemoryStore
     name: str = "macro_planning"
     order: int = 300
 
     def update(self, context: SystemContext) -> None:
+        from stage0_sim.application.macro_work import (
+            MacroWorkCoordinator,
+            PlanningWork,
+        )
+
         if not context.registry.has_resource(WorldMap):
             return
         world = context.registry.get_resource(WorldMap)
+        coordinator = context.registry.get_resource(MacroWorkCoordinator)
         for agent_id in context.registry.query_entities(
             PlannerComponent,
             PlanComponent,
@@ -53,6 +55,7 @@ class MacroPlanningSystem:
             drive = context.registry.get_component(agent_id, DriveComponent)
             if (
                 not planner_state.needs_plan
+                or planner_state.request_pending
                 or plan.current is not None
                 or plan.queue
                 or drive.state is not System1State.NORMAL
@@ -62,101 +65,31 @@ class MacroPlanningSystem:
             ):
                 continue
 
-            memories: tuple[str, ...] = ()
+            memory_query: str | None = None
+            top_k = 1
             if context.registry.has_component(agent_id, MemoryComponent):
                 memory = context.registry.get_component(agent_id, MemoryComponent)
-                query = _memory_query(context, agent_id, planner_state)
-                try:
-                    retrieved = self.memory_store.retrieve(
-                        agent_id=agent_id,
-                        query=query,
-                        simulation_time=context.clock.simulation_time,
-                        top_k=memory.top_k,
-                    )
-                except EmbeddingError as error:
-                    context.events.emit(
-                        "memory.retrieval_failed",
-                        simulation_tick=context.clock.tick,
-                        simulation_time=context.clock.simulation_time,
-                        agent_id=agent_id,
-                        payload={"message": str(error), "query": query},
-                    )
-                    retrieved = ()
-                memories = tuple(item.record.text for item in retrieved)
-                if retrieved:
-                    context.events.emit(
-                        "memory.retrieved",
-                        simulation_tick=context.clock.tick,
-                        simulation_time=context.clock.simulation_time,
-                        agent_id=agent_id,
-                        payload={
-                            "query": query,
-                            "memory_ids": [
-                                item.record.id for item in retrieved
-                            ],
-                            "scores": [item.score for item in retrieved],
-                        },
-                    )
-            planner_context = _build_context(
-                context, agent_id, world, planner_state, memories
+                memory_query = _memory_query(context, agent_id, planner_state)
+                top_k = memory.top_k
+            planner_context = build_planner_context(
+                context, agent_id, world, planner_state
             )
-            requested = context.events.emit(
-                "planner.requested",
-                simulation_tick=context.clock.tick,
-                simulation_time=context.clock.simulation_time,
-                agent_id=agent_id,
-                payload={
-                    "daily_goals": list(planner_context.daily_goals),
-                    "zone_count": len(planner_context.zones),
-                    "station_count": len(planner_context.stations),
-                    "memory_count": len(planner_context.memories),
-                },
-            )
-            planner_state.request_count += 1
-            try:
-                result = self.planner.plan(planner_context)
-                validate_plan(result, world, set(context.registry.entities()))
-            except (PlannerError, PlanValidationError) as error:
-                planner_state.failure_count += 1
-                context.events.emit(
-                    "planner.failed",
-                    simulation_tick=context.clock.tick,
-                    simulation_time=context.clock.simulation_time,
+            planner_state.request_pending = True
+            coordinator.enqueue_planning(
+                PlanningWork(
                     agent_id=agent_id,
-                    payload={
-                        "error_type": type(error).__name__,
-                        "message": str(error),
-                    },
-                    causation_id=requested.event_id,
-                    correlation_id=requested.event_id,
+                    context=planner_context,
+                    memory_query=memory_query,
+                    top_k=top_k,
                 )
-                continue
-
-            plan.queue.extend(result.actions)
-            planner_state.needs_plan = False
-            planner_state.last_planned_at = context.clock.simulation_time
-            context.events.emit(
-                "planner.completed",
-                simulation_tick=context.clock.tick,
-                simulation_time=context.clock.simulation_time,
-                agent_id=agent_id,
-                payload={
-                    "rationale": result.rationale,
-                    "actions": [_action_payload(action) for action in result.actions],
-                    "provider": result.provider,
-                    "latency_ms": result.latency_ms,
-                    "input_tokens": result.input_tokens,
-                    "output_tokens": result.output_tokens,
-                },
-                causation_id=requested.event_id,
-                correlation_id=requested.event_id,
             )
 
 
 def validate_plan(
     result: PlanResult,
     world: WorldMap,
-    agent_ids: set[str],
+    registry: Registry,
+    agent_id: str,
 ) -> None:
     if not result.actions:
         raise PlanValidationError("planner returned an empty action list")
@@ -184,11 +117,11 @@ def validate_plan(
             raise PlanValidationError(f"{action.action.value} requires a duration")
 
         if action.action is ActionType.SOCIALIZE and (
-            action.target is None or action.target not in agent_ids
+            action.target is None
+            or action.target == agent_id
+            or not is_dialogue_capable(registry, action.target)
         ):
-            raise PlanValidationError(
-                f"SOCIALIZE target does not exist: {action.target}"
-            )
+            raise PlanValidationError("invalid_social_target")
         if action.action in affordance_actions and action.target is not None:
             station = stations.get(action.target)
             if station is None or action.action.value not in station.supported_actions:
@@ -198,7 +131,7 @@ def validate_plan(
                 )
 
 
-def _build_context(
+def build_planner_context(
     context: SystemContext,
     agent_id: str,
     world: WorldMap,
@@ -254,7 +187,7 @@ def _memory_query(
     )
 
 
-def _action_payload(action: PlanAction) -> dict[str, JsonValue]:
+def action_payload(action: PlanAction) -> dict[str, JsonValue]:
     payload: dict[str, JsonValue] = {"action": action.action.value}
     if action.target is not None:
         payload["target"] = action.target

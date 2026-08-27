@@ -2,6 +2,7 @@ import asyncio
 import json
 import sqlite3
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,7 @@ from stage0_sim.domain.ecs import Registry
 
 
 def scenario_path(name: str) -> Path:
-    return Path(__file__).parents[2] / "scenarios" / name
+    return Path(__file__).parents[1] / "scenarios" / name
 
 
 def collect_run(
@@ -182,12 +183,7 @@ def test_telemetry_sampling_does_not_add_canonical_records(tmp_path: Path) -> No
 
 def test_api_exposes_summary_and_versioned_jsonl_export() -> None:
     demo = json.loads(
-        (
-            Path(__file__).parents[1]
-            / "stage0_sim"
-            / "web"
-            / "demo.json"
-        ).read_text(encoding="utf-8")
+        files("stage0_sim").joinpath("web", "demo.json").read_text(encoding="utf-8")
     )
     with TestClient(app) as client:
         scenario_id = client.post(

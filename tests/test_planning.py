@@ -66,7 +66,7 @@ def test_fake_llm_endpoints_return_deterministic_structured_results() -> None:
 
 
 def test_fake_planner_generates_and_executes_work_routine() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "fake-llm-planning.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "fake-llm-planning.json"
     fake_planner = FakePlanner()
     runner = create_runner(
         load_scenario(scenario_path),
@@ -92,7 +92,7 @@ def test_fake_planner_generates_and_executes_work_routine() -> None:
 
 
 def test_physical_scenario_makes_no_planner_calls() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "navigation.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "navigation.json"
     fake_planner = FakePlanner()
     runner = create_runner(load_scenario(scenario_path), planner=fake_planner)
 
@@ -105,7 +105,7 @@ def test_physical_scenario_makes_no_planner_calls() -> None:
 
 
 def test_invalid_planner_output_emits_failure_without_stopping_ticks() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "fake-llm-planning.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "fake-llm-planning.json"
     invalid_planner = ScriptedPlanner(
         actions=(PlanAction(ActionType.MOVE_TO, target="missing-place"),)
     )
@@ -126,7 +126,7 @@ def test_invalid_planner_output_emits_failure_without_stopping_ticks() -> None:
 
 
 def test_system1_clears_generated_plan_without_another_planner_call() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "fake-llm-planning.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "fake-llm-planning.json"
     fake_planner = FakePlanner()
     runner = create_runner(load_scenario(scenario_path), planner=fake_planner)
     state = runner.registry.get_component("agent-001", HomeostasisComponent)

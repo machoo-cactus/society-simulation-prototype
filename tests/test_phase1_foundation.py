@@ -155,7 +155,7 @@ def test_scenario_loader_rejects_duplicate_entities(tmp_path: Path) -> None:
 
 def test_cli_emits_canonical_jsonl(tmp_path: Path) -> None:
     output_path = tmp_path / "events.jsonl"
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "minimal.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "minimal.json"
 
     exit_code = main(
         ["run", str(scenario_path), "--ticks", "2", "--output", str(output_path)]

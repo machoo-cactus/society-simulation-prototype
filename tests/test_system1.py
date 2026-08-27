@@ -17,7 +17,7 @@ from stage0_sim.domain.world import Coordinate
 
 
 def test_critical_satiety_preempts_plan_and_targets_fridge_on_next_tick() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "system1-preemption.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "system1-preemption.json"
     runner = create_runner(load_scenario(scenario_path), run_id="preemption")
 
     runner.run_for(1)

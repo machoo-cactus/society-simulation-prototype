@@ -158,7 +158,7 @@ def test_saved_memory_survives_close_without_run_finalization(
 
 
 def test_meaningful_events_are_recorded_but_routine_ticks_are_not() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "system1-preemption.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "system1-preemption.json"
     embedding_provider = FakeEmbeddingProvider()
     runner = create_runner(
         load_scenario(scenario_path),
@@ -179,7 +179,7 @@ def test_meaningful_events_are_recorded_but_routine_ticks_are_not() -> None:
 
 
 def test_planner_receives_retrieved_initial_memories() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "fake-llm-planning.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "fake-llm-planning.json"
     planner = CapturingPlanner()
     runner = create_runner(load_scenario(scenario_path), planner=planner)
 
@@ -224,7 +224,7 @@ def test_dialogue_wrapper_includes_relevant_memories() -> None:
 
 
 def test_physical_only_ticks_make_zero_embedding_calls() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "navigation.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "navigation.json"
     provider = FakeEmbeddingProvider()
     runner = create_runner(
         load_scenario(scenario_path),
@@ -237,7 +237,7 @@ def test_physical_only_ticks_make_zero_embedding_calls() -> None:
 
 
 def test_embedding_failure_is_observable_and_does_not_stop_ticks() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "system1-preemption.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "system1-preemption.json"
     runner = create_runner(
         load_scenario(scenario_path),
         embedding_provider=FailingEmbeddingProvider(),

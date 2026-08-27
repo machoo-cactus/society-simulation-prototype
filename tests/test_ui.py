@@ -1,8 +1,18 @@
 import json
+from importlib.resources import files
 
 from fastapi.testclient import TestClient
 
 from stage0_sim.api.app import app
+
+
+def test_ui_assets_are_installed_as_package_data() -> None:
+    web = files("stage0_sim").joinpath("web")
+
+    assert web.joinpath("index.html").is_file()
+    assert web.joinpath("styles.css").is_file()
+    assert web.joinpath("app.js").is_file()
+    assert web.joinpath("demo.json").is_file()
 
 
 def test_root_redirects_to_python_served_ui() -> None:

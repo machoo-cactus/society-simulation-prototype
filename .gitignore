@@ -11,3 +11,5 @@ htmlcov/
 *.sqlite3
 data/runs/
 *.egg-info/
+build/
+dist/

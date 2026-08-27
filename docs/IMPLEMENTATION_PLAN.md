@@ -57,7 +57,7 @@ Additional decisions:
 Keep the simulation domain independent of FastAPI, storage, WebSockets, and any particular LLM provider.
 
 ```text
-backend/
+src/
   stage0_sim/
     domain/
       components/
@@ -71,9 +71,9 @@ backend/
       persistence/
       websocket/
     api/
-  tests/
+tests/
 
-backend/stage0_sim/web/
+src/stage0_sim/web/
   index.html
   styles.css
   app.js

@@ -46,7 +46,7 @@ def test_astar_uses_deterministic_shortest_route() -> None:
 
 
 def test_four_zone_scenario_reaches_destination() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "navigation.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "navigation.json"
     runner = create_runner(load_scenario(scenario_path), run_id="four-zone")
 
     runner.run_for(20)
@@ -64,7 +64,7 @@ def test_four_zone_scenario_reaches_destination() -> None:
 
 
 def test_navigation_event_log_is_reproducible() -> None:
-    scenario_path = Path(__file__).parents[2] / "scenarios" / "navigation.json"
+    scenario_path = Path(__file__).parents[1] / "scenarios" / "navigation.json"
     scenario = load_scenario(scenario_path)
     first = create_runner(scenario, run_id="first-navigation-run")
     second = create_runner(scenario, run_id="second-navigation-run")

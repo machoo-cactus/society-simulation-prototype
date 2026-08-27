@@ -2,7 +2,8 @@
 
 **Original assessment:** 2026-08-26  
 **Completion update:** 2026-08-26  
-**Compared against:** `IMPLEMENTATION_PLAN.md` and `starting_basic_PRD.md`
+**Compared against:** `docs/IMPLEMENTATION_PLAN.md` and
+`docs/starting_basic_PRD.md`
 
 ## Executive conclusion
 

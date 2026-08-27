@@ -9,7 +9,7 @@ from stage0_sim.api.app import app
 
 
 def load_scenario_payload(name: str) -> dict[str, Any]:
-    path = Path(__file__).parents[2] / "scenarios" / name
+    path = Path(__file__).parents[1] / "scenarios" / name
     return json.loads(path.read_text(encoding="utf-8"))
 
 

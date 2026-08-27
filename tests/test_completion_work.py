@@ -40,7 +40,7 @@ from stage0_sim.domain.components import (
 
 
 def _scenario_path(name: str) -> Path:
-    return Path(__file__).parents[2] / "scenarios" / name
+    return Path(__file__).parents[1] / "scenarios" / name
 
 
 def _social_scenario(*, with_memory: bool = False) -> ScenarioDefinition:
@@ -463,15 +463,15 @@ def _is_system_executor_frame(function: str, filename: str) -> bool:
 def test_system_executor_stack_detection_accepts_native_path_styles() -> None:
     assert _is_system_executor_frame(
         "update",
-        "/repo/backend/stage0_sim/domain/systems/__init__.py",
+        "/repo/src/stage0_sim/domain/systems/__init__.py",
     )
     assert _is_system_executor_frame(
         "update",
-        r"C:\repo\backend\stage0_sim\domain\systems\__init__.py",
+        r"C:\repo\src\stage0_sim\domain\systems\__init__.py",
     )
     assert not _is_system_executor_frame(
         "update",
-        "/repo/backend/stage0_sim/application/runner.py",
+        "/repo/src/stage0_sim/application/runner.py",
     )
 
 

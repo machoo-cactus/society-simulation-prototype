@@ -6,10 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     environment: str = "development"
-    log_level: str = "INFO"
-    api_host: str = "127.0.0.1"
-    api_port: int = 8000
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = []
     data_directory: Path = Path("data/runs")
     dataset_database: str = "stage0.sqlite3"
 

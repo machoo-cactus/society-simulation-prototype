@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
+from stage0_sim.application.agents.contracts import ModelClient
 from stage0_sim.application.collection import RunDataCollector
 from stage0_sim.application.runner import RunnerStatus, SimulationRunner
 from stage0_sim.application.scenario import ScenarioDefinition, create_runner
@@ -32,11 +33,17 @@ class SimulationManager:
         self,
         dataset_store: SQLiteDatasetStore,
         telemetry_hz: float = 10.0,
+        model_client: ModelClient | None = None,
+        model_max_output_tokens: int | None = None,
+        model_max_concurrency: int | None = None,
     ) -> None:
         if telemetry_hz <= 0:
             raise ValueError("telemetry_hz must be greater than zero")
         self.telemetry_hz = telemetry_hz
         self.dataset_store = dataset_store
+        self.model_client = model_client
+        self.model_max_output_tokens = model_max_output_tokens
+        self.model_max_concurrency = model_max_concurrency
         self._scenarios: dict[str, ScenarioDefinition] = {}
         self._runs: dict[str, ManagedRun] = {}
         self._next_scenario_id = 1
@@ -64,7 +71,14 @@ class SimulationManager:
     ) -> str:
         scenario = self.get_scenario(scenario_id)
         run_id = f"run-{uuid4()}"
-        runner = create_runner(scenario, run_id=run_id, speed=speed)
+        runner = create_runner(
+            scenario,
+            run_id=run_id,
+            speed=speed,
+            model_client=self.model_client,
+            model_max_output_tokens=self.model_max_output_tokens,
+            model_max_concurrency=self.model_max_concurrency,
+        )
         collector = RunDataCollector(
             store=self.dataset_store,
             runner=runner,

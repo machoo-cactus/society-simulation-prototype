@@ -2,10 +2,12 @@ from dataclasses import dataclass
 
 from stage0_sim.domain.components import (
     ActivityComponent,
+    ControllerComponent,
     ConversationComponent,
     DriveComponent,
     HomeostasisComponent,
     MovementComponent,
+    PerceptionComponent,
     PlanAction,
     PlanComponent,
     PlannerComponent,
@@ -99,6 +101,23 @@ class AgentStateProjector:
                 "failure_count": planner.failure_count,
                 "last_planned_at": planner.last_planned_at,
                 "request_pending": planner.request_pending,
+            }
+        if registry.has_component(agent_id, ControllerComponent):
+            controller = registry.get_component(agent_id, ControllerComponent)
+            state["controller"] = {
+                "enabled": controller.enabled,
+                "request_pending": controller.request_pending,
+                "state_revision": controller.state_revision,
+                "current_decision_id": controller.current_decision_id,
+                "last_outcome": controller.last_outcome,
+            }
+        if registry.has_component(agent_id, PerceptionComponent):
+            perception = registry.get_component(agent_id, PerceptionComponent)
+            visible_now: list[JsonValue] = list(sorted(perception.visible_now))
+            state["perception"] = {
+                "inbox_count": len(perception.inbox),
+                "visible_now": visible_now,
+                "known_character_count": len(perception.knowledge),
             }
         if registry.has_component(agent_id, ConversationComponent):
             conversation = registry.get_component(

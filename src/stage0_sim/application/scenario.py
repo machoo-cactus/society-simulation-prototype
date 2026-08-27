@@ -10,7 +10,15 @@ from stage0_sim.adapters.llm import (
     FakeDialogueGenerator,
     FakeEmbeddingProvider,
     FakePlanner,
+    FakeToolModelClient,
 )
+from stage0_sim.application.agents import (
+    AgentWorkCoordinator,
+    CognitionScheduler,
+    ToolCallingCharacterController,
+)
+from stage0_sim.application.agents.contracts import ModelClient
+from stage0_sim.application.agents.tools import ToolRegistry
 from stage0_sim.application.cognition import (
     DialogueGenerator,
     EmbeddingProvider,
@@ -23,6 +31,10 @@ from stage0_sim.application.memory_recording import (
     MemoryRecordingSystem,
     observation_metadata,
 )
+from stage0_sim.application.perception import (
+    PerceptionConfiguration,
+    PerceptionSystem,
+)
 from stage0_sim.application.planning import MacroPlanningSystem
 from stage0_sim.application.runner import RunConfiguration, SimulationRunner
 from stage0_sim.domain.components import (
@@ -30,6 +42,8 @@ from stage0_sim.domain.components import (
     ActivityComponent,
     ActivityRates,
     ActivityType,
+    CharacterProfileComponent,
+    ControllerComponent,
     ConversationComponent,
     DriveComponent,
     DriveThreshold,
@@ -38,10 +52,12 @@ from stage0_sim.domain.components import (
     HomeostasisConfiguration,
     MemoryComponent,
     MovementComponent,
+    PerceptionComponent,
     PlanAction,
     PlanComponent,
     PlannerComponent,
     PositionComponent,
+    SensesComponent,
     System1Configuration,
     default_activity_rates,
     default_drive_thresholds,
@@ -55,6 +71,7 @@ from stage0_sim.domain.systems.homeostasis import (
 )
 from stage0_sim.domain.systems.navigation import MovementSystem, PathfindingSystem
 from stage0_sim.domain.systems.plans import PlanExecutionSystem, TimedPlanActionSystem
+from stage0_sim.domain.systems.speech import SpeechSystem
 from stage0_sim.domain.systems.system1 import System1ArbitrationSystem
 from stage0_sim.domain.world import (
     AffordanceAction,
@@ -267,6 +284,61 @@ class MemorySettingsDefinition(BaseModel):
         )
 
 
+class PerceptionSettingsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vision_range: int = Field(default=8, ge=0)
+    recognition_range: int = Field(default=5, ge=0)
+    hearing_range: int = Field(default=10, ge=0)
+    whisper_range: int = Field(default=2, ge=0)
+    blocked_tiles_are_opaque: bool = True
+    inbox_limit: int = Field(default=100, gt=0)
+    fact_max_age_seconds: float = Field(default=300.0, gt=0)
+    renderer: str = "deterministic"
+
+    def to_domain(self) -> PerceptionConfiguration:
+        if self.renderer != "deterministic":
+            raise ValueError("only the deterministic perception renderer is supported")
+        return PerceptionConfiguration(
+            vision_range=self.vision_range,
+            recognition_range=self.recognition_range,
+            hearing_range=self.hearing_range,
+            whisper_range=self.whisper_range,
+            blocked_tiles_are_opaque=self.blocked_tiles_are_opaque,
+            inbox_limit=self.inbox_limit,
+            fact_max_age_seconds=self.fact_max_age_seconds,
+        )
+
+
+class CognitionSettingsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    controller: str = "legacy"
+    model_profile: str = "default"
+    decision_timeout_seconds: float = Field(default=30.0, gt=0)
+    max_output_tokens: int = Field(default=512, gt=0)
+    max_read_tool_rounds: int = Field(default=0, ge=0)
+    max_state_changing_tools: int = Field(default=1, ge=1, le=1)
+    max_concurrency: int = Field(default=4, gt=0)
+    max_requests: int | None = Field(default=None, gt=0)
+    max_input_tokens: int | None = Field(default=None, gt=0)
+    max_total_output_tokens: int | None = Field(default=None, gt=0)
+    tool_allowlist: list[str] = Field(
+        default_factory=lambda: ["go_to", "perform", "say", "wait"]
+    )
+
+    @model_validator(mode="after")
+    def supported_values(self) -> "CognitionSettingsDefinition":
+        if self.controller not in {"legacy", "tool-agent"}:
+            raise ValueError("cognition controller must be legacy or tool-agent")
+        if self.max_read_tool_rounds != 0:
+            raise ValueError("read-only tool rounds are not implemented")
+        unknown = set(self.tool_allowlist) - {"go_to", "perform", "say", "wait"}
+        if unknown:
+            raise ValueError(f"unknown cognition tools: {sorted(unknown)}")
+        return self
+
+
 class EntityDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -291,6 +363,12 @@ class ScenarioDefinition(BaseModel):
         default_factory=System1SettingsDefinition
     )
     memory: MemorySettingsDefinition = Field(default_factory=MemorySettingsDefinition)
+    perception: PerceptionSettingsDefinition = Field(
+        default_factory=PerceptionSettingsDefinition
+    )
+    cognition: CognitionSettingsDefinition = Field(
+        default_factory=CognitionSettingsDefinition
+    )
     entities: list[EntityDefinition] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -332,6 +410,9 @@ def create_runner(
     planner: Planner | None = None,
     dialogue_generator: DialogueGenerator | None = None,
     embedding_provider: EmbeddingProvider | None = None,
+    model_client: ModelClient | None = None,
+    model_max_output_tokens: int | None = None,
+    model_max_concurrency: int | None = None,
 ) -> SimulationRunner:
     registry = Registry()
     systems = SystemExecutor()
@@ -348,10 +429,12 @@ def create_runner(
     registry.set_resource(macro_work)
     registry.set_resource(scenario.homeostasis.to_domain())
     registry.set_resource(scenario.system1.to_domain())
+    registry.set_resource(scenario.perception.to_domain())
     systems.add(MovementActivitySystem())
     systems.add(HomeostasisSystem())
     systems.add(TimedPlanActionSystem())
     systems.add(System1ArbitrationSystem())
+    systems.add(SpeechSystem())
     systems.add(MemoryRecordingSystem())
     systems.add(MacroDialogueSystem())
     systems.add(MacroPlanningSystem())
@@ -362,6 +445,50 @@ def create_runner(
         systems.add(PlanExecutionSystem())
         systems.add(AffordanceExecutionSystem())
         systems.add(MovementSystem())
+        systems.add(PerceptionSystem())
+
+    tool_registry = ToolRegistry()
+    tool_agent_enabled = scenario.cognition.controller == "tool-agent" or any(
+        bool(entity.components.get("controller", {}).get("enabled", False))
+        for entity in scenario.entities
+    )
+    if tool_agent_enabled:
+        controller = ToolCallingCharacterController(
+            model_client=model_client or FakeToolModelClient(),
+            tool_registry=tool_registry,
+            model=scenario.cognition.model_profile,
+            timeout_seconds=scenario.cognition.decision_timeout_seconds,
+            max_output_tokens=(
+                min(
+                    scenario.cognition.max_output_tokens,
+                    model_max_output_tokens,
+                )
+                if model_max_output_tokens is not None
+                else scenario.cognition.max_output_tokens
+            ),
+        )
+        registry.set_resource(
+            AgentWorkCoordinator(
+                controller,
+                tool_registry,
+                max_concurrency=(
+                    min(
+                        scenario.cognition.max_concurrency,
+                        model_max_concurrency,
+                    )
+                    if model_max_concurrency is not None
+                    else scenario.cognition.max_concurrency
+                ),
+                request_timeout_seconds=(
+                    scenario.cognition.decision_timeout_seconds
+                ),
+                max_requests=scenario.cognition.max_requests,
+                max_input_tokens=scenario.cognition.max_input_tokens,
+                max_output_tokens=scenario.cognition.max_total_output_tokens,
+                memory_store=memory_store,
+            )
+        )
+        systems.add(CognitionScheduler())
 
     occupied: set[Coordinate] = set()
     for entity_definition in scenario.entities:
@@ -464,6 +591,63 @@ def create_runner(
             if not registry.has_component(entity_id, PlanComponent):
                 registry.add_component(entity_id, PlanComponent())
 
+        profile_values = raw_components.pop("character_profile", None)
+        metadata_values = raw_components.get("metadata", {})
+        if profile_values is not None:
+            profile_definition = _validate_component(
+                CharacterProfileDefinition, profile_values, entity_id
+            )
+        else:
+            profile_definition = CharacterProfileDefinition(
+                display_name=str(metadata_values.get("display_name", entity_id))
+            )
+        registry.add_component(
+            entity_id,
+            CharacterProfileComponent(
+                display_name=profile_definition.display_name,
+                role=profile_definition.role,
+                traits=tuple(profile_definition.traits),
+                values=tuple(profile_definition.values),
+                goals=tuple(profile_definition.goals),
+                relationships=dict(profile_definition.relationships),
+            ),
+        )
+
+        controller_values = raw_components.pop("controller", None)
+        if controller_values is not None:
+            controller_definition = _validate_component(
+                ControllerDefinition, controller_values, entity_id
+            )
+            registry.add_component(
+                entity_id,
+                ControllerComponent(
+                    enabled=controller_definition.enabled,
+                    tool_allowlist=tuple(controller_definition.tool_allowlist),
+                ),
+            )
+            if not registry.has_component(entity_id, PlanComponent):
+                registry.add_component(entity_id, PlanComponent())
+
+        senses_values = raw_components.pop("senses", None)
+        senses_definition = (
+            _validate_component(SensesDefinition, senses_values, entity_id)
+            if senses_values is not None
+            else SensesDefinition(
+                vision_range=scenario.perception.vision_range,
+                recognition_range=scenario.perception.recognition_range,
+            )
+        )
+        if registry.has_component(entity_id, PositionComponent):
+            registry.add_component(
+                entity_id,
+                SensesComponent(
+                    vision_range=senses_definition.vision_range,
+                    recognition_range=senses_definition.recognition_range,
+                    hearing_multiplier=senses_definition.hearing_multiplier,
+                ),
+            )
+            registry.add_component(entity_id, PerceptionComponent())
+
         if "memory" in raw_components:
             memory_definition = _validate_component(
                 MemoryComponentDefinition,
@@ -536,6 +720,41 @@ class HomeostasisComponentDefinition(BaseModel):
     satiety: float = Field(default=100.0, ge=0, le=100)
     energy: float = Field(default=100.0, ge=0, le=100)
     stress: float = Field(default=0.0, ge=0, le=100)
+
+
+class CharacterProfileDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1)
+    role: str = ""
+    traits: list[str] = Field(default_factory=list)
+    values: list[str] = Field(default_factory=list)
+    goals: list[str] = Field(default_factory=list)
+    relationships: dict[str, str] = Field(default_factory=dict)
+
+
+class ControllerDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    tool_allowlist: list[str] = Field(
+        default_factory=lambda: ["go_to", "perform", "say", "wait"]
+    )
+
+    @model_validator(mode="after")
+    def tools_are_supported(self) -> "ControllerDefinition":
+        unknown = set(self.tool_allowlist) - {"go_to", "perform", "say", "wait"}
+        if unknown:
+            raise ValueError(f"unknown controller tools: {sorted(unknown)}")
+        return self
+
+
+class SensesDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vision_range: int = Field(default=8, ge=0)
+    recognition_range: int = Field(default=5, ge=0)
+    hearing_multiplier: float = Field(default=1.0, gt=0)
 
 
 class ActivityDefinition(BaseModel):

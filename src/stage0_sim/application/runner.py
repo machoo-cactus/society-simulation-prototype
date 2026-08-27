@@ -98,6 +98,7 @@ class SimulationRunner:
         self._emit("simulation.stopped")
 
     def _prepare_stop(self) -> None:
+        from stage0_sim.application.agents import AgentWorkCoordinator
         from stage0_sim.application.macro_work import MacroWorkCoordinator
 
         if self.registry.has_resource(MacroWorkCoordinator):
@@ -105,6 +106,10 @@ class SimulationRunner:
                 self.context,
                 "simulation_stopped",
             )
+        if self.registry.has_resource(AgentWorkCoordinator):
+            coordinator = self.registry.get_resource(AgentWorkCoordinator)
+            coordinator.cancel_all(self.context, "simulation_stopped")
+            coordinator.close()
         self.flush_pending_memory()
 
     def flush_pending_memory(self) -> None:
@@ -175,6 +180,7 @@ class SimulationRunner:
                 completed += 1
 
     def _advance_one_tick(self) -> bool:
+        from stage0_sim.application.agents import AgentWorkCoordinator
         from stage0_sim.application.macro_work import MacroWorkCoordinator
 
         self._advancing = True
@@ -201,6 +207,13 @@ class SimulationRunner:
                 self.registry.get_resource(MacroWorkCoordinator).drain(
                     self.context,
                     survival_agent_ids=survival_agent_ids,
+                )
+            if (
+                not self._stop_requested
+                and self.registry.has_resource(AgentWorkCoordinator)
+            ):
+                self.registry.get_resource(AgentWorkCoordinator).drain(
+                    self.context
                 )
             if self._stop_requested:
                 self._prepare_stop()

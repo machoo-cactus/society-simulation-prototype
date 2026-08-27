@@ -5,10 +5,17 @@ from stage0_sim.domain.components.affordance import (
     AffordanceRequestComponent,
 )
 from stage0_sim.domain.components.cognition import (
+    CharacterProfileComponent,
+    ControllerComponent,
     ConversationComponent,
     PlannerComponent,
 )
 from stage0_sim.domain.components.memory import MemoryComponent
+from stage0_sim.domain.components.perception import (
+    KnowledgeRecord,
+    PerceptionComponent,
+    SensesComponent,
+)
 from stage0_sim.domain.components.physiology import (
     ActivityComponent,
     ActivityRates,
@@ -23,6 +30,7 @@ from stage0_sim.domain.components.planning import (
     PlanComponent,
 )
 from stage0_sim.domain.components.spatial import MovementComponent, PositionComponent
+from stage0_sim.domain.components.speech import PendingSpeechComponent
 from stage0_sim.domain.components.survival import (
     DriveComponent,
     DriveThreshold,
@@ -39,7 +47,9 @@ __all__ = [
     "ActivityComponent",
     "ActivityRates",
     "ActivityType",
+    "CharacterProfileComponent",
     "ConversationComponent",
+    "ControllerComponent",
     "DriveComponent",
     "DriveThreshold",
     "DriveType",
@@ -47,10 +57,14 @@ __all__ = [
     "HomeostasisConfiguration",
     "MemoryComponent",
     "MovementComponent",
+    "KnowledgeRecord",
+    "PendingSpeechComponent",
+    "PerceptionComponent",
     "PlanAction",
     "PlanComponent",
     "PlannerComponent",
     "PositionComponent",
+    "SensesComponent",
     "System1Configuration",
     "System1State",
     "default_activity_rates",

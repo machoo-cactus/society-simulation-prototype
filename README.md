@@ -63,6 +63,7 @@ stage0-sim run scenarios/navigation.json --ticks 20
 stage0-sim run scenarios/homeostasis.json --ticks 60
 stage0-sim run scenarios/system1-preemption.json --ticks 20
 stage0-sim run scenarios/fake-llm-planning.json --ticks 30
+stage0-sim run scenarios/real-llm-tool-agent.json --ticks 30
 ```
 
 | Scenario | What it demonstrates |
@@ -72,6 +73,7 @@ stage0-sim run scenarios/fake-llm-planning.json --ticks 30
 | `homeostasis.json` | Activity-dependent satiety, energy, and stress trajectories |
 | `system1-preemption.json` | Plan cancellation, survival navigation, affordance recovery, and resumption |
 | `fake-llm-planning.json` | Post-tick planning, memory retrieval, and validated routines without an external model |
+| `real-llm-tool-agent.json` | Observer-specific sensing and opt-in typed-tool character control |
 
 By default, canonical events are written to standard output and a SQLite dataset
 is created under `data/runs/`. Canonical events omit run IDs and wall-clock
@@ -194,9 +196,11 @@ runner, although completed records and episodic memories remain in SQLite.
 - Telemetry samples authoritative state without advancing the simulation.
 - Fake providers are deterministic and require no credentials or network calls.
 
-Real model providers are intentionally not included. A remote provider should
-run behind the existing macro-work boundary and return results for deterministic
-application outside the ordered physical system pass.
+Tool-agent scenarios default to a deterministic local controller. Set
+`STAGE0_LLM_PROVIDER=openai-compatible`, `STAGE0_LLM_BASE_URL`, and
+`STAGE0_LLM_MODEL` to opt into a remote or local OpenAI-compatible endpoint.
+Provider work runs outside the ordered physical system pass, and completed tools
+are applied at deterministic post-tick boundaries.
 
 ## Configuration
 
@@ -207,6 +211,15 @@ Settings use `STAGE0_` environment variables and may be placed in `.env`:
 | `STAGE0_CORS_ORIGINS` | `[]` | Optional origins for separately hosted clients |
 | `STAGE0_DATA_DIRECTORY` | `data/runs` | API dataset directory |
 | `STAGE0_DATASET_DATABASE` | `stage0.sqlite3` | API SQLite filename |
+| `STAGE0_LLM_PROVIDER` | unset | Set to `openai-compatible` to enable a real model |
+| `STAGE0_LLM_BASE_URL` | unset | OpenAI-compatible API root, including `/v1` |
+| `STAGE0_LLM_MODEL` | unset | Provider model identifier |
+| `STAGE0_LLM_API_KEY` | unset | Optional provider credential; never persisted |
+| `STAGE0_LLM_TIMEOUT_SECONDS` | `30` | Provider HTTP timeout |
+| `STAGE0_LLM_MAX_OUTPUT_TOKENS` | `512` | Deployment ceiling per response |
+| `STAGE0_LLM_MAX_CONCURRENCY` | `4` | Deployment ceiling for concurrent requests |
+| `STAGE0_LLM_RECORD_PATH` | unset | Sanitized model request/response JSONL |
+| `STAGE0_LLM_REPLAY_PATH` | unset | Recording used when provider is `replay` |
 
 Paths are interpreted relative to the process working directory. Run commands
 from the repository root, or supply absolute paths in `.env`.
@@ -256,9 +269,11 @@ records are no longer needed.
 
 Design and status documents:
 
+- [Concept guide for advanced development](docs/CONCEPT_GUIDE.md)
 - [Product requirements](docs/starting_basic_PRD.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [Project state assessment](docs/PROJECT_STATE_ASSESSMENT.md)
+- [Real LLM tool-agent plan](docs/REAL_LLM_TOOL_AGENT_PLAN.md)
 
 ## Platform support
 

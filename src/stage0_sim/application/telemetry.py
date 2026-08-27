@@ -5,11 +5,13 @@ from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import SimulationRunner
 from stage0_sim.domain.components import (
     ActivityComponent,
+    ControllerComponent,
     ConversationComponent,
     DriveComponent,
     HomeostasisComponent,
     MemoryComponent,
     MovementComponent,
+    PerceptionComponent,
     PlanAction,
     PlanComponent,
     PlannerComponent,
@@ -201,6 +203,23 @@ def build_agent_snapshot(
             "request_count": planner.request_count,
             "failure_count": planner.failure_count,
         }
+    if registry.has_component(agent_id, ControllerComponent):
+        controller = registry.get_component(agent_id, ControllerComponent)
+        payload["controller"] = {
+            "enabled": controller.enabled,
+            "request_pending": controller.request_pending,
+            "state_revision": controller.state_revision,
+            "current_decision_id": controller.current_decision_id,
+            "last_outcome": controller.last_outcome,
+        }
+    if registry.has_component(agent_id, PerceptionComponent):
+        perception = registry.get_component(agent_id, PerceptionComponent)
+        visible_now: list[JsonValue] = list(sorted(perception.visible_now))
+        payload["perception"] = {
+            "inbox_count": len(perception.inbox),
+            "visible_now": visible_now,
+            "known_character_count": len(perception.knowledge),
+        }
     if registry.has_component(agent_id, MemoryComponent):
         store = registry.get_resource(EpisodicMemoryStore)
         payload["memory"] = {
@@ -238,6 +257,10 @@ def _message_type_for_event(event_type: str) -> str:
         return "system1_event"
     if event_type.startswith("dialogue."):
         return "dialogue_event"
+    if event_type.startswith(("cognition.", "tool.")):
+        return "cognition_event"
+    if event_type.startswith(("speech.", "perception.")):
+        return "perception_event"
     if event_type.startswith(("agent.", "path.", "activity.", "affordance.")):
         return "agent_delta"
     return "event"

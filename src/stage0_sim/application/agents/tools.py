@@ -1,0 +1,164 @@
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+
+from stage0_sim.application.agents.contracts import (
+    CharacterDecisionRequest,
+    ModelToolCall,
+    ToolDefinition,
+)
+from stage0_sim.domain.components import ActionType
+from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.intents import (
+    ActivityIntent,
+    CharacterIntent,
+    IntentKind,
+    MoveIntent,
+    SpeechIntent,
+    WaitIntent,
+)
+
+
+class ToolValidationError(ValueError):
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+class GoToArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_id: str = Field(min_length=1)
+    reason: str | None = Field(default=None, max_length=300)
+
+
+class PerformArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["WORK", "READ", "EAT", "SLEEP", "RELAX"]
+    target_id: str | None = None
+    duration_seconds: float | None = Field(default=None, gt=0, le=3600)
+    reason: str | None = Field(default=None, max_length=300)
+
+
+class SayArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_id: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=500)
+    reason: str | None = Field(default=None, max_length=300)
+
+
+class WaitArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    duration_seconds: float = Field(ge=1, le=600)
+    reason: str | None = Field(default=None, max_length=300)
+
+
+ToolArguments = Annotated[
+    GoToArguments | PerformArguments | SayArguments | WaitArguments,
+    Field(discriminator=None),
+]
+
+
+class ToolRegistry:
+    def __init__(self) -> None:
+        self._types: dict[str, type[BaseModel]] = {
+            "go_to": GoToArguments,
+            "perform": PerformArguments,
+            "say": SayArguments,
+            "wait": WaitArguments,
+        }
+
+    def definitions(self, allowed: tuple[str, ...]) -> tuple[ToolDefinition, ...]:
+        return tuple(
+            ToolDefinition(
+                name=name,
+                description=_DESCRIPTIONS[name],
+                input_schema=_schema(self._types[name]),
+            )
+            for name in allowed
+            if name in self._types
+        )
+
+    def propose(
+        self,
+        request: CharacterDecisionRequest,
+        call: ModelToolCall,
+    ) -> CharacterIntent:
+        if call.name not in request.allowed_tools:
+            raise ToolValidationError("tool_not_allowed", call.name)
+        args_type = self._types.get(call.name)
+        if args_type is None:
+            raise ToolValidationError("unknown_tool", call.name)
+        try:
+            args = args_type.model_validate(call.arguments)
+        except ValidationError as error:
+            raise ToolValidationError("invalid_arguments", str(error)) from error
+        targets = {target.id: target for target in request.observation.targets}
+        if isinstance(args, GoToArguments):
+            target = targets.get(args.target_id)
+            if target is None or target.kind not in {"zone", "station"}:
+                raise ToolValidationError("target_not_observable", args.target_id)
+            return MoveIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.MOVE,
+                args.reason,
+                args.target_id,
+            )
+        if isinstance(args, PerformArguments):
+            if args.target_id is not None:
+                target = targets.get(args.target_id)
+                if target is None:
+                    raise ToolValidationError(
+                        "target_not_observable", args.target_id
+                    )
+                if target.kind == "station" and args.action not in target.supported_actions:
+                    raise ToolValidationError(
+                        "precondition_failed",
+                        f"{target.id} does not support {args.action}",
+                    )
+            return ActivityIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.ACTIVITY,
+                args.reason,
+                ActionType(args.action),
+                args.target_id,
+                args.duration_seconds,
+            )
+        if isinstance(args, SayArguments):
+            target = targets.get(args.target_id)
+            if target is None or target.kind != "character":
+                raise ToolValidationError("target_not_observable", args.target_id)
+            return SpeechIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.SPEECH,
+                args.reason,
+                args.target_id,
+                args.text,
+            )
+        if isinstance(args, WaitArguments):
+            return WaitIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.WAIT,
+                args.reason,
+                args.duration_seconds,
+            )
+        raise ToolValidationError("invalid_arguments", call.name)
+
+
+def _schema(model: type[BaseModel]) -> dict[str, JsonValue]:
+    return TypeAdapter(model).json_schema()
+
+
+_DESCRIPTIONS = {
+    "go_to": "Queue movement toward a known zone or station.",
+    "perform": "Attempt a supported bounded activity or affordance.",
+    "say": "Speak exact in-world words to a known character.",
+    "wait": "Remain intentionally idle for a bounded duration.",
+}

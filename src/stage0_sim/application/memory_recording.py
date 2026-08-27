@@ -10,6 +10,7 @@ _EVENT_IMPORTANCE = {
     "plan.action_completed": 0.55,
     "plan.action_failed": 0.75,
     "planner.failed": 0.75,
+    "speech.delivered": 0.7,
     "system1.activated": 0.9,
     "system1.resolved": 0.85,
     "system1.blocked": 1.0,
@@ -34,42 +35,41 @@ class MemoryRecordingSystem:
         pending = events[self._event_cursor :]
         self._event_cursor = len(events)
         for event in pending:
-            if (
-                event.event_type not in _EVENT_IMPORTANCE
-                or event.agent_id is None
-                or not context.registry.has_component(
-                    event.agent_id, MemoryComponent
-                )
-            ):
+            if event.event_type not in _EVENT_IMPORTANCE:
                 continue
-            text = _event_text(event)
-            requested = context.events.emit(
-                "memory.requested",
-                simulation_tick=context.clock.tick,
-                simulation_time=context.clock.simulation_time,
-                agent_id=event.agent_id,
-                payload={
-                    "source_event_type": event.event_type,
-                    "importance": _EVENT_IMPORTANCE[event.event_type],
-                },
-                causation_id=event.event_id,
-                correlation_id=event.correlation_id,
-            )
-            coordinator.enqueue_memory(
-                MemoryWork(
-                    agent_id=event.agent_id,
-                    text=text,
-                    simulation_time=event.simulation_time,
-                    importance=_EVENT_IMPORTANCE[event.event_type],
-                    metadata={
-                        "event_id": event.event_id,
-                        "event_type": event.event_type,
-                        "payload": dict(event.payload),
+            for recipient_id in _memory_recipients(event):
+                if not context.registry.has_component(
+                    recipient_id, MemoryComponent
+                ):
+                    continue
+                text = _event_text(event)
+                requested = context.events.emit(
+                    "memory.requested",
+                    simulation_tick=context.clock.tick,
+                    simulation_time=context.clock.simulation_time,
+                    agent_id=recipient_id,
+                    payload={
+                        "source_event_type": event.event_type,
+                        "importance": _EVENT_IMPORTANCE[event.event_type],
                     },
-                    requested_event_id=requested.event_id,
+                    causation_id=event.event_id,
                     correlation_id=event.correlation_id,
                 )
-            )
+                coordinator.enqueue_memory(
+                    MemoryWork(
+                        agent_id=recipient_id,
+                        text=text,
+                        simulation_time=event.simulation_time,
+                        importance=_EVENT_IMPORTANCE[event.event_type],
+                        metadata={
+                            "event_id": event.event_id,
+                            "event_type": event.event_type,
+                            "payload": dict(event.payload),
+                        },
+                        requested_event_id=requested.event_id,
+                        correlation_id=event.correlation_id,
+                    )
+                )
 
 
 def _event_text(event: DomainEvent) -> str:
@@ -90,6 +90,11 @@ def _event_text(event: DomainEvent) -> str:
         )
     if event.event_type == "dialogue.generated":
         return str(payload.get("text", "Dialogue occurred."))
+    if event.event_type == "speech.delivered":
+        return (
+            f"{event.agent_id or 'Someone'} said: "
+            f"{payload.get('text', '')}"
+        )
     if event.event_type.startswith("plan."):
         return (
             f"Plan event {event.event_type}: "
@@ -103,3 +108,18 @@ def _event_text(event: DomainEvent) -> str:
 
 def observation_metadata(source: str) -> dict[str, JsonValue]:
     return {"source": source, "event_type": "observation"}
+
+
+def _memory_recipients(event: DomainEvent) -> tuple[str, ...]:
+    recipients: set[str] = set()
+    if event.agent_id is not None:
+        recipients.add(event.agent_id)
+    if event.event_type == "speech.delivered":
+        raw_recipients = event.payload.get("recipient_ids")
+        if isinstance(raw_recipients, list):
+            recipients.update(
+                recipient
+                for recipient in raw_recipients
+                if isinstance(recipient, str)
+            )
+    return tuple(sorted(recipients))

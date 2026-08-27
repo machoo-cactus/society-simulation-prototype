@@ -151,6 +151,20 @@ class PlanExecutionSystem:
             ActionType.READ,
             ActionType.IDLE,
         }:
+            if (
+                action.action in {ActionType.WORK, ActionType.READ}
+                and action.target is not None
+                and not self._activity_target_valid(
+                    context, agent_id, world, action
+                )
+            ):
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "activity_precondition_failed",
+                )
+                return
             if action.duration is None:
                 self._fail(context, agent_id, plan, "duration_required")
                 return
@@ -221,6 +235,31 @@ class PlanExecutionSystem:
             agent_id, AffordanceExecutionComponent
         ):
             self._fail(context, agent_id, plan, "affordance_request_lost")
+
+    @staticmethod
+    def _activity_target_valid(
+        context: SystemContext,
+        agent_id: str,
+        world: WorldMap,
+        action: PlanAction,
+    ) -> bool:
+        if action.target is None:
+            return True
+        position = context.registry.get_component(
+            agent_id, PositionComponent
+        ).coordinate
+        try:
+            station = world.station(action.target)
+        except KeyError:
+            zone = next(
+                (candidate for candidate in world.zones if candidate.id == action.target),
+                None,
+            )
+            return zone is not None and position in zone.tiles
+        return (
+            station.position == position
+            and action.action.value in station.supported_actions
+        )
 
     @staticmethod
     def _resolve_destination(

@@ -12,6 +12,7 @@ from stage0_sim.application.cognition import (
 from stage0_sim.domain.components import (
     ActionType,
     AffordanceExecutionComponent,
+    ControllerComponent,
     DriveComponent,
     HomeostasisComponent,
     MemoryComponent,
@@ -61,6 +62,14 @@ class MacroPlanningSystem:
                 or drive.state is not System1State.NORMAL
                 or context.registry.has_component(
                     agent_id, AffordanceExecutionComponent
+                )
+                or (
+                    context.registry.has_component(
+                        agent_id, ControllerComponent
+                    )
+                    and context.registry.get_component(
+                        agent_id, ControllerComponent
+                    ).enabled
                 )
             ):
                 continue

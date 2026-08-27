@@ -129,6 +129,14 @@ class RunDataCollector:
             record_type = "dialogue"
         elif event.event_type.startswith("memory."):
             record_type = "memory_reference"
+        elif event.event_type.startswith("perception."):
+            record_type = "perception"
+        elif event.event_type.startswith("speech."):
+            record_type = "speech"
+        elif event.event_type.startswith("tool."):
+            record_type = "tool"
+        elif event.event_type.startswith("cognition."):
+            record_type = "cognition"
         if record_type is not None:
             payload = {
                 "event_type": event.event_type,
@@ -151,6 +159,9 @@ class RunDataCollector:
             "dialogue.generated": ("dialogue", "completed"),
             "dialogue.failed": ("dialogue", "failed"),
             "dialogue.cancelled": ("dialogue", "cancelled"),
+            "cognition.completed": ("character_decision", "completed"),
+            "cognition.failed": ("character_decision", "failed"),
+            "cognition.cancelled": ("character_decision", "cancelled"),
         }
         if event.event_type in request_events:
             operation, status = request_events[event.event_type]

@@ -8,6 +8,7 @@ from pathlib import Path
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.application.collection import RunDataCollector
 from stage0_sim.application.scenario import ScenarioLoadError, create_runner, load_scenario
+from stage0_sim.config import create_model_client, get_settings
 from stage0_sim.domain.events import DomainEvent
 
 
@@ -36,7 +37,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         scenario = load_scenario(args.scenario)
-        runner = create_runner(scenario, speed=args.speed)
+        settings = get_settings()
+        runner = create_runner(
+            scenario,
+            speed=args.speed,
+            model_client=create_model_client(settings),
+            model_max_output_tokens=settings.llm_max_output_tokens,
+            model_max_concurrency=settings.llm_max_concurrency,
+        )
         database_path = args.database or (
             Path("data/runs") / f"{runner.events.run_id}.sqlite3"
         )
@@ -51,8 +59,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     output = args.output.open("w", encoding="utf-8") if args.output else sys.stdout
+    write_events = True
 
     def write_event(event: DomainEvent) -> None:
+        if not write_events:
+            return
         content = event.to_dict() if args.full_events else event.canonical_dict()
         print(json.dumps(content, sort_keys=True, separators=(",", ":")), file=output)
 
@@ -66,6 +77,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         completed = True
     finally:
         collector.finalize("completed" if completed else "failed")
+        write_events = False
+        runner.stop()
         if args.export:
             args.export.parent.mkdir(parents=True, exist_ok=True)
             with args.export.open("w", encoding="utf-8", newline="\n") as export:

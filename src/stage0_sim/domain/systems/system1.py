@@ -5,6 +5,7 @@ from stage0_sim.domain.components import (
     ActivityType,
     AffordanceExecutionComponent,
     AffordanceRequestComponent,
+    ControllerComponent,
     DriveComponent,
     DriveType,
     HomeostasisComponent,
@@ -91,6 +92,14 @@ class System1ArbitrationSystem:
         homeostasis: HomeostasisComponent,
         configuration: System1Configuration,
     ) -> None:
+        if context.registry.has_component(agent_id, ControllerComponent):
+            controller = context.registry.get_component(
+                agent_id, ControllerComponent
+            )
+            controller.state_revision += 1
+            controller.request_pending = False
+            controller.current_decision_id = None
+            controller.last_outcome = "interrupted by survival need"
         drive.active_drive = selected
         self._transition(context, agent_id, drive, System1State.CRITICAL_DETECTED)
         self._emit(

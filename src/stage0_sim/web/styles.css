@@ -89,13 +89,25 @@ h3 { margin-bottom: .7rem; font-size: .86rem; text-transform: uppercase; letter-
 .facts dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 .plan ol { max-height: 9rem; margin: 0; padding-left: 1.3rem; overflow: auto; font-size: .78rem; }
 .plan li + li { margin-top: .35rem; }
+.character-profile { padding: 1rem; border-bottom: 1px solid var(--border); }
+.character-profile summary { cursor: pointer; font-size: .82rem; font-weight: 700; }
+.character-profile pre { max-height: 20rem; margin: .8rem 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #becbd8; font-size: .72rem; }
 .vitals-form { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; border-bottom: 0; }
 .vitals-form h3, .vitals-form button { grid-column: 1 / -1; }
 .vitals-form label { color: var(--muted); font-size: .7rem; }
 .vitals-form input { width: 100%; margin-top: .25rem; padding: .4rem; }
 
 .controls-panel { grid-column: 1; }
+.scenario-actions { display: flex; align-items: center; gap: .5rem; }
+.character-assignments { padding: 1rem; border-bottom: 1px solid var(--border); }
+.character-assignments h3, .character-assignments p { margin-bottom: .35rem; }
+.character-assignments__row { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(12rem, 2fr); align-items: center; gap: .75rem; padding: .45rem 0; }
+.character-assignments__row select { width: 100%; padding: .45rem; }
 .controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: 1rem; }
+.control-status { min-height: 1.3rem; margin: 0; padding: 0 1rem 1rem; color: var(--muted); font-size: .78rem; }
+.control-status.error { color: var(--danger); }
+.world-panel.paused { outline: 2px solid var(--warning); }
+.world-panel.paused canvas { opacity: .72; }
 .speed-control { display: flex; align-items: center; gap: .4rem; margin-left: auto; color: var(--muted); font-size: .78rem; }
 .speed-control select { padding: .45rem; }
 .file-button { padding: .45rem .65rem; border: 1px solid var(--border); border-radius: .45rem; cursor: pointer; font-size: .78rem; }
@@ -103,16 +115,26 @@ h3 { margin-bottom: .7rem; font-size: .86rem; text-transform: uppercase; letter-
 .file-button input { display: none; }
 
 .log-panel { grid-column: 1; }
-.log-tools { display: flex; gap: .4rem; }
-.log-tools select { padding: .4rem; }
+.log-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
+.log-tools select, .log-tools input { padding: .4rem; }
+.log-tools input[type="search"] { min-width: 10rem; }
+.auto-scroll { display: flex; align-items: center; gap: .3rem; color: var(--muted); font-size: .72rem; }
 .event-log { height: 18rem; overflow: auto; font-family: ui-monospace, "Cascadia Mono", monospace; font-size: .72rem; }
+.log-panel.expanded { position: fixed; inset: 1rem; z-index: 20; display: flex; flex-direction: column; }
+.log-panel.expanded .event-log { height: auto; flex: 1; }
 .event-row { display: grid; grid-template-columns: 4.5rem 8.5rem 1fr; gap: .65rem; padding: .45rem 1rem; border-bottom: 1px solid rgb(38 57 75 / 55%); }
 .event-row:hover { background: var(--panel-soft); }
+.event-row { cursor: pointer; }
 .event-row__tick { color: var(--muted); }
 .event-row__type { color: var(--accent); overflow-wrap: anywhere; }
 .event-row.error .event-row__type { color: var(--danger); }
 .event-row.system1 .event-row__type { color: var(--warning); }
 .event-row__detail { color: #becbd8; overflow-wrap: anywhere; }
+.event-detail-dialog { width: min(60rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); color: inherit; border: 1px solid var(--border); border-radius: .8rem; background: var(--panel); }
+.event-detail-dialog::backdrop { background: rgb(0 0 0 / 65%); }
+.event-detail__header, .event-detail__actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.event-detail__text { max-height: 65vh; padding: 1rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: .5rem; background: #08121c; }
+.event-detail__actions { justify-content: flex-end; }
 
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }

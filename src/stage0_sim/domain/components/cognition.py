@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from stage0_sim.domain.events import JsonValue
+
 
 @dataclass(slots=True)
 class PlannerComponent:
@@ -19,16 +21,20 @@ class ConversationComponent:
 
 @dataclass(frozen=True, slots=True)
 class CharacterProfileComponent:
+    profile_id: str
+    template_id: str
+    template_version: int
+    content_hash: str
     display_name: str
-    role: str = ""
-    traits: tuple[str, ...] = ()
-    values: tuple[str, ...] = ()
+    description: str
+    ui_data: dict[str, JsonValue]
     goals: tuple[str, ...] = ()
-    relationships: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not self.display_name:
-            raise ValueError("character display_name must not be empty")
+        if not self.profile_id or not self.template_id or not self.display_name:
+            raise ValueError("character profile identity must not be empty")
+        if self.template_version <= 0:
+            raise ValueError("character template_version must be greater than zero")
 
 
 @dataclass(slots=True)

@@ -81,9 +81,6 @@ def build_character_observation(
     return CharacterObservation(
         agent_id=agent_id,
         display_name=profile.display_name,
-        role=profile.role,
-        traits=profile.traits,
-        values=profile.values,
         goals=profile.goals,
         simulation_time=context.clock.simulation_time,
         location_id=zone.id if zone is not None else None,

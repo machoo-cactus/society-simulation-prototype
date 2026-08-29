@@ -109,12 +109,16 @@ It is intentionally plain HTML, CSS, and JavaScript:
 
 From the UI you can:
 
-- start the built-in survival demo or load a scenario JSON file;
+- load and validate a scenario without starting it;
+- assign reusable character profiles to each scenario entity slot;
+- start, pause, single-step, resume, stop, and restart the loaded scenario;
 - inspect positions, paths, destinations, activities, plans, and memories;
 - watch satiety, energy, and stress change;
 - pause, resume, single-step, change speed, or stop a run;
 - mutate vitals to force survival behavior;
-- filter planning, survival, affordance, dialogue, and failure events;
+- search and filter planning, survival, perception, cognition, speech, dialogue,
+  and failure events;
+- expand, copy, and inspect complete long-form event payloads;
 - download the run's versioned JSONL dataset.
 
 The empty top-level `frontend/` scaffold from the original proposed architecture
@@ -301,6 +305,7 @@ Design and status documents:
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [Project state assessment](docs/PROJECT_STATE_ASSESSMENT.md)
 - [Real LLM tool-agent plan](docs/REAL_LLM_TOOL_AGENT_PLAN.md)
+- [Character profile authoring guide](docs/CHARACTER_PROFILE_GUIDE.md)
 
 ## Platform support
 

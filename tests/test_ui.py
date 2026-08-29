@@ -26,6 +26,9 @@ def test_root_redirects_to_python_served_ui() -> None:
     assert 'id="world-canvas"' in page.text
     assert 'id="agent-select"' in page.text
     assert 'id="event-log"' in page.text
+    assert 'id="start-button"' in page.text
+    assert 'id="character-assignments"' in page.text
+    assert 'id="event-detail-dialog"' in page.text
     assert 'src="/ui/app.js"' in page.text
 
 
@@ -48,6 +51,12 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     assert telemetry_hz == 10.0
     assert "Telemetry gap" in script.text
     assert "scheduleReconnect" in script.text
+    assert "async function loadScenario" in script.text
+    assert "async function startLoadedScenario" in script.text
+    assert "function renderCharacterAssignments" in script.text
+    assert "function showEventDetail" in script.text
+    assert 'filter === "dialogue"' in script.text
+    assert "/^(dialogue|speech)\\./" in script.text
     assert styles.status_code == 200
     assert "text/css" in styles.headers["content-type"]
     assert "#world-canvas" in styles.text

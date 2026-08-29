@@ -5,6 +5,7 @@ from stage0_sim.application.agents.contracts import CharacterDecisionRequest
 from stage0_sim.application.agents.coordinator import AgentWorkCoordinator
 from stage0_sim.domain.components import (
     AffordanceExecutionComponent,
+    CharacterProfileComponent,
     ControllerComponent,
     DriveComponent,
     PendingSpeechComponent,
@@ -81,6 +82,18 @@ class CognitionScheduler:
                 requested_tick=context.clock.tick,
                 state_revision=controller.state_revision,
                 trigger="idle",
+                character_description=context.registry.get_component(
+                    agent_id, CharacterProfileComponent
+                ).description,
+                profile_id=context.registry.get_component(
+                    agent_id, CharacterProfileComponent
+                ).profile_id,
+                profile_template_version=context.registry.get_component(
+                    agent_id, CharacterProfileComponent
+                ).template_version,
+                profile_content_hash=context.registry.get_component(
+                    agent_id, CharacterProfileComponent
+                ).content_hash,
                 observation=build_character_observation(context, agent_id),
                 memories=(),
                 allowed_tools=controller.tool_allowlist,
@@ -96,6 +109,9 @@ class CognitionScheduler:
                     "decision_id": decision_id,
                     "trigger": request.trigger,
                     "state_revision": request.state_revision,
+                    "profile_id": request.profile_id,
+                    "profile_template_version": request.profile_template_version,
+                    "profile_content_hash": request.profile_content_hash,
                     "allowed_tools": list(request.allowed_tools),
                     "fact_ids": [
                         fact.fact_id for fact in request.observation.facts

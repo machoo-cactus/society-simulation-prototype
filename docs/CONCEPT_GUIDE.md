@@ -134,7 +134,13 @@ A character may have:
 - survival-drive state;
 - episodic memory;
 - conversation state;
-- later, a profile, senses, knowledge, and an LLM controller.
+- a structured profile, senses, knowledge, and an optional LLM controller.
+
+Character profiles are now reusable, structured scenario records. The built-in
+`human-v1` template covers identity, appearance, personality, background,
+motivations, capabilities, preferences, relationships, and ordered custom
+experimental sections. Browser operators may assign any scenario profile to
+each character entity slot before starting a run.
 
 The code currently uses ECS entity IDs such as `agent-001`. The conceptual term
 for a simulated person is **character**, not "LLM agent." This distinction avoids

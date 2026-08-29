@@ -17,6 +17,9 @@ from stage0_sim.application.agents import (
     ToolCallingCharacterController,
 )
 from stage0_sim.application.agents.contracts import ModelClient
+from stage0_sim.application.agents.profile_renderer import (
+    CharacterDescriptionRenderer,
+)
 from stage0_sim.application.agents.tools import ToolRegistry
 from stage0_sim.application.cognition import (
     DialogueGenerator,
@@ -62,6 +65,7 @@ from stage0_sim.domain.components import (
     default_drive_thresholds,
 )
 from stage0_sim.domain.ecs import Registry
+from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemExecutor
 from stage0_sim.domain.systems.affordances import AffordanceExecutionSystem
 from stage0_sim.domain.systems.homeostasis import (
@@ -338,6 +342,30 @@ class CognitionSettingsDefinition(BaseModel):
         return self
 
 
+class CharacterProfileTemplateDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = Field(default=1, ge=1)
+    sections: list[str] = Field(
+        default_factory=lambda: [
+            "identity",
+            "appearance",
+            "personality",
+            "background",
+            "motivations",
+            "capabilities",
+            "preferences",
+            "relationships",
+        ]
+    )
+
+    @model_validator(mode="after")
+    def sections_are_unique(self) -> "CharacterProfileTemplateDefinition":
+        if len(self.sections) != len(set(self.sections)):
+            raise ValueError("character profile template sections must be unique")
+        return self
+
+
 class EntityDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -368,6 +396,16 @@ class ScenarioDefinition(BaseModel):
     cognition: CognitionSettingsDefinition = Field(
         default_factory=CognitionSettingsDefinition
     )
+    character_profile_templates: dict[
+        str, CharacterProfileTemplateDefinition
+    ] = Field(
+        default_factory=lambda: {
+            "human-v1": CharacterProfileTemplateDefinition()
+        }
+    )
+    character_profiles: dict[str, "CharacterProfileDefinition"] = Field(
+        default_factory=dict
+    )
     entities: list[EntityDefinition] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -375,6 +413,26 @@ class ScenarioDefinition(BaseModel):
         entity_ids = [entity.id for entity in self.entities]
         if len(entity_ids) != len(set(entity_ids)):
             raise ValueError("entity IDs must be unique")
+        for profile_id, profile in self.character_profiles.items():
+            if profile.profile_ref is not None:
+                raise ValueError(
+                    f"catalog character profile {profile_id} cannot use profile_ref"
+                )
+            if profile.template_id not in self.character_profile_templates:
+                raise ValueError(
+                    f"character profile {profile_id} uses unknown template "
+                    f"{profile.template_id}"
+                )
+        for entity in self.entities:
+            raw_profile = entity.components.get("character_profile")
+            if not raw_profile:
+                continue
+            reference = raw_profile.get("profile_ref")
+            if isinstance(reference, str) and reference not in self.character_profiles:
+                raise ValueError(
+                    f"entity {entity.id} references unknown character profile "
+                    f"{reference}"
+                )
         return self
 
 
@@ -597,23 +655,46 @@ def create_runner(
 
         profile_values = raw_components.pop("character_profile", None)
         metadata_values = raw_components.get("metadata", {})
-        if profile_values is not None:
-            profile_definition = _validate_component(
-                CharacterProfileDefinition, profile_values, entity_id
-            )
-        else:
-            profile_definition = CharacterProfileDefinition(
-                display_name=str(metadata_values.get("display_name", entity_id))
-            )
+        profile_definition, profile_id = _resolve_character_profile(
+            scenario,
+            entity_id,
+            profile_values,
+            str(metadata_values.get("display_name", entity_id)),
+        )
+        template = scenario.character_profile_templates[
+            profile_definition.template_id
+        ]
+        profile_payload = profile_definition.model_dump(
+            mode="json",
+            exclude={
+                "profile_ref",
+                "display_name",
+                "role",
+                "traits",
+                "values",
+                "goals",
+            },
+        )
+        rendered_profile = CharacterDescriptionRenderer().render(
+            template_id=profile_definition.template_id,
+            template_version=template.schema_version,
+            sections=template.sections,
+            profile=profile_payload,
+        )
+        identity = profile_definition.identity
+        if identity is None:
+            raise ValueError(f"resolved character profile missing identity: {profile_id}")
         registry.add_component(
             entity_id,
             CharacterProfileComponent(
-                display_name=profile_definition.display_name,
-                role=profile_definition.role,
-                traits=tuple(profile_definition.traits),
-                values=tuple(profile_definition.values),
-                goals=tuple(profile_definition.goals),
-                relationships=dict(profile_definition.relationships),
+                profile_id=profile_id,
+                template_id=profile_definition.template_id,
+                template_version=template.schema_version,
+                content_hash=rendered_profile.content_hash,
+                display_name=identity.display_name,
+                description=rendered_profile.markdown,
+                ui_data=_profile_ui_payload(profile_payload),
+                goals=tuple(profile_definition.motivations.goals),
             ),
         )
 
@@ -726,15 +807,187 @@ class HomeostasisComponentDefinition(BaseModel):
     stress: float = Field(default=0.0, ge=0, le=100)
 
 
-class CharacterProfileDefinition(BaseModel):
+class CharacterIdentityDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     display_name: str = Field(min_length=1)
+    age: int | None = Field(default=None, ge=0, le=150)
+    gender: str = ""
+    pronouns: str = ""
+    occupation: str = ""
+
+
+class CharacterAppearanceDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str = ""
+    height: str = ""
+    build: str = ""
+    hair: str = ""
+    eyes: str = ""
+    clothing: str = ""
+    distinguishing_features: list[str] = Field(default_factory=list)
+
+
+class CharacterPersonalityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str = ""
+    traits: list[str] = Field(default_factory=list)
+    temperament: str = ""
+    social_style: str = ""
+    speech_style: str = ""
+    strengths: list[str] = Field(default_factory=list)
+    flaws: list[str] = Field(default_factory=list)
+
+
+class CharacterBackgroundDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    birthplace: str = ""
+    residence: str = ""
+    education: str = ""
+    history: str = ""
+
+
+class CharacterMotivationsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    values: list[str] = Field(default_factory=list)
+    goals: list[str] = Field(default_factory=list)
+    fears: list[str] = Field(default_factory=list)
+    needs: list[str] = Field(default_factory=list)
+    current_priorities: list[str] = Field(default_factory=list)
+
+
+class CharacterCapabilitiesDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    skills: list[str] = Field(default_factory=list)
+    knowledge_areas: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class CharacterPreferencesDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    likes: list[str] = Field(default_factory=list)
+    dislikes: list[str] = Field(default_factory=list)
+    habits: list[str] = Field(default_factory=list)
+    routines: list[str] = Field(default_factory=list)
+
+
+class CharacterRelationshipDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_id: str = Field(min_length=1)
+    relationship: str = Field(min_length=1)
+    sentiment: str = ""
+    notes: str = ""
+
+
+class CharacterCustomFieldDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    value: JsonValue
+    prompt_visible: bool = True
+    ui_visible: bool = True
+
+
+class CharacterCustomSectionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    prompt_visible: bool = True
+    ui_visible: bool = True
+    fields: list[CharacterCustomFieldDefinition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def field_keys_are_unique(self) -> "CharacterCustomSectionDefinition":
+        keys = [field.key for field in self.fields]
+        if len(keys) != len(set(keys)):
+            raise ValueError(f"custom section {self.id} field keys must be unique")
+        return self
+
+
+class CharacterProfileDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    profile_ref: str | None = Field(default=None, min_length=1)
+    template_id: str = "human-v1"
+    identity: CharacterIdentityDefinition | None = None
+    appearance: CharacterAppearanceDefinition = Field(
+        default_factory=CharacterAppearanceDefinition
+    )
+    personality: CharacterPersonalityDefinition = Field(
+        default_factory=CharacterPersonalityDefinition
+    )
+    background: CharacterBackgroundDefinition = Field(
+        default_factory=CharacterBackgroundDefinition
+    )
+    motivations: CharacterMotivationsDefinition = Field(
+        default_factory=CharacterMotivationsDefinition
+    )
+    capabilities: CharacterCapabilitiesDefinition = Field(
+        default_factory=CharacterCapabilitiesDefinition
+    )
+    preferences: CharacterPreferencesDefinition = Field(
+        default_factory=CharacterPreferencesDefinition
+    )
+    relationships: list[CharacterRelationshipDefinition] = Field(
+        default_factory=list
+    )
+    custom_sections: list[CharacterCustomSectionDefinition] = Field(
+        default_factory=list
+    )
+    display_name: str | None = None
     role: str = ""
     traits: list[str] = Field(default_factory=list)
     values: list[str] = Field(default_factory=list)
     goals: list[str] = Field(default_factory=list)
-    relationships: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_relationships(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        relationships = value.get("relationships")
+        if isinstance(relationships, dict):
+            normalized = dict(value)
+            normalized["relationships"] = [
+                {
+                    "target_id": target_id,
+                    "relationship": relationship,
+                }
+                for target_id, relationship in relationships.items()
+            ]
+            return normalized
+        return value
+
+    @model_validator(mode="after")
+    def normalize_legacy_shape(self) -> "CharacterProfileDefinition":
+        if self.identity is None:
+            if self.display_name is None:
+                if self.profile_ref is not None:
+                    return self
+                raise ValueError("character profile requires identity.display_name")
+            self.identity = CharacterIdentityDefinition(
+                display_name=self.display_name,
+                occupation=self.role,
+            )
+        if self.traits and not self.personality.traits:
+            self.personality.traits = list(self.traits)
+        if self.values and not self.motivations.values:
+            self.motivations.values = list(self.values)
+        if self.goals and not self.motivations.goals:
+            self.motivations.goals = list(self.goals)
+        section_ids = [section.id for section in self.custom_sections]
+        if len(section_ids) != len(set(section_ids)):
+            raise ValueError("custom section IDs must be unique")
+        return self
 
 
 class ControllerDefinition(BaseModel):
@@ -828,6 +1081,92 @@ def _validate_component[DefinitionT: BaseModel](
         raise ValueError(
             f"invalid {component_type.__name__} for entity {entity_id}: {error}"
         ) from error
+
+
+def _resolve_character_profile(
+    scenario: ScenarioDefinition,
+    entity_id: str,
+    raw_profile: dict[str, Any] | None,
+    fallback_display_name: str,
+) -> tuple[CharacterProfileDefinition, str]:
+    if raw_profile is None:
+        return (
+            CharacterProfileDefinition(
+                identity=CharacterIdentityDefinition(
+                    display_name=fallback_display_name
+                )
+            ),
+            f"inline:{entity_id}",
+        )
+    reference = raw_profile.get("profile_ref")
+    if isinstance(reference, str):
+        base = scenario.character_profiles.get(reference)
+        if base is None:
+            raise ValueError(
+                f"entity {entity_id} references unknown character profile {reference}"
+            )
+        base_payload = base.model_dump(
+            mode="python",
+            exclude={
+                "profile_ref",
+                "display_name",
+                "role",
+                "traits",
+                "values",
+                "goals",
+            },
+        )
+        overrides = {
+            key: value
+            for key, value in raw_profile.items()
+            if key != "profile_ref"
+        }
+        resolved = CharacterProfileDefinition.model_validate(
+            _deep_merge(base_payload, overrides)
+        )
+        return resolved, reference
+    resolved = _validate_component(
+        CharacterProfileDefinition, raw_profile, entity_id
+    )
+    return resolved, f"inline:{entity_id}"
+
+
+def _deep_merge(
+    base: dict[str, Any],
+    override: dict[str, Any],
+) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(current, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _profile_ui_payload(
+    profile: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    visible = dict(profile)
+    raw_sections = visible.get("custom_sections")
+    if not isinstance(raw_sections, list):
+        return visible
+    sections: list[JsonValue] = []
+    for raw_section in raw_sections:
+        if not isinstance(raw_section, dict) or raw_section.get("ui_visible") is False:
+            continue
+        section = dict(raw_section)
+        raw_fields = section.get("fields")
+        if isinstance(raw_fields, list):
+            section["fields"] = [
+                field
+                for field in raw_fields
+                if isinstance(field, dict) and field.get("ui_visible") is not False
+            ]
+        sections.append(section)
+    visible["custom_sections"] = sections
+    return visible
 
 
 def _build_world(definition: WorldDefinition) -> WorldMap:

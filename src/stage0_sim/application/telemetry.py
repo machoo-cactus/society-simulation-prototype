@@ -5,6 +5,7 @@ from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import SimulationRunner
 from stage0_sim.domain.components import (
     ActivityComponent,
+    CharacterProfileComponent,
     ControllerComponent,
     ConversationComponent,
     DriveComponent,
@@ -60,7 +61,7 @@ class TelemetryBroker:
             _message_type_for_event(event.event_type),
             event.simulation_tick,
             event.simulation_time,
-            {"event": event.canonical_dict()},
+            {"event": event.to_dict()},
         )
 
     def _on_event(self, event: DomainEvent) -> None:
@@ -158,6 +159,17 @@ def build_agent_snapshot(
 ) -> dict[str, JsonValue]:
     registry = runner.registry
     payload: dict[str, JsonValue] = {"id": agent_id}
+    if registry.has_component(agent_id, CharacterProfileComponent):
+        profile = registry.get_component(agent_id, CharacterProfileComponent)
+        payload["character_profile"] = {
+            "profile_id": profile.profile_id,
+            "template_id": profile.template_id,
+            "template_version": profile.template_version,
+            "content_hash": profile.content_hash,
+            "display_name": profile.display_name,
+            "description": profile.description,
+            "data": profile.ui_data,
+        }
     if registry.has_component(agent_id, PositionComponent):
         payload["position"] = registry.get_component(
             agent_id, PositionComponent

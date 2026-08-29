@@ -1,4 +1,10 @@
 const state = {
+  uiState: "EMPTY",
+  loadedScenario: null,
+  loadedScenarioName: null,
+  scenarioId: null,
+  scenarioRevision: 0,
+  characterAssignments: {},
   runId: null,
   runStatus: "created",
   snapshot: null,
@@ -9,7 +15,14 @@ const state = {
   reconnectAttempt: 0,
   intentionalClose: false,
   events: [],
+  eventIds: new Set(),
   filter: "all",
+  search: "",
+  eventOrder: "newest",
+  autoScroll: true,
+  selectedEvent: null,
+  eventHistoryTotal: 0,
+  eventHistoryOffset: 0,
 };
 
 const elements = Object.fromEntries(
@@ -19,10 +32,18 @@ const elements = Object.fromEntries(
     "agent-location", "satiety-value", "satiety-gauge", "energy-value",
     "energy-gauge", "stress-value", "stress-gauge", "activity-value",
     "system1-value", "drive-value", "destination-value", "memory-value",
-    "plan-list", "vitals-form", "mutate-satiety", "mutate-energy",
-    "mutate-stress", "scenario-file", "demo-button", "pause-button",
+    "plan-list", "character-profile-text", "vitals-form",
+    "mutate-satiety", "mutate-energy",
+    "mutate-stress", "scenario-file", "load-example-button", "start-button",
+    "pause-button",
     "resume-button", "step-button", "stop-button", "speed-select",
-    "run-label", "event-filter", "clear-log", "event-log", "event-count",
+    "scenario-label", "run-label", "control-status",
+    "character-assignment-panel", "character-assignments",
+    "event-filter", "event-search", "event-order", "auto-scroll",
+    "load-older-events", "expand-log", "clear-log", "event-log", "event-count",
+    "event-detail-dialog", "event-detail-title", "event-detail-meta",
+    "event-detail-text", "close-event-detail", "copy-event-text",
+    "copy-event-json",
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -59,8 +80,11 @@ function normalizeAgent(raw, fallbackId = "unknown-agent") {
   const system1 = isObject(agent.system1) ? agent.system1 : {};
   const plan = isObject(agent.plan) ? agent.plan : {};
   const memory = isObject(agent.memory) ? agent.memory : {};
+  const profile = isObject(agent.character_profile) ? agent.character_profile : {};
   return {
     id: optionalString(agent.id) ?? fallbackId,
+    displayName: optionalString(profile.display_name) ?? optionalString(agent.id) ?? fallbackId,
+    characterProfile: profile,
     position: normalizeCoordinate(agent.position),
     homeostasis: {
       satiety: finiteNumber(
@@ -176,43 +200,168 @@ async function api(path, options = {}) {
   return response.json();
 }
 
-async function startScenario(scenario) {
-  closeSocket(true);
-  resetRunState();
-  setConnection("warning", "Creating scenario...");
+async function loadScenario(scenario, sourceLabel = "JSON file") {
+  if (!isObject(scenario)) throw new Error("Scenario must be a JSON object");
+  state.uiState = "SCENARIO_LOADING";
+  state.loadedScenario = structuredClone(scenario);
+  const revision = ++state.scenarioRevision;
+  state.loadedScenarioName = optionalString(scenario.name) ?? "Unnamed scenario";
+  initializeCharacterAssignments();
+  renderCharacterAssignments();
+  setControlStatus(`Validating ${state.loadedScenarioName}...`);
+  updateControls();
   try {
     const created = await api("/simulation/scenarios", {
       method: "POST",
-      body: JSON.stringify(scenario),
+      body: JSON.stringify(buildAssignedScenario()),
     });
+    if (revision !== state.scenarioRevision) return;
+    state.scenarioId = created.scenario_id;
+    state.uiState = "SCENARIO_READY";
+    elements["scenario-label"].textContent =
+      `Ready: ${state.loadedScenarioName} (${sourceLabel})`;
+    setControlStatus("Scenario loaded. Assign characters if needed, then press Start.");
+    updateControls();
+  } catch (error) {
+    if (revision !== state.scenarioRevision) return;
+    state.scenarioId = null;
+    state.uiState = "ERROR";
+    setControlStatus(`Scenario invalid: ${error.message}`, true);
+    addLocalEvent("ui.scenario_invalid", {message: error.message}, "error");
+    updateControls();
+  }
+}
+
+async function loadExample() {
+  try {
+    const response = await fetch("/ui/demo.json", {cache: "no-store"});
+    if (!response.ok) throw new Error(`Example HTTP ${response.status}`);
+    await loadScenario(await response.json(), "bundled example");
+  } catch (error) {
+    setControlStatus(`Example unavailable: ${error.message}`, true);
+  }
+}
+
+async function startLoadedScenario() {
+  if (!state.loadedScenario || !state.scenarioId) return;
+  state.uiState = "RUN_STARTING";
+  setControlStatus("Starting simulation...");
+  updateControls();
+  try {
     const run = await api("/simulation/runs", {
       method: "POST",
       body: JSON.stringify({
-        scenario_id: created.scenario_id,
+        scenario_id: state.scenarioId,
         realtime: true,
         speed: finiteNumber(elements["speed-select"].value, 1),
       }),
     });
+    closeSocket(true);
+    resetRunState();
     state.runId = run.run_id;
     state.runStatus = run.status;
+    state.uiState = "RUNNING";
     state.intentionalClose = false;
-    elements["run-label"].textContent = `${run.run_id} / ${scenario.name ?? "scenario"}`;
+    elements["run-label"].textContent = `${run.run_id} / running`;
+    setControlStatus("Simulation running.");
     updateControls();
     connectStream();
   } catch (error) {
-    setConnection("offline", `Start failed: ${error.message}`);
+    state.uiState = "SCENARIO_READY";
+    setControlStatus(`Start failed: ${error.message}`, true);
     addLocalEvent("ui.start_failed", {message: error.message}, "error");
+    updateControls();
   }
 }
 
-async function startDemo() {
-  try {
-    const response = await fetch("/ui/demo.json", {cache: "no-store"});
-    if (!response.ok) throw new Error(`Demo HTTP ${response.status}`);
-    await startScenario(await response.json());
-  } catch (error) {
-    setConnection("offline", `Demo unavailable: ${error.message}`);
+function initializeCharacterAssignments() {
+  state.characterAssignments = {};
+  const profiles = Object.keys(state.loadedScenario?.character_profiles ?? {});
+  if (!profiles.length) return;
+  const entities = Array.isArray(state.loadedScenario?.entities)
+    ? state.loadedScenario.entities
+    : [];
+  entities.forEach((entity, index) => {
+    if (!isObject(entity)) return;
+    const components = isObject(entity.components) ? entity.components : {};
+    const current = isObject(components.character_profile)
+      ? optionalString(components.character_profile.profile_ref)
+      : null;
+    state.characterAssignments[entity.id] =
+      current && profiles.includes(current)
+        ? current
+        : profiles[index % profiles.length];
+  });
+}
+
+function renderCharacterAssignments() {
+  const container = elements["character-assignments"];
+  container.replaceChildren();
+  const profiles = state.loadedScenario?.character_profiles ?? {};
+  const profileEntries = Object.entries(profiles);
+  const assignments = Object.entries(state.characterAssignments);
+  elements["character-assignment-panel"].hidden =
+    !profileEntries.length || !assignments.length;
+  for (const [entityId, selectedProfile] of assignments) {
+    const row = document.createElement("label");
+    row.className = "character-assignments__row";
+    const slot = document.createElement("span");
+    slot.textContent = entityId;
+    const select = document.createElement("select");
+    select.dataset.entityId = entityId;
+    for (const [profileId, profile] of profileEntries) {
+      const name = profileDisplayName(profile, profileId);
+      select.add(new Option(`${name} (${profileId})`, profileId));
+    }
+    select.value = selectedProfile;
+    select.addEventListener("change", async (event) => {
+      state.characterAssignments[entityId] = event.target.value;
+      await revalidateAssignedScenario();
+    });
+    row.append(slot, select);
+    container.append(row);
   }
+}
+
+async function revalidateAssignedScenario() {
+  const revision = ++state.scenarioRevision;
+  state.uiState = "SCENARIO_LOADING";
+  state.scenarioId = null;
+  setControlStatus("Validating character assignments...");
+  updateControls();
+  try {
+    const created = await api("/simulation/scenarios", {
+      method: "POST",
+      body: JSON.stringify(buildAssignedScenario()),
+    });
+    if (revision !== state.scenarioRevision) return;
+    state.scenarioId = created.scenario_id;
+    state.uiState = "SCENARIO_READY";
+    setControlStatus("Character assignments ready.");
+  } catch (error) {
+    if (revision !== state.scenarioRevision) return;
+    state.uiState = "ERROR";
+    setControlStatus(`Assignment invalid: ${error.message}`, true);
+  }
+  updateControls();
+}
+
+function buildAssignedScenario() {
+  const scenario = structuredClone(state.loadedScenario);
+  if (!scenario) throw new Error("No scenario loaded");
+  for (const entity of scenario.entities ?? []) {
+    const profileId = state.characterAssignments[entity.id];
+    if (!profileId) continue;
+    entity.components ??= {};
+    entity.components.character_profile = {profile_ref: profileId};
+  }
+  return scenario;
+}
+
+function profileDisplayName(profile, fallback) {
+  return optionalString(profile?.identity?.display_name)
+    ?? optionalString(profile?.display_name)
+    ?? fallback;
 }
 
 function connectStream() {
@@ -291,6 +440,9 @@ function handleEnvelope(message) {
   }
   if (message.type === "simulation_status") {
     state.runStatus = optionalString(message.payload.status) ?? state.runStatus;
+    state.uiState = uiStateForRunStatus(state.runStatus);
+    updateRunLabel();
+    setControlStatus(statusMessage(state.runStatus));
     updateControls();
     return;
   }
@@ -322,6 +474,9 @@ async function refreshSnapshot() {
 
 async function control(action, body = null) {
   if (!state.runId) return;
+  state.uiState = `${action.toUpperCase()}ING`;
+  setControlStatus(`${action[0].toUpperCase()}${action.slice(1)} in progress...`);
+  updateControls();
   try {
     const result = await api(
       `/simulation/runs/${encodeURIComponent(state.runId)}/${action}`,
@@ -331,15 +486,28 @@ async function control(action, body = null) {
       }
     );
     if (typeof result.status === "string") state.runStatus = result.status;
-    updateControls();
-    if (action === "step") await refreshSnapshot();
+    await refreshRunState();
     if (action === "stop") {
       closeSocket(true);
-      setConnection("offline", "Run stopped");
+      setConnection("warning", "Run stopped; scenario remains loaded");
     }
   } catch (error) {
+    state.uiState = uiStateForRunStatus(state.runStatus);
+    setControlStatus(`${action} failed: ${error.message}`, true);
     addLocalEvent(`ui.${action}_failed`, {message: error.message}, "error");
+    updateControls();
   }
+}
+
+async function refreshRunState() {
+  if (!state.runId) return;
+  const run = await api(`/simulation/runs/${encodeURIComponent(state.runId)}`);
+  state.runStatus = run.status;
+  state.uiState = uiStateForRunStatus(run.status);
+  await refreshSnapshot();
+  updateRunLabel();
+  setControlStatus(statusMessage(run.status));
+  updateControls();
 }
 
 async function mutateVitals(event) {
@@ -378,6 +546,10 @@ function render() {
   renderInspector();
   drawWorld();
   updateControls();
+  document.querySelector(".world-panel")?.classList.toggle(
+    "paused",
+    state.runStatus === "paused"
+  );
 }
 
 function syncAgentSelection() {
@@ -406,7 +578,9 @@ function renderInspector() {
   const agent = selectedAgent();
   const position = agent?.position;
   elements["agent-location"].textContent = agent
-    ? `${agent.id}${position ? ` at (${position.x}, ${position.y})` : " / no position"}`
+    ? `${agent.displayName} [${agent.id}]${
+        position ? ` at (${position.x}, ${position.y})` : " / no position"
+      }`
     : "No agent selected";
   setGauge("satiety", agent?.homeostasis.satiety);
   setGauge("energy", agent?.homeostasis.energy);
@@ -418,6 +592,9 @@ function renderInspector() {
     ? `(${agent.movement.destination.x}, ${agent.movement.destination.y})`
     : "none";
   elements["memory-value"].textContent = agent ? String(agent.memoryCount) : "--";
+  elements["character-profile-text"].textContent =
+    optionalString(agent?.characterProfile?.description)
+    ?? "No character profile available";
   renderPlan(agent);
 }
 
@@ -603,14 +780,27 @@ function stationLabel(station) {
 
 function addEvent(raw) {
   const event = isObject(raw) ? raw : {};
+  const eventId = optionalString(event.event_id)
+    ?? `local:${optionalString(event.event_type) ?? "unknown"}:${
+      event.simulation_tick ?? 0
+    }:${state.events.length}`;
+  if (state.eventIds.has(eventId)) return;
+  state.eventIds.add(eventId);
   state.events.push({
+    eventId,
     type: optionalString(event.event_type) ?? "unknown",
     tick: finiteNumber(event.simulation_tick, state.snapshot?.tick ?? 0),
     time: finiteNumber(event.simulation_time, state.snapshot?.simulationTime ?? 0),
     agentId: optionalString(event.agent_id),
     payload: isObject(event.payload) ? event.payload : {},
+    causationId: optionalString(event.causation_id),
+    correlationId: optionalString(event.correlation_id),
+    wallTime: optionalString(event.wall_time),
   });
-  if (state.events.length > 500) state.events.splice(0, state.events.length - 500);
+  if (state.events.length > 5000) {
+    const removed = state.events.splice(0, state.events.length - 5000);
+    removed.forEach((item) => state.eventIds.delete(item.eventId));
+  }
   renderEventLog();
 }
 
@@ -625,10 +815,15 @@ function addLocalEvent(type, payload, category = null) {
 
 function renderEventLog() {
   const visible = state.events.filter(eventMatchesFilter);
+  const ordered = state.eventOrder === "oldest"
+    ? visible
+    : visible.slice().reverse();
   const fragment = document.createDocumentFragment();
-  for (const event of visible.slice().reverse()) {
+  for (const event of ordered) {
     const row = document.createElement("div");
     row.className = `event-row ${eventClass(event.type)}`;
+    row.tabIndex = 0;
+    row.title = "Open full event detail";
     const tick = document.createElement("span");
     tick.className = "event-row__tick";
     tick.textContent = `t${event.tick}`;
@@ -639,21 +834,35 @@ function renderEventLog() {
     detail.className = "event-row__detail";
     detail.textContent = summarizePayload(event.payload, event.agentId);
     row.append(tick, type, detail);
+    row.addEventListener("click", () => showEventDetail(event));
+    row.addEventListener("keydown", (keyboardEvent) => {
+      if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+        keyboardEvent.preventDefault();
+        showEventDetail(event);
+      }
+    });
     fragment.append(row);
   }
   elements["event-log"].replaceChildren(fragment);
   elements["event-count"].textContent = `${state.events.length} events / ${visible.length} shown`;
+  if (state.autoScroll && state.eventOrder === "oldest") {
+    elements["event-log"].scrollTop = elements["event-log"].scrollHeight;
+  }
 }
 
 function eventMatchesFilter(event) {
   const filter = state.filter;
-  if (filter === "all") return true;
-  if (filter === "system1") return event.type.startsWith("system1.") || event.type === "threshold.breached";
-  if (filter === "plan") return event.type.startsWith("plan");
-  if (filter === "affordance") return event.type.startsWith("affordance.");
-  if (filter === "dialogue") return event.type.startsWith("dialogue.");
-  if (filter === "errors") return /(failed|blocked|cancelled|error)/.test(event.type);
-  return true;
+  let matches = true;
+  if (filter === "system1") matches = event.type.startsWith("system1.") || event.type === "threshold.breached";
+  if (filter === "actions") matches = /^(plan|planner|affordance|activity|agent|path)\./.test(event.type);
+  if (filter === "dialogue") matches = /^(dialogue|speech)\./.test(event.type);
+  if (filter === "cognition") matches = /^(cognition|tool)\./.test(event.type);
+  if (filter === "perception") matches = event.type.startsWith("perception.");
+  if (filter === "errors") matches = /(failed|blocked|cancelled|error|rejected)/.test(event.type);
+  if (filter === "ui") matches = event.type.startsWith("ui.") || event.type.startsWith("simulation.");
+  if (!matches) return false;
+  if (!state.search) return true;
+  return JSON.stringify(event).toLowerCase().includes(state.search);
 }
 
 function eventClass(type) {
@@ -664,13 +873,56 @@ function eventClass(type) {
 
 function summarizePayload(payload, agentId) {
   const prefix = agentId ? `${agentId}: ` : "";
-  const preferred = ["drive", "action", "station_id", "reason", "current", "message"];
+  const preferred = [
+    "text", "tool_name", "action", "target_id", "recipient_ids", "drive",
+    "station_id", "reason", "current", "message", "provider", "latency_ms",
+  ];
   const details = preferred
     .filter((key) => payload[key] !== undefined && payload[key] !== null)
     .map((key) => `${key}=${String(payload[key])}`);
   if (details.length) return prefix + details.join(", ");
   const serialized = JSON.stringify(payload);
-  return prefix + (serialized.length > 180 ? `${serialized.slice(0, 177)}...` : serialized);
+  return prefix + (serialized.length > 240 ? `${serialized.slice(0, 237)}...` : serialized);
+}
+
+function showEventDetail(event) {
+  state.selectedEvent = event;
+  elements["event-detail-title"].textContent = event.type;
+  elements["event-detail-meta"].textContent =
+    `tick ${event.tick} / ${event.time.toFixed(1)}s / ${event.eventId}`;
+  elements["event-detail-text"].textContent = JSON.stringify(event, null, 2);
+  elements["event-detail-dialog"].showModal();
+}
+
+async function copySelectedEvent(mode) {
+  if (!state.selectedEvent) return;
+  const event = state.selectedEvent;
+  const text = mode === "text"
+    ? String(event.payload.text ?? summarizePayload(event.payload, event.agentId))
+    : JSON.stringify(event, null, 2);
+  await navigator.clipboard.writeText(text);
+  setControlStatus("Copied event content.");
+}
+
+async function loadOlderEvents() {
+  if (!state.runId) return;
+  try {
+    const page = await api(
+      `/simulation/runs/${encodeURIComponent(state.runId)}/events?offset=${
+        state.eventHistoryOffset
+      }&limit=1000`
+    );
+    state.eventHistoryTotal = finiteNumber(page.total, 0);
+    for (const event of page.events ?? []) addEvent(event);
+    state.eventHistoryOffset = finiteNumber(
+      page.next_offset,
+      state.eventHistoryOffset
+    );
+    elements["load-older-events"].disabled =
+      state.eventHistoryOffset >= state.eventHistoryTotal;
+  } catch (error) {
+    setControlStatus(`Could not load event history: ${error.message}`, true);
+  }
 }
 
 function updateControls() {
@@ -678,11 +930,51 @@ function updateControls() {
   const running = state.runStatus === "running";
   const paused = state.runStatus === "paused";
   const stopped = state.runStatus === "stopped";
-  elements["pause-button"].disabled = !hasRun || !running;
-  elements["resume-button"].disabled = !hasRun || !paused;
-  elements["step-button"].disabled = !hasRun || !paused;
-  elements["stop-button"].disabled = !hasRun || stopped;
-  elements["speed-select"].disabled = !hasRun || stopped;
+  const busy = /ING$/.test(state.uiState);
+  const scenarioReady = Boolean(state.loadedScenario) &&
+    ["SCENARIO_READY", "STOPPED"].includes(state.uiState);
+  elements["start-button"].disabled = !scenarioReady || (hasRun && !stopped) || busy;
+  elements["pause-button"].disabled = busy || !hasRun || !running;
+  elements["resume-button"].disabled = busy || !hasRun || !paused;
+  elements["step-button"].disabled = busy || !hasRun || !paused;
+  elements["stop-button"].disabled = busy || !hasRun || stopped;
+  elements["speed-select"].disabled = busy || !hasRun || stopped;
+  elements["scenario-file"].disabled = busy || (hasRun && !stopped);
+  elements["load-example-button"].disabled = busy || (hasRun && !stopped);
+  elements["load-older-events"].disabled =
+    !hasRun
+    || (
+      state.eventHistoryTotal > 0
+      && state.eventHistoryOffset >= state.eventHistoryTotal
+    );
+  elements["vitals-form"].querySelectorAll("input, button").forEach((control) => {
+    control.disabled = busy || !hasRun || stopped;
+  });
+}
+
+function uiStateForRunStatus(status) {
+  if (status === "running") return "RUNNING";
+  if (status === "paused") return "PAUSED";
+  if (status === "stopped") return "STOPPED";
+  return state.loadedScenario ? "SCENARIO_READY" : "EMPTY";
+}
+
+function statusMessage(status) {
+  if (status === "paused") return "Simulation paused. Tick will remain stable until Resume or Single step.";
+  if (status === "stopped") return "Run stopped. The loaded scenario and final results remain available.";
+  if (status === "running") return "Simulation running.";
+  return "";
+}
+
+function updateRunLabel() {
+  elements["run-label"].textContent = state.runId
+    ? `${state.runId} / ${state.runStatus}`
+    : "No active run";
+}
+
+function setControlStatus(message, isError = false) {
+  elements["control-status"].textContent = message;
+  elements["control-status"].classList.toggle("error", isError);
 }
 
 function setConnection(kind, label) {
@@ -702,16 +994,21 @@ function clearProtocolWarning() {
 
 function resetRunState() {
   state.runId = null;
+  state.runStatus = "created";
   state.snapshot = null;
   state.selectedAgentId = null;
   state.lastSequence = 0;
   state.events = [];
+  state.eventIds = new Set();
+  state.eventHistoryTotal = 0;
+  state.eventHistoryOffset = 0;
   elements["sequence-label"].textContent = "seq --";
   renderEventLog();
   render();
 }
 
-elements["demo-button"].addEventListener("click", startDemo);
+elements["load-example-button"].addEventListener("click", loadExample);
+elements["start-button"].addEventListener("click", startLoadedScenario);
 elements["pause-button"].addEventListener("click", () => control("pause"));
 elements["resume-button"].addEventListener("click", () => control("resume"));
 elements["step-button"].addEventListener("click", () => control("step"));
@@ -728,16 +1025,46 @@ elements["event-filter"].addEventListener("change", (event) => {
   state.filter = event.target.value;
   renderEventLog();
 });
-elements["clear-log"].addEventListener("click", () => {
-  state.events = [];
+elements["event-search"].addEventListener("input", (event) => {
+  state.search = event.target.value.trim().toLowerCase();
   renderEventLog();
 });
+elements["event-order"].addEventListener("change", (event) => {
+  state.eventOrder = event.target.value;
+  renderEventLog();
+});
+elements["auto-scroll"].addEventListener("change", (event) => {
+  state.autoScroll = event.target.checked;
+});
+elements["load-older-events"].addEventListener("click", loadOlderEvents);
+elements["expand-log"].addEventListener("click", () => {
+  const panel = document.querySelector(".log-panel");
+  const expanded = panel.classList.toggle("expanded");
+  elements["expand-log"].textContent = expanded ? "Collapse" : "Expand";
+});
+elements["clear-log"].addEventListener("click", () => {
+  state.events = [];
+  state.eventIds = new Set();
+  state.eventHistoryOffset = 0;
+  state.eventHistoryTotal = 0;
+  renderEventLog();
+  updateControls();
+});
+elements["close-event-detail"].addEventListener("click", () =>
+  elements["event-detail-dialog"].close()
+);
+elements["copy-event-text"].addEventListener("click", () =>
+  copySelectedEvent("text")
+);
+elements["copy-event-json"].addEventListener("click", () =>
+  copySelectedEvent("json")
+);
 elements["vitals-form"].addEventListener("submit", mutateVitals);
 elements["scenario-file"].addEventListener("change", async (event) => {
   const [file] = event.target.files;
   if (!file) return;
   try {
-    await startScenario(JSON.parse(await file.text()));
+    await loadScenario(JSON.parse(await file.text()), file.name);
   } catch (error) {
     addLocalEvent("ui.scenario_invalid", {message: error.message}, "error");
   } finally {

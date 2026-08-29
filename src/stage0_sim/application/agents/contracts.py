@@ -83,9 +83,6 @@ class ObservationFact:
 class CharacterObservation:
     agent_id: str
     display_name: str
-    role: str
-    traits: tuple[str, ...]
-    values: tuple[str, ...]
     goals: tuple[str, ...]
     simulation_time: float
     location_id: str | None
@@ -106,6 +103,10 @@ class CharacterDecisionRequest:
     requested_tick: int
     state_revision: int
     trigger: str
+    character_description: str
+    profile_id: str
+    profile_template_version: int
+    profile_content_hash: str
     observation: CharacterObservation
     memories: tuple[str, ...]
     allowed_tools: tuple[str, ...]

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from stage0_sim.domain.components import (
     ActivityComponent,
+    CharacterProfileComponent,
     ControllerComponent,
     ConversationComponent,
     DriveComponent,
@@ -53,6 +54,17 @@ class AgentStateProjector:
 
     def project(self, registry: Registry, agent_id: str) -> dict[str, JsonValue]:
         state: dict[str, JsonValue] = {}
+        if registry.has_component(agent_id, CharacterProfileComponent):
+            profile = registry.get_component(
+                agent_id, CharacterProfileComponent
+            )
+            state["character_profile"] = {
+                "profile_id": profile.profile_id,
+                "template_id": profile.template_id,
+                "template_version": profile.template_version,
+                "content_hash": profile.content_hash,
+                "display_name": profile.display_name,
+            }
         if registry.has_component(agent_id, PositionComponent):
             state["position"] = registry.get_component(
                 agent_id, PositionComponent

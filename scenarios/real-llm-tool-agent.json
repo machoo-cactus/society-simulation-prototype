@@ -24,6 +24,81 @@
     "max_concurrency": 4,
     "tool_allowlist": ["go_to", "perform", "say", "wait"]
   },
+  "character_profiles": {
+    "alex-chen": {
+      "template_id": "human-v1",
+      "identity": {
+        "display_name": "Alex Chen",
+        "age": 34,
+        "gender": "Man",
+        "pronouns": "he/him",
+        "occupation": "Software research engineer"
+      },
+      "appearance": {
+        "summary": "Medium height with a slim build",
+        "hair": "Short black hair",
+        "eyes": "Dark brown behind rectangular glasses",
+        "clothing": "Dark sweater, practical trousers, worn trainers"
+      },
+      "personality": {
+        "summary": "Quiet, methodical, and considerate",
+        "traits": ["methodical", "reserved", "considerate"],
+        "speech_style": "Brief and precise; avoids exaggeration",
+        "strengths": ["careful analysis", "sustained concentration"],
+        "flaws": ["hesitates when information is incomplete"]
+      },
+      "motivations": {
+        "values": ["accuracy", "finishing commitments", "helping colleagues"],
+        "goals": ["complete the report", "check whether Jordan needs help"]
+      },
+      "capabilities": {
+        "skills": ["software research", "technical writing"]
+      },
+      "relationships": [
+        {
+          "target_id": "agent-002",
+          "relationship": "trusted colleague",
+          "sentiment": "positive"
+        }
+      ]
+    },
+    "jordan-lee": {
+      "template_id": "human-v1",
+      "identity": {
+        "display_name": "Jordan Lee",
+        "age": 29,
+        "gender": "Woman",
+        "pronouns": "she/her",
+        "occupation": "Operations analyst"
+      },
+      "appearance": {
+        "summary": "Average height with an athletic build",
+        "hair": "Shoulder-length brown hair",
+        "clothing": "Blue overshirt, plain T-shirt, dark jeans"
+      },
+      "personality": {
+        "summary": "Curious, warm, and direct",
+        "traits": ["curious", "collaborative", "direct"],
+        "speech_style": "Friendly and asks concrete follow-up questions",
+        "strengths": ["notices coordination problems", "communicates early"],
+        "flaws": ["can become impatient with prolonged indecision"]
+      },
+      "motivations": {
+        "values": ["clarity", "teamwork", "practical progress"],
+        "goals": ["coordinate the day's work with Alex", "take a break after the analysis"]
+      },
+      "capabilities": {
+        "skills": ["operations analysis", "coordination"]
+      },
+      "relationships": [
+        {
+          "target_id": "agent-001",
+          "relationship": "trusted colleague",
+          "sentiment": "positive"
+        }
+      ]
+    }
+  },
   "world": {
     "width": 7,
     "height": 3,
@@ -75,13 +150,7 @@
       "components": {
         "position": {"x": 0, "y": 1},
         "homeostasis": {"satiety": 80, "energy": 80, "stress": 20},
-        "character_profile": {
-          "display_name": "Alex",
-          "role": "researcher",
-          "traits": ["methodical", "reserved"],
-          "values": ["finish commitments", "help colleagues"],
-          "goals": ["complete focused work", "speak with Jordan"]
-        },
+        "character_profile": {"profile_ref": "alex-chen"},
         "controller": {
           "enabled": true,
           "tool_allowlist": ["go_to", "perform", "say", "wait"]
@@ -94,13 +163,7 @@
       "components": {
         "position": {"x": 2, "y": 1},
         "homeostasis": {"satiety": 75, "energy": 85, "stress": 15},
-        "character_profile": {
-          "display_name": "Jordan",
-          "role": "analyst",
-          "traits": ["curious", "collaborative"],
-          "values": ["clarity", "teamwork"],
-          "goals": ["coordinate with Alex"]
-        },
+        "character_profile": {"profile_ref": "jordan-lee"},
         "controller": {
           "enabled": true,
           "tool_allowlist": ["go_to", "perform", "say", "wait"]

@@ -276,9 +276,6 @@ def test_tool_registry_rejects_extra_fields_and_unknown_targets() -> None:
     observation = CharacterObservation(
         agent_id="alex",
         display_name="Alex",
-        role="",
-        traits=(),
-        values=(),
         goals=(),
         simulation_time=0,
         location_id=None,
@@ -297,6 +294,10 @@ def test_tool_registry_rejects_extra_fields_and_unknown_targets() -> None:
         requested_tick=1,
         state_revision=0,
         trigger="idle",
+        character_description="# Character Profile\n\nAlex",
+        profile_id="alex",
+        profile_template_version=1,
+        profile_content_hash="hash",
         observation=observation,
         memories=(),
         allowed_tools=("go_to", "wait"),
@@ -361,7 +362,7 @@ def test_system1_makes_late_provider_result_stale() -> None:
     state = runner.registry.get_component("alex", HomeostasisComponent)
     state.satiety = 0
     runner.run_for(1)
-    time.sleep(0.05)
+    time.sleep(0.1)
     runner.run_for(1)
 
     plan = runner.registry.get_component("alex", PlanComponent)

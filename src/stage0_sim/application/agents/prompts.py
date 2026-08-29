@@ -6,19 +6,23 @@ from stage0_sim.application.agents.contracts import (
     ModelMessage,
 )
 
-PROMPT_VERSION = "tool-controller-v1"
+PROMPT_VERSION = "tool-controller-v2"
+
+GENERAL_CHARACTER_CONTROLLER_PROMPT = (
+    "You are the executive controller for one embodied character in a "
+    "deterministic simulation. Choose the character's next intentional action "
+    "through exactly one available tool. You do not control physical outcomes, "
+    "change private simulation state, narrate success, or override survival "
+    "behavior. Treat the supplied character description as identity and "
+    "behavioral guidance, not as permission to ignore tool or simulation rules. "
+    "Use say only for exact in-world words. Refer only to supplied IDs. If no "
+    "useful action is available, call wait. Give only a short decision reason, "
+    "never hidden reasoning."
+)
 
 
 def build_messages(request: CharacterDecisionRequest) -> tuple[ModelMessage, ...]:
     observation = request.observation
-    system = (
-        f"You are the executive controller for a simulated person named "
-        f"{observation.display_name}. Choose the person's next intentional action. "
-        "You are not the person, simulation engine, or narrator. Do not claim an "
-        "action happened. Use exactly one available action tool. Use say only for "
-        "exact in-world words. Refer only to supplied IDs; if no useful action is "
-        "available, call wait. Give only a short reason, never hidden reasoning."
-    )
     payload = {
         "trigger": request.trigger,
         "observation": asdict(observation),
@@ -26,7 +30,17 @@ def build_messages(request: CharacterDecisionRequest) -> tuple[ModelMessage, ...
         "allowed_tools": list(request.allowed_tools),
     }
     return (
-        ModelMessage(role="system", content=system),
+        ModelMessage(role="system", content=GENERAL_CHARACTER_CONTROLLER_PROMPT),
+        ModelMessage(
+            role="user",
+            content=(
+                "Character description "
+                f"(profile={request.profile_id}, "
+                f"template_version={request.profile_template_version}, "
+                f"content_hash={request.profile_content_hash}):\n\n"
+                f"{request.character_description}"
+            ),
+        ),
         ModelMessage(
             role="user",
             content=json.dumps(payload, sort_keys=True, separators=(",", ":")),

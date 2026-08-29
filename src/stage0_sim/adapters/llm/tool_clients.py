@@ -37,38 +37,6 @@ class ScriptedModelClient(ModelClient):
         return self.turns.popleft()
 
 
-class FakeToolModelClient(ModelClient):
-    provider_name = "fake-tool"
-    synchronous = True
-
-    async def complete(self, request: ModelRequest) -> ModelTurn:
-        wait_tool = next(
-            (tool for tool in request.tools if tool.name == "wait"),
-            None,
-        )
-        if wait_tool is None:
-            raise ModelClientError("wait tool is not available")
-        return ModelTurn(
-            text=None,
-            tool_calls=(
-                ModelToolCall(
-                    call_id=f"{request.request_id}:tool-1",
-                    name="wait",
-                    arguments={
-                        "duration_seconds": 30,
-                        "reason": "Deterministic default action",
-                    },
-                ),
-            ),
-            finish_reason="tool_calls",
-            provider=self.provider_name,
-            model="fake-tool-v1",
-            latency_ms=0.0,
-            input_tokens=0,
-            output_tokens=0,
-        )
-
-
 class ReplayModelClient(ModelClient):
     synchronous = True
 
@@ -125,12 +93,21 @@ class OpenAICompatibleConfiguration:
     model: str
     api_key: str | None = None
     timeout_seconds: float = 30.0
+    retry_attempts: int = 3
+    retry_delay_seconds: float = 1.0
+    tool_choice: str = "auto"
 
     def __post_init__(self) -> None:
         if not self.base_url or not self.model:
             raise ValueError("LLM base_url and model must not be empty")
         if self.timeout_seconds <= 0:
             raise ValueError("LLM timeout must be greater than zero")
+        if self.retry_attempts <= 0:
+            raise ValueError("LLM retry_attempts must be greater than zero")
+        if self.retry_delay_seconds < 0:
+            raise ValueError("LLM retry_delay_seconds must not be negative")
+        if self.tool_choice not in {"auto", "required", "none"}:
+            raise ValueError("LLM tool_choice must be auto, required, or none")
 
 
 class OpenAICompatibleClient(ModelClient):
@@ -169,43 +146,69 @@ class OpenAICompatibleClient(ModelClient):
                 }
                 for tool in request.tools
             ],
-            "tool_choice": "required",
+            "tool_choice": self.configuration.tool_choice,
             "max_tokens": request.max_output_tokens,
+            "stream": False,
         }
-        headers = {"Content-Type": "application/json"}
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "stage0-simulation/0.1",
+        }
         if self.configuration.api_key:
             headers["Authorization"] = f"Bearer {self.configuration.api_key}"
         http_request = urllib.request.Request(
-            self.configuration.base_url.rstrip("/") + "/chat/completions",
+            _chat_completions_url(self.configuration.base_url),
             data=json.dumps(payload).encode("utf-8"),
             headers=headers,
             method="POST",
         )
         timeout = min(request.timeout_seconds, self.configuration.timeout_seconds)
         body: Any = None
-        for attempt in range(2):
+        last_error: ModelClientError | None = None
+        for attempt in range(self.configuration.retry_attempts):
             try:
                 with urllib.request.urlopen(http_request, timeout=timeout) as response:
                     body = json.loads(response.read().decode("utf-8"))
                 break
             except urllib.error.HTTPError as error:
-                if attempt == 0 and error.code in {408, 429, 500, 502, 503, 504}:
+                detail = _http_error_detail(error)
+                last_error = ModelClientError(
+                    f"model HTTP {error.code} from {http_request.full_url}"
+                    f"{f': {detail}' if detail else ''}"
+                )
+                if (
+                    error.code in {408, 429, 500, 502, 503, 504}
+                    and attempt + 1 < self.configuration.retry_attempts
+                ):
+                    _retry_sleep(
+                        error.headers.get("Retry-After"),
+                        self.configuration.retry_delay_seconds,
+                        attempt,
+                    )
                     continue
-                raise ModelClientError(
-                    f"model HTTP request failed with status {error.code}"
-                ) from error
+                raise last_error from error
             except TimeoutError as error:
                 raise ModelClientError(
                     "model request timed out", reason="provider_timeout"
                 ) from error
             except urllib.error.URLError as error:
-                if attempt == 0:
+                last_error = ModelClientError(
+                    f"model transport failed for {http_request.full_url}: "
+                    f"{error.reason}"
+                )
+                if attempt + 1 < self.configuration.retry_attempts:
+                    _retry_sleep(
+                        None,
+                        self.configuration.retry_delay_seconds,
+                        attempt,
+                    )
                     continue
-                raise ModelClientError(
-                    f"model transport failed: {error.reason}"
-                ) from error
+                raise last_error from error
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
                 raise ModelClientError("model returned invalid JSON") from error
+        if body is None:
+            raise last_error or ModelClientError("model returned no response")
         try:
             choice = body["choices"][0]
             message = choice["message"]
@@ -288,3 +291,50 @@ def _optional_int(value: object) -> int | None:
     if isinstance(value, (int, float, str, bytes, bytearray)):
         return int(value)
     raise ValueError("token count must be numeric")
+
+
+def _chat_completions_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        return normalized
+    if normalized.endswith("/v1"):
+        return normalized + "/chat/completions"
+    return normalized + "/v1/chat/completions"
+
+
+def _http_error_detail(error: urllib.error.HTTPError) -> str:
+    try:
+        content = error.read(4096).decode("utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+    if not content:
+        return ""
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        return content
+    if isinstance(payload, dict):
+        nested = payload.get("error")
+        if isinstance(nested, dict):
+            message = nested.get("message")
+            if isinstance(message, str):
+                return message
+        detail = payload.get("detail")
+        if isinstance(detail, str):
+            return detail
+    return content
+
+
+def _retry_sleep(
+    retry_after: str | None,
+    base_delay: float,
+    attempt: int,
+) -> None:
+    delay = base_delay * (2**attempt)
+    if retry_after is not None:
+        try:
+            delay = max(delay, float(retry_after))
+        except ValueError:
+            retry_after = None
+    if delay > 0:
+        time.sleep(delay)

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_api_key: str | None = None
     llm_timeout_seconds: float = 30.0
+    llm_retry_attempts: int = 3
+    llm_retry_delay_seconds: float = 1.0
+    llm_tool_choice: str = "auto"
     llm_max_output_tokens: int = 512
     llm_max_concurrency: int = 4
     llm_record_path: Path | None = None
@@ -61,6 +64,9 @@ def create_model_client(settings: Settings) -> ModelClient | None:
             model=settings.llm_model,
             api_key=settings.llm_api_key,
             timeout_seconds=settings.llm_timeout_seconds,
+            retry_attempts=settings.llm_retry_attempts,
+            retry_delay_seconds=settings.llm_retry_delay_seconds,
+            tool_choice=settings.llm_tool_choice,
         )
     )
     if settings.llm_record_path is not None:

@@ -9,7 +9,6 @@ from fastapi.staticfiles import StaticFiles
 
 from stage0_sim import __version__
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
-from stage0_sim.api.fake_llm import router as fake_llm_router
 from stage0_sim.api.simulation import router as simulation_router
 from stage0_sim.application.manager import SimulationManager
 from stage0_sim.config import create_model_client, get_settings
@@ -48,7 +47,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(fake_llm_router)
 app.include_router(simulation_router)
 web_directory = Path(__file__).parents[1] / "web"
 app.mount("/ui", StaticFiles(directory=web_directory, html=True), name="ui")

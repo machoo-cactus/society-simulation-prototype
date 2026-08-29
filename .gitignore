@@ -13,3 +13,4 @@ data/runs/
 *.egg-info/
 build/
 dist/
+github-key.txt

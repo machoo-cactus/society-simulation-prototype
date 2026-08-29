@@ -1,10 +1,16 @@
 import asyncio
+import io
+import json
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
 
 from stage0_sim.adapters.llm import (
+    OpenAICompatibleClient,
+    OpenAICompatibleConfiguration,
     RecordingModelClient,
     ReplayModelClient,
     ScriptedModelClient,
@@ -16,6 +22,7 @@ from stage0_sim.application.agents.contracts import (
     ModelRequest,
     ModelToolCall,
     ModelTurn,
+    ToolDefinition,
 )
 from stage0_sim.application.agents.tools import ToolRegistry, ToolValidationError
 from stage0_sim.application.memory import EpisodicMemoryStore
@@ -394,7 +401,12 @@ def test_coordinator_timeout_does_not_stop_simulation_ticks() -> None:
 def test_run_budget_exhaustion_is_explicit_and_stops_cognition() -> None:
     payload = _tool_scenario().model_dump(mode="json")
     payload["cognition"]["max_requests"] = 1
-    runner = create_runner(ScenarioDefinition.model_validate(payload))
+    runner = create_runner(
+        ScenarioDefinition.model_validate(payload),
+        model_client=ScriptedModelClient(
+            (_turn("wait", {"duration_seconds": 30}),)
+        ),
+    )
 
     runner.run_for(35)
 
@@ -406,3 +418,112 @@ def test_run_budget_exhaustion_is_explicit_and_stops_cognition() -> None:
     assert len(exhausted) == 1
     assert exhausted[0].payload["reason"] == "maximum_requests"
     runner.stop()
+
+
+def test_tool_agent_requires_an_explicit_model_client() -> None:
+    with pytest.raises(ValueError, match="requires an explicit model client"):
+        create_runner(_tool_scenario())
+
+
+class _HTTPResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._content = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self) -> "_HTTPResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._content
+
+
+def test_openai_client_retries_llamacpp_503_and_accepts_root_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts: list[urllib.request.Request] = []
+
+    def urlopen(
+        request: urllib.request.Request, timeout: float
+    ) -> _HTTPResponse:
+        del timeout
+        attempts.append(request)
+        if len(attempts) == 1:
+            raise urllib.error.HTTPError(
+                url="http://127.0.0.1:8080/v1/chat/completions",
+                code=503,
+                msg="Service Unavailable",
+                hdrs={},
+                fp=io.BytesIO(
+                    b'{"error":{"message":"model is still loading"}}'
+                ),
+            )
+        return _HTTPResponse(
+            {
+                "id": "chatcmpl-1",
+                "model": "local",
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "wait",
+                                        "arguments": (
+                                            '{"duration_seconds":1}'
+                                        ),
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+            }
+        )
+
+    monkeypatch.setattr(
+        "stage0_sim.adapters.llm.tool_clients.urllib.request.urlopen",
+        urlopen,
+    )
+    client = OpenAICompatibleClient(
+        OpenAICompatibleConfiguration(
+            base_url="http://127.0.0.1:8080",
+            model="local",
+            retry_attempts=2,
+            retry_delay_seconds=0,
+        )
+    )
+    request = ModelRequest(
+        request_id="request-1",
+        correlation_id="decision-1",
+        messages=(),
+        tools=(
+            ToolDefinition(
+                name="wait",
+                description="Wait.",
+                input_schema={"type": "object"},
+            ),
+        ),
+        model="local",
+        timeout_seconds=5,
+        max_output_tokens=32,
+        prompt_version="v1",
+    )
+
+    result = asyncio.run(client.complete(request))
+
+    assert len(attempts) == 2
+    sent = attempts[-1]
+    assert sent.full_url == (
+        "http://127.0.0.1:8080/v1/chat/completions"
+    )
+    assert sent.data is not None
+    sent_payload = json.loads(sent.data.decode("utf-8"))
+    assert sent_payload["tool_choice"] == "auto"
+    assert result.tool_calls[0].name == "wait"

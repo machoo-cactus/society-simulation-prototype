@@ -63,7 +63,6 @@ stage0-sim run scenarios/navigation.json --ticks 20
 stage0-sim run scenarios/homeostasis.json --ticks 60
 stage0-sim run scenarios/system1-preemption.json --ticks 20
 stage0-sim run scenarios/fake-llm-planning.json --ticks 30
-stage0-sim run scenarios/real-llm-tool-agent.json --ticks 30
 ```
 
 | Scenario | What it demonstrates |
@@ -73,7 +72,7 @@ stage0-sim run scenarios/real-llm-tool-agent.json --ticks 30
 | `homeostasis.json` | Activity-dependent satiety, energy, and stress trajectories |
 | `system1-preemption.json` | Plan cancellation, survival navigation, affordance recovery, and resumption |
 | `fake-llm-planning.json` | Post-tick planning, memory retrieval, and validated routines without an external model |
-| `real-llm-tool-agent.json` | Observer-specific sensing and opt-in typed-tool character control |
+| `real-llm-tool-agent.json` | Observer-specific sensing and externally configured typed-tool character control |
 
 By default, canonical events are written to standard output and a SQLite dataset
 is created under `data/runs/`. Canonical events omit run IDs and wall-clock
@@ -179,8 +178,8 @@ The browser uses the same public API available to other clients:
 6. Export records from `/simulation/runs/{run_id}/export`.
 
 Additional endpoints provide agent inspection, controlled vital mutation, event
-history, and dataset summaries. The fake planner, dialogue, and embedding
-providers are exposed under `/fake-llm/v1/` for local integration experiments.
+history, and dataset summaries. Model APIs are deliberately not mounted in the
+simulation process.
 
 API run objects are process-local. Restarting the server does not restore a live
 runner, although completed records and episodic memories remain in SQLite.
@@ -194,13 +193,38 @@ runner, although completed records and episodic memories remain in SQLite.
   ordered system pass.
 - System 1 preemption cancels conflicting planner/dialogue work.
 - Telemetry samples authoritative state without advancing the simulation.
-- Fake providers are deterministic and require no credentials or network calls.
+- Legacy planner tests use deterministic in-process fakes.
 
-Tool-agent scenarios default to a deterministic local controller. Set
-`STAGE0_LLM_PROVIDER=openai-compatible`, `STAGE0_LLM_BASE_URL`, and
-`STAGE0_LLM_MODEL` to opt into a remote or local OpenAI-compatible endpoint.
-Provider work runs outside the ordered physical system pass, and completed tools
-are applied at deterministic post-tick boundaries.
+Tool-agent scenarios require an explicitly configured OpenAI-compatible or
+replay provider. Provider work runs outside the ordered physical system pass,
+and completed tools are applied at deterministic post-tick boundaries.
+
+### Start the standalone fake model API
+
+The fake server uses the same `/v1/chat/completions` shape as a real
+OpenAI-compatible server. Each request increments a process-local counter; text
+responses say `Fake response N`, while tool requests return a valid `wait` call
+whose duration counts upward.
+
+```powershell
+stage0-fake-llm --host 127.0.0.1 --port 8081
+```
+
+The equivalent module command is
+`python -m stage0_sim.api.fake_llm --host 127.0.0.1 --port 8081`.
+
+In another PowerShell window:
+
+```powershell
+$env:STAGE0_LLM_PROVIDER = "openai-compatible"
+$env:STAGE0_LLM_BASE_URL = "http://127.0.0.1:8081/v1"
+$env:STAGE0_LLM_MODEL = "stage0-fake"
+stage0-sim run scenarios/real-llm-tool-agent.json --ticks 30
+```
+
+For llama.cpp, point `STAGE0_LLM_BASE_URL` at either the server root, its `/v1`
+root, or the complete `/v1/chat/completions` URL. The adapter retries transient
+503 responses with backoff and includes llama.cpp's response detail in failures.
 
 ## Configuration
 
@@ -216,6 +240,9 @@ Settings use `STAGE0_` environment variables and may be placed in `.env`:
 | `STAGE0_LLM_MODEL` | unset | Provider model identifier |
 | `STAGE0_LLM_API_KEY` | unset | Optional provider credential; never persisted |
 | `STAGE0_LLM_TIMEOUT_SECONDS` | `30` | Provider HTTP timeout |
+| `STAGE0_LLM_RETRY_ATTEMPTS` | `3` | Attempts for transient HTTP/transport failures |
+| `STAGE0_LLM_RETRY_DELAY_SECONDS` | `1` | Initial retry backoff in seconds |
+| `STAGE0_LLM_TOOL_CHOICE` | `auto` | OpenAI-compatible tool-choice mode |
 | `STAGE0_LLM_MAX_OUTPUT_TOKENS` | `512` | Deployment ceiling per response |
 | `STAGE0_LLM_MAX_CONCURRENCY` | `4` | Deployment ceiling for concurrent requests |
 | `STAGE0_LLM_RECORD_PATH` | unset | Sanitized model request/response JSONL |

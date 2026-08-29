@@ -10,7 +10,6 @@ from stage0_sim.adapters.llm import (
     FakeDialogueGenerator,
     FakeEmbeddingProvider,
     FakePlanner,
-    FakeToolModelClient,
 )
 from stage0_sim.application.agents import (
     AgentWorkCoordinator,
@@ -453,8 +452,13 @@ def create_runner(
         for entity in scenario.entities
     )
     if tool_agent_enabled:
+        if model_client is None:
+            raise ValueError(
+                "tool-agent cognition requires an explicit model client; "
+                "configure STAGE0_LLM_PROVIDER or pass model_client"
+            )
         controller = ToolCallingCharacterController(
-            model_client=model_client or FakeToolModelClient(),
+            model_client=model_client,
             tool_registry=tool_registry,
             model=scenario.cognition.model_profile,
             timeout_seconds=scenario.cognition.decision_timeout_seconds,

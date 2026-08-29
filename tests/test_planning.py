@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from stage0_sim.adapters.llm import FakePlanner, ScriptedPlanner
 from stage0_sim.api.app import app
+from stage0_sim.api.fake_llm import app as fake_llm_app
 from stage0_sim.application.scenario import ScenarioDefinition, create_runner, load_scenario
 from stage0_sim.domain.components import (
     ActionType,
@@ -18,51 +20,51 @@ from stage0_sim.domain.components import (
 from stage0_sim.domain.world import Coordinate
 
 
-def test_fake_llm_endpoints_return_deterministic_structured_results() -> None:
-    plan_request = {
-        "agent_id": "agent",
-        "simulation_time": 12,
-        "vitals": {"satiety": 80, "energy": 75, "stress": 20},
-        "location": {"x": 0, "y": 0, "zone_id": "home"},
-        "zones": [{"id": "office", "name": "Office", "zone_type": "OFFICE"}],
-        "stations": [
+def test_fake_llm_is_a_separate_openai_compatible_api() -> None:
+    request = {
+        "model": "stage0-fake",
+        "messages": [{"role": "user", "content": "Choose an action."}],
+        "tools": [
             {
-                "id": "desk",
-                "name": "Desk",
-                "x": 2,
-                "y": 0,
-                "actions": ["WORK"],
-                "available": True,
+                "type": "function",
+                "function": {
+                    "name": "wait",
+                    "description": "Wait.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "duration_seconds": {"type": "number"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["duration_seconds"],
+                    },
+                },
             }
         ],
-        "daily_goals": ["Work"],
+        "tool_choice": "auto",
     }
+    with TestClient(fake_llm_app) as client:
+        first = client.post("/v1/chat/completions", json=request)
+        second = client.post("/v1/chat/completions", json=request)
+        models = client.get("/v1/models")
     with TestClient(app) as client:
-        first = client.post("/fake-llm/v1/plan", json=plan_request)
-        second = client.post("/fake-llm/v1/plan", json=plan_request)
-        dialogue = client.post(
-            "/fake-llm/v1/dialogue",
-            json={
-                "agent_id": "agent",
-                "simulation_time": 12,
-                "prompt": "How is the task going?",
-            },
-        )
-        embeddings = client.post(
-            "/fake-llm/v1/embeddings",
-            json={"texts": ["same text", "same text"]},
-        )
+        embedded_route = client.post("/v1/chat/completions", json=request)
 
     assert first.status_code == 200
-    assert first.json() == second.json()
-    assert first.json()["actions"] == [
-        {"action": "MOVE_TO", "target": "desk"},
-        {"action": "WORK", "duration": 60.0},
-    ]
-    assert dialogue.json()["text"] == "agent responds at t=12: How is the task going?"
-    embedding_payload = embeddings.json()
-    assert embedding_payload["dimensions"] == 8
-    assert embedding_payload["embeddings"][0] == embedding_payload["embeddings"][1]
+    assert second.status_code == 200
+    first_payload = first.json()
+    second_payload = second.json()
+    first_number = int(first_payload["id"].rsplit("-", 1)[1])
+    second_number = int(second_payload["id"].rsplit("-", 1)[1])
+    assert second_number == first_number + 1
+    first_call = first_payload["choices"][0]["message"]["tool_calls"][0]
+    second_call = second_payload["choices"][0]["message"]["tool_calls"][0]
+    assert first_call["function"]["name"] == "wait"
+    assert json.loads(second_call["function"]["arguments"])[
+        "duration_seconds"
+    ] == second_number
+    assert models.json()["data"][0]["id"] == "stage0-fake"
+    assert embedded_route.status_code == 404
 
 
 def test_fake_planner_generates_and_executes_work_routine() -> None:

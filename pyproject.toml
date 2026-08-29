@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 stage0-sim = "stage0_sim.cli:main"
+stage0-fake-llm = "stage0_sim.api.fake_llm:main"
 
 [project.optional-dependencies]
 dev = [

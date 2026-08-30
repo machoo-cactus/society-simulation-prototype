@@ -1,6 +1,7 @@
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -47,6 +48,7 @@ from stage0_sim.application.perception import (
 )
 from stage0_sim.application.planning import MacroPlanningSystem
 from stage0_sim.application.runner import RunConfiguration, SimulationRunner
+from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
     ActionType,
     ActivityComponent,
@@ -89,6 +91,7 @@ from stage0_sim.domain.information import (
 )
 from stage0_sim.domain.systems import SystemExecutor
 from stage0_sim.domain.systems.affordances import AffordanceExecutionSystem
+from stage0_sim.domain.systems.calendar import CalendarUpdateSystem
 from stage0_sim.domain.systems.homeostasis import (
     HomeostasisSystem,
     MovementActivitySystem,
@@ -658,6 +661,25 @@ class EntityDefinition(BaseModel):
     components: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
+class CalendarSettingsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_datetime: datetime
+    update_interval_seconds: float = Field(default=1800.0, gt=0)
+
+    @model_validator(mode="after")
+    def start_datetime_has_offset(self) -> "CalendarSettingsDefinition":
+        if self.start_datetime.utcoffset() is None:
+            raise ValueError("start_datetime must include a UTC offset")
+        return self
+
+    def to_domain(self) -> SimulationCalendar:
+        return SimulationCalendar(
+            start_datetime=self.start_datetime,
+            update_interval_seconds=self.update_interval_seconds,
+        )
+
+
 class ScenarioDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -667,6 +689,7 @@ class ScenarioDefinition(BaseModel):
     dt: float = Field(default=1.0, gt=0)
     speed: float = Field(default=1.0, gt=0)
     run_id: str | None = Field(default=None, min_length=1)
+    calendar: CalendarSettingsDefinition | None = None
     world: WorldDefinition | CityWorldDefinition | None = None
     homeostasis: HomeostasisSettingsDefinition = Field(
         default_factory=HomeostasisSettingsDefinition
@@ -793,6 +816,9 @@ def create_runner(
     registry.set_resource(scenario.homeostasis.to_domain())
     registry.set_resource(scenario.system1.to_domain())
     registry.set_resource(scenario.perception.to_domain())
+    if scenario.calendar is not None:
+        registry.set_resource(scenario.calendar.to_domain())
+        systems.add(CalendarUpdateSystem())
     systems.add(MovementActivitySystem())
     systems.add(HomeostasisSystem())
     systems.add(TimedPlanActionSystem())

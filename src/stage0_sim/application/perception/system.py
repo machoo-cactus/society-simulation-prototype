@@ -70,6 +70,8 @@ class PerceptionSystem:
                 self._route_movement(context, world, event, observers)
             elif event.event_type in {"activity.changed", "affordance.started"}:
                 self._route_visual_event(context, world, event, observers)
+            elif event.event_type == "time.updated":
+                self._route_time_update(context, event, observers)
         for observer_id in observers:
             perception = context.registry.get_component(
                 observer_id, PerceptionComponent
@@ -262,6 +264,35 @@ class PerceptionSystem:
                 ),
             )
 
+    def _route_time_update(
+        self,
+        context: SystemContext,
+        event: DomainEvent,
+        observers: tuple[str, ...],
+    ) -> None:
+        for observer_id in observers:
+            perception = context.registry.get_component(
+                observer_id, PerceptionComponent
+            )
+            perception.inbox[:] = [
+                item
+                for item in perception.inbox
+                if item.fact.fact_type != "time_updated"
+            ]
+            self._deliver(
+                context,
+                observer_id,
+                self._fact(
+                    context,
+                    "time_updated",
+                    Modality.AUDITORY,
+                    DisclosureClass.PUBLIC_WORLD,
+                    event_id=event.event_id,
+                    properties=dict(event.payload),
+                ),
+                salience=0.8,
+            )
+
     def _route_movement(
         self,
         context: SystemContext,
@@ -422,7 +453,10 @@ class PerceptionSystem:
         expired = [
             item
             for item in perception.inbox
-            if item.perceived_tick < minimum_tick
+            if (
+                item.fact.fact_type != "time_updated"
+                and item.perceived_tick < minimum_tick
+            )
         ]
         for item in expired:
             perception.inbox.remove(item)

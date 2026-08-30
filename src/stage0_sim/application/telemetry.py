@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import SimulationRunner
+from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
     ActivityComponent,
     CharacterProfileComponent,
@@ -341,6 +342,13 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
                 registry.get_resource(VehicleRegistry).states.items()
             )
         ]
+    calendar_time = (
+        registry.get_resource(SimulationCalendar).payload_at(
+            runner.clock.simulation_time
+        )
+        if registry.has_resource(SimulationCalendar)
+        else None
+    )
     return {
         "status": runner.status.value,
         "speed": runner.speed,
@@ -359,6 +367,7 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
         ),
         "tick": runner.clock.tick,
         "simulation_time": runner.clock.simulation_time,
+        "calendar_time": calendar_time,
         "world": {
             "station_states": station_states,
             "vehicle_states": vehicle_states,

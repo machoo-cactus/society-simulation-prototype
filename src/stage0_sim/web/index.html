@@ -42,15 +42,17 @@
               <option value="NEIGHBORHOOD">Neighborhood</option>
               <option value="CITY">City</option>
             </select>
+            <button id="zoom-out" aria-label="Zoom out">-</button>
+            <output id="zoom-value" aria-live="polite">100%</output>
+            <button id="zoom-in" aria-label="Zoom in">+</button>
+            <button id="fit-camera">Fit</button>
             <button id="reset-camera">Reset view</button>
+            <button id="focus-world">Focus view</button>
             <div id="protocol-warning" class="warning" hidden></div>
           </div>
         </div>
         <div class="canvas-wrap">
           <canvas id="world-canvas" aria-label="Simulation world"></canvas>
-          <div id="empty-world" class="empty-state">
-            Load a scenario, assign characters, then start the simulation.
-          </div>
         </div>
         <div class="legend">
           <span><i class="legend__agent"></i>Agent</span>

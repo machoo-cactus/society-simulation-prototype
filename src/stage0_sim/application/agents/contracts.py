@@ -81,6 +81,15 @@ class ObservationFact:
 
 
 @dataclass(frozen=True, slots=True)
+class CalendarTimeObservation:
+    datetime: str
+    date: str
+    time: str
+    weekday: str
+    period: str
+
+
+@dataclass(frozen=True, slots=True)
 class CharacterObservation:
     agent_id: str
     display_name: str
@@ -96,6 +105,7 @@ class CharacterObservation:
     recent_outcome: str | None
     spatial_location: dict[str, JsonValue] | None = None
     available_travel_modes: tuple[str, ...] = ()
+    calendar_time: CalendarTimeObservation | None = None
 
 
 @dataclass(frozen=True, slots=True)

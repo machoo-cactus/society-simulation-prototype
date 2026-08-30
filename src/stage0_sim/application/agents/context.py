@@ -1,6 +1,7 @@
 from typing import Literal, cast
 
 from stage0_sim.application.agents.contracts import (
+    CalendarTimeObservation,
     CharacterObservation,
     ObservationFact,
     ObservedTarget,
@@ -9,6 +10,7 @@ from stage0_sim.application.navigation import NavigationService
 from stage0_sim.application.perception.renderer import (
     DeterministicPerceptionRenderer,
 )
+from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
     ActivityComponent,
     CharacterProfileComponent,
@@ -114,6 +116,18 @@ def build_character_observation(
     )
     perception.inbox.clear()
     zone = world.zone_at(position.coordinate)
+    calendar_time = None
+    if registry.has_resource(SimulationCalendar):
+        calendar_payload = registry.get_resource(
+            SimulationCalendar
+        ).payload_at(context.clock.simulation_time)
+        calendar_time = CalendarTimeObservation(
+            datetime=str(calendar_payload["datetime"]),
+            date=str(calendar_payload["date"]),
+            time=str(calendar_payload["time"]),
+            weekday=str(calendar_payload["weekday"]),
+            period=str(calendar_payload["period"]),
+        )
     return CharacterObservation(
         agent_id=agent_id,
         display_name=profile.display_name,
@@ -129,4 +143,5 @@ def build_character_observation(
         recent_outcome=controller.last_outcome,
         spatial_location=spatial_payload,
         available_travel_modes=available_travel_modes,
+        calendar_time=calendar_time,
     )

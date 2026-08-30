@@ -771,6 +771,11 @@ def _build_information_query(
     parts = [
         f"cognition trigger: {request.trigger}",
         *(
+            [f"current civil time: {request.observation.calendar_time.datetime}"]
+            if request.observation.calendar_time is not None
+            else []
+        ),
+        *(
             f"current goal: {goal}"
             for goal in request.observation.goals
         ),

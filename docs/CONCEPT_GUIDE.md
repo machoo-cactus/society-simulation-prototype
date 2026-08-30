@@ -441,6 +441,12 @@ The project separates four notions of time.
 **Simulation time** is authoritative in-world time. It advances by fixed `dt`
 increments.
 
+Scenarios may define an offset-aware civil start timestamp. Civil time is
+derived only from that timestamp plus simulation time and never reads the host
+clock. Configured interval boundaries emit public `time.updated` facts so
+character controllers receive clock updates without changing physical
+authority or interrupting active behavior.
+
 ### 7.2 Micro-clock
 
 The **micro-clock** is the fixed-step execution rhythm for:

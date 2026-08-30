@@ -25,6 +25,12 @@ class DeterministicPerceptionRenderer:
             return f"{subject} started {fact.properties.get('activity', 'an activity')}."
         if fact.fact_type == "heard_speech":
             return f'{subject} said: "{fact.properties.get("text", "")}"'
+        if fact.fact_type == "time_updated":
+            return (
+                f"It is {fact.properties.get('time', 'an unknown time')} on "
+                f"{fact.properties.get('weekday', 'an unknown day')}, "
+                f"{fact.properties.get('date', 'an unknown date')}."
+            )
         return f"{subject}: {fact.fact_type}."
 
     def render(

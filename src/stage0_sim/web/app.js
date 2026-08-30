@@ -32,6 +32,8 @@ const state = {
   viewLevel: "BUILDING",
   camera: {x: 0, y: 0, zoom: 1},
   cameraDragging: null,
+  cameraSuppressClick: false,
+  worldFocused: false,
   vehicleStates: {},
   buildingMaps: {},
   buildingMapRequests: new Set(),
@@ -70,9 +72,10 @@ const state = {
 
 const elements = Object.fromEntries(
   [
-    "world-canvas", "empty-world", "connection-dot", "connection-label",
+    "world-canvas", "connection-dot", "connection-label",
     "sequence-label", "clock-label", "world-breadcrumb", "view-mode",
-    "view-level", "reset-camera", "protocol-warning", "agent-select",
+    "view-level", "zoom-out", "zoom-value", "zoom-in", "fit-camera",
+    "reset-camera", "focus-world", "protocol-warning", "agent-select",
     "agent-location", "satiety-value", "satiety-gauge", "energy-value",
     "energy-gauge", "stress-value", "stress-gauge", "activity-value",
     "system1-value", "drive-value", "destination-value", "memory-value",
@@ -261,6 +264,7 @@ function normalizeSnapshot(raw) {
     speed: finiteNumber(raw.speed, 1),
     tick: Math.max(0, finiteNumber(raw.tick, 0)),
     simulationTime: Math.max(0, finiteNumber(raw.simulation_time, 0)),
+    calendarTime: isObject(raw.calendar_time) ? raw.calendar_time : null,
     world,
     agents: agentValues.map((agent, index) =>
       normalizeAgent(
@@ -818,9 +822,10 @@ function render() {
   updateAutomaticView();
   void ensureFocusedBuildingMap();
   elements["clock-label"].textContent = snapshot
-    ? `tick ${snapshot.tick} / ${snapshot.simulationTime.toFixed(1)}s`
+    ? formatClockLabel(snapshot)
     : "tick 0 / 0.0s";
-  elements["empty-world"].hidden = Boolean(snapshot?.world);
+  elements["zoom-value"].textContent =
+    `${Math.round(state.camera.zoom * 100)}%`;
   elements["view-level"].value = state.viewLevel;
   elements["view-level"].disabled = state.viewMode === "AUTO";
   elements["world-breadcrumb"].textContent = worldBreadcrumb();
@@ -834,6 +839,14 @@ function render() {
     "paused",
     state.runStatus === "paused"
   );
+}
+
+function formatClockLabel(snapshot) {
+  const civil = snapshot.calendarTime;
+  const civilLabel = optionalString(civil?.datetime);
+  return civilLabel
+    ? `${civilLabel} · tick ${snapshot.tick} / ${snapshot.simulationTime.toFixed(1)}s`
+    : `tick ${snapshot.tick} / ${snapshot.simulationTime.toFixed(1)}s`;
 }
 
 function syncAgentSelection() {
@@ -950,7 +963,11 @@ function renderPlan(agent) {
 function updateAutomaticView() {
   if (state.viewMode !== "AUTO") return;
   const scale = selectedAgent()?.spatialLocation.scale;
-  state.viewLevel = scale === "BUILDING" ? "BUILDING" : "CITY";
+  const nextLevel = scale === "BUILDING" ? "BUILDING" : "CITY";
+  if (nextLevel !== state.viewLevel) {
+    state.viewLevel = nextLevel;
+    resetCamera();
+  }
 }
 
 function worldBreadcrumb() {
@@ -1035,15 +1052,18 @@ function drawWorld() {
 
 function drawBuildingWorld(rect, world) {
   const padding = 30;
-  const tile = Math.max(
+  const baseTile = Math.max(
     4,
     Math.min(
       (rect.width - padding * 2) / world.width,
       (rect.height - padding * 2) / world.height
     )
   );
-  const originX = (rect.width - tile * world.width) / 2;
-  const originY = (rect.height - tile * world.height) / 2;
+  const tile = baseTile * state.camera.zoom;
+  const originX =
+    (rect.width - tile * world.width) / 2 + state.camera.x * tile;
+  const originY =
+    (rect.height - tile * world.height) / 2 + state.camera.y * tile;
   context.fillStyle = "#0a141e";
   context.fillRect(originX, originY, tile * world.width, tile * world.height);
   for (const zone of world.zones) {
@@ -1055,6 +1075,47 @@ function drawBuildingWorld(rect, world) {
         tile,
         tile
       );
+    }
+
+    function resetCamera() {
+      state.camera = {x: 0, y: 0, zoom: 1};
+      elements["zoom-value"].textContent = "100%";
+      drawWorld();
+    }
+
+    function setCameraZoom(zoom) {
+      state.camera.zoom = Math.max(0.5, Math.min(8, zoom));
+      elements["zoom-value"].textContent =
+        `${Math.round(state.camera.zoom * 100)}%`;
+      drawWorld();
+    }
+
+    function cameraScale(rect) {
+      if (state.viewLevel === "BUILDING") {
+        const world = activeBuildingWorld();
+        if (!world) return 0;
+        return Math.max(
+          4,
+          Math.min(
+            (rect.width - 60) / world.width,
+            (rect.height - 60) / world.height
+          )
+        ) * state.camera.zoom;
+      }
+      const bounds = state.bootstrap?.city?.bounds;
+      if (!bounds) return 0;
+      return Math.min(
+        (rect.width - 60) / Math.max(1, bounds.max_x - bounds.min_x),
+        (rect.height - 60) / Math.max(1, bounds.max_y - bounds.min_y)
+      ) * state.camera.zoom;
+    }
+
+    function setWorldFocused(focused) {
+      state.worldFocused = focused;
+      document.querySelector(".world-panel")?.classList.toggle("focused", focused);
+      document.body.classList.toggle("world-focus-active", focused);
+      elements["focus-world"].textContent = focused ? "Exit focus" : "Focus view";
+      requestAnimationFrame(drawWorld);
     }
     if (zone.tiles.length) {
       const center = zone.tiles.reduce(
@@ -1797,12 +1858,19 @@ elements["view-mode"].addEventListener("change", (event) => {
 });
 elements["view-level"].addEventListener("change", (event) => {
   state.viewLevel = event.target.value;
-  drawWorld();
+  resetCamera();
 });
-elements["reset-camera"].addEventListener("click", () => {
-  state.camera = {x: 0, y: 0, zoom: 1};
-  drawWorld();
-});
+elements["zoom-out"].addEventListener("click", () =>
+  setCameraZoom(state.camera.zoom / 1.25)
+);
+elements["zoom-in"].addEventListener("click", () =>
+  setCameraZoom(state.camera.zoom * 1.25)
+);
+elements["fit-camera"].addEventListener("click", resetCamera);
+elements["reset-camera"].addEventListener("click", resetCamera);
+elements["focus-world"].addEventListener("click", () =>
+  setWorldFocused(!state.worldFocused)
+);
 elements["event-filter"].addEventListener("change", (event) => {
   state.filter = event.target.value;
   renderEventLog();
@@ -1868,6 +1936,10 @@ elements["scenario-file"].addEventListener("change", async (event) => {
   }
 });
 canvas.addEventListener("click", (event) => {
+  if (state.cameraSuppressClick) {
+    state.cameraSuppressClick = false;
+    return;
+  }
   if (state.viewLevel !== "BUILDING") return;
   const tile = finiteNumber(canvas.dataset.tile, 0);
   if (!tile) return;
@@ -1885,39 +1957,57 @@ canvas.addEventListener("click", (event) => {
   }
 });
 canvas.addEventListener("wheel", (event) => {
-  if (state.viewLevel === "BUILDING") return;
   event.preventDefault();
-  state.camera.zoom = Math.max(
-    0.5,
-    Math.min(8, state.camera.zoom * (event.deltaY > 0 ? 0.9 : 1.1))
-  );
-  drawWorld();
+  setCameraZoom(state.camera.zoom * (event.deltaY > 0 ? 0.9 : 1.1));
 }, {passive: false});
 canvas.addEventListener("pointerdown", (event) => {
-  if (state.viewLevel === "BUILDING") return;
-  state.cameraDragging = {x: event.clientX, y: event.clientY};
+  state.cameraDragging = {
+    x: event.clientX,
+    y: event.clientY,
+    startX: event.clientX,
+    startY: event.clientY,
+  };
+  canvas.classList.add("dragging");
   canvas.setPointerCapture(event.pointerId);
 });
 canvas.addEventListener("pointermove", (event) => {
-  if (!state.cameraDragging || state.viewLevel === "BUILDING") return;
-  const city = state.bootstrap?.city;
-  if (!city?.bounds) return;
+  if (!state.cameraDragging) return;
   const rect = canvas.getBoundingClientRect();
-  const baseScale = Math.min(
-    (rect.width - 60) / Math.max(1, city.bounds.max_x - city.bounds.min_x),
-    (rect.height - 60) / Math.max(1, city.bounds.max_y - city.bounds.min_y)
-  ) * state.camera.zoom;
-  state.camera.x += (event.clientX - state.cameraDragging.x) / baseScale;
-  state.camera.y += (event.clientY - state.cameraDragging.y) / baseScale;
-  state.cameraDragging = {x: event.clientX, y: event.clientY};
+  const scale = cameraScale(rect);
+  if (!scale) return;
+  state.camera.x += (event.clientX - state.cameraDragging.x) / scale;
+  state.camera.y += (event.clientY - state.cameraDragging.y) / scale;
+  state.cameraSuppressClick =
+    state.cameraSuppressClick
+    || Math.hypot(
+      event.clientX - state.cameraDragging.startX,
+      event.clientY - state.cameraDragging.startY
+    ) > 3;
+  state.cameraDragging.x = event.clientX;
+  state.cameraDragging.y = event.clientY;
   drawWorld();
 });
-canvas.addEventListener("pointerup", (event) => {
+function finishCameraDrag(event) {
   state.cameraDragging = null;
+  canvas.classList.remove("dragging");
   if (canvas.hasPointerCapture(event.pointerId)) {
     canvas.releasePointerCapture(event.pointerId);
   }
+}
+canvas.addEventListener("pointerup", finishCameraDrag);
+canvas.addEventListener("pointercancel", finishCameraDrag);
+canvas.addEventListener("lostpointercapture", () => {
+  state.cameraDragging = null;
+  canvas.classList.remove("dragging");
 });
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.worldFocused) {
+    setWorldFocused(false);
+  }
+});
+new ResizeObserver(drawWorld).observe(
+  document.querySelector(".world-panel")
+);
 window.addEventListener("resize", drawWorld);
 window.addEventListener("beforeunload", () => closeSocket(true));
 window.addEventListener("focus", () => {

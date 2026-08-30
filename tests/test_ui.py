@@ -31,6 +31,10 @@ def test_root_redirects_to_python_served_ui() -> None:
     assert response.headers["location"] == "/ui/"
     assert page.status_code == 200
     assert 'id="world-canvas"' in page.text
+    assert 'id="zoom-in"' in page.text
+    assert 'id="zoom-out"' in page.text
+    assert 'id="focus-world"' in page.text
+    assert "Load a scenario, assign characters" not in page.text
     assert 'id="agent-select"' in page.text
     assert 'id="event-log"' in page.text
     assert 'id="start-button"' in page.text

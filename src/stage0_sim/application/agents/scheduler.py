@@ -9,6 +9,7 @@ from stage0_sim.domain.components import (
     ControllerComponent,
     DriveComponent,
     PendingSpeechComponent,
+    PerceptionComponent,
     PlanComponent,
     System1State,
 )
@@ -30,10 +31,19 @@ class CognitionScheduler:
             )
             plan = context.registry.get_component(agent_id, PlanComponent)
             drive = context.registry.get_component(agent_id, DriveComponent)
+            time_update_due = any(
+                item.fact.fact_type == "time_updated"
+                for item in context.registry.get_component(
+                    agent_id, PerceptionComponent
+                ).inbox
+            )
             if (
                 not controller.enabled
                 or controller.request_pending
-                or context.clock.simulation_time < controller.next_decision_time
+                or (
+                    context.clock.simulation_time < controller.next_decision_time
+                    and not time_update_due
+                )
                 or plan.current is not None
                 or plan.queue
                 or drive.state is not System1State.NORMAL
@@ -75,7 +85,7 @@ class CognitionScheduler:
                 agent_id=agent_id,
                 payload={
                     "decision_id": decision_id,
-                    "trigger": "idle",
+                    "trigger": "time_update" if time_update_due else "idle",
                     "execution_mode": coordinator.execution_mode,
                 },
                 correlation_id=decision_id,
@@ -86,7 +96,7 @@ class CognitionScheduler:
                 agent_id=agent_id,
                 requested_tick=context.clock.tick,
                 state_revision=controller.state_revision,
-                trigger="idle",
+                trigger="time_update" if time_update_due else "idle",
                 character_description=context.registry.get_component(
                     agent_id, CharacterProfileComponent
                 ).description,

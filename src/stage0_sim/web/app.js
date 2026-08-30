@@ -288,9 +288,7 @@ function normalizeStaticWorld(worldRaw) {
           id: optionalString(zone.id) ?? `zone-${index}`,
           name: optionalString(zone.name) ?? optionalString(zone.id) ?? "Zone",
           type: optionalString(zone.type) ?? "UNKNOWN",
-          tiles: Array.isArray(zone.tiles)
-            ? zone.tiles.map(normalizeCoordinate).filter(Boolean)
-            : [],
+          tiles: scenarioZoneTiles(zone),
         }))
       : [],
     stations: Array.isArray(worldRaw.stations)
@@ -298,10 +296,174 @@ function normalizeStaticWorld(worldRaw) {
           id: optionalString(station.id) ?? `station-${index}`,
           name: optionalString(station.name) ?? "Station",
           position: normalizeCoordinate(station.position),
-          actions: Array.isArray(station.actions)
-            ? station.actions.filter((item) => typeof item === "string")
-            : [],
+          actions: scenarioStationActions(station),
           available: station.available !== false,
+        }))
+      : [],
+  };
+}
+
+function scenarioStationActions(station) {
+  const values = Array.isArray(station.actions)
+    ? station.actions
+    : Array.isArray(station.supported_actions)
+      ? station.supported_actions
+      : [];
+  return values.map((item) =>
+    typeof item === "string" ? item : optionalString(item?.action)
+  ).filter(Boolean);
+}
+
+function scenarioZoneTiles(zone) {
+  if (Array.isArray(zone.tiles)) {
+    return zone.tiles.map(normalizeCoordinate).filter(Boolean);
+  }
+  if (!isObject(zone.bounds)) return [];
+  const x = finiteNumber(zone.bounds.x);
+  const y = finiteNumber(zone.bounds.y);
+  const width = Math.max(0, finiteNumber(zone.bounds.width));
+  const height = Math.max(0, finiteNumber(zone.bounds.height));
+  const tiles = [];
+  for (let tileY = y; tileY < y + height; tileY += 1) {
+    for (let tileX = x; tileX < x + width; tileX += 1) {
+      tiles.push({x: tileX, y: tileY});
+    }
+  }
+  return tiles;
+}
+
+function buildScenarioPreview(scenario, validation) {
+  const worldDefinition = isObject(scenario.world) ? scenario.world : null;
+  const cityDefinition = worldDefinition?.type === "city"
+    ? worldDefinition
+    : null;
+  const world = cityDefinition ? null : (
+    worldDefinition ? normalizeStaticWorld(worldDefinition) : null
+  );
+  const city = cityDefinition ? normalizeScenarioCity(cityDefinition) : null;
+  const characterNames = new Map(
+    Array.isArray(validation.characters)
+      ? validation.characters
+        .filter(isObject)
+        .map((character) => [character.entity_id, character.display_name])
+      : []
+  );
+  const agents = (scenario.entities ?? [])
+    .filter(isObject)
+    .map((entity, index) => previewScenarioAgent(
+      entity,
+      index,
+      characterNames.get(entity.id)
+    ));
+  state.bootstrap = {world, city, agents};
+  state.buildingMaps = {};
+  if (cityDefinition) {
+    for (const building of cityDefinition.buildings ?? []) {
+      const localMap = cityDefinition.local_maps?.[building.local_map_id];
+      if (localMap) {
+        state.buildingMaps[building.id] = normalizeStaticWorld(localMap);
+      }
+    }
+  }
+  state.snapshot = normalizeSnapshot({
+    status: "created",
+    speed: finiteNumber(scenario.speed, 1),
+    tick: 0,
+    simulation_time: 0,
+    calendar_time: scenarioCalendarTime(scenario.calendar),
+    world: world ?? {},
+    agents,
+  });
+  state.runStatus = "created";
+  state.selectedAgentId = agents[0]?.id ?? null;
+  resetCamera();
+  render();
+}
+
+function previewScenarioAgent(entity, index, validatedDisplayName) {
+  const components = isObject(entity.components) ? entity.components : {};
+  const spatial = isObject(components.spatial_location)
+    ? components.spatial_location
+    : null;
+  const profile = isObject(components.character_profile)
+    ? structuredClone(components.character_profile)
+    : {};
+  profile.display_name =
+    optionalString(validatedDisplayName)
+    ?? scenarioProfileDisplayName(profile)
+    ?? optionalString(components.metadata?.display_name)
+    ?? optionalString(entity.id)
+    ?? `agent-${index + 1}`;
+  return {
+    id: optionalString(entity.id) ?? `agent-${index + 1}`,
+    character_profile: profile,
+    position: normalizeCoordinate(components.position)
+      ?? normalizeCoordinate(spatial?.local_coordinate),
+    homeostasis: isObject(components.homeostasis)
+      ? components.homeostasis
+      : {},
+    activity: optionalString(components.activity?.type) ?? "IDLE",
+    movement: isObject(components.movement) ? components.movement : {},
+    plan: isObject(components.plan) ? components.plan : {},
+    spatial_location: spatial ?? {
+      scale: "BUILDING",
+      place_id: "implicit-building",
+      local_coordinate: normalizeCoordinate(components.position),
+    },
+  };
+}
+
+function scenarioProfileDisplayName(profile) {
+  return optionalString(profile.display_name)
+    ?? optionalString(profile.identity?.display_name);
+}
+
+function scenarioCalendarTime(calendar) {
+  const start = optionalString(calendar?.start_datetime);
+  if (!start) return null;
+  const parsed = new Date(start);
+  if (Number.isNaN(parsed.valueOf())) return null;
+  return {
+    datetime: start,
+    date: start.slice(0, 10),
+    time: start.slice(11),
+    weekday: parsed.toLocaleDateString(undefined, {weekday: "long"}),
+  };
+}
+
+function normalizeScenarioCity(world) {
+  const transport = isObject(world.transport) ? world.transport : {};
+  return {
+    id: optionalString(world.city?.id) ?? "city",
+    name: optionalString(world.city?.name) ?? "City",
+    bounds: isObject(world.city?.bounds_meters)
+      ? world.city.bounds_meters
+      : null,
+    districts: Array.isArray(world.districts) ? world.districts : [],
+    buildings: Array.isArray(world.buildings)
+      ? world.buildings.map((building) => ({
+          ...building,
+          position: normalizeCoordinate(building.city_position),
+          entrances: Array.isArray(building.entrances)
+            ? building.entrances.map((entrance) => ({
+                ...entrance,
+                network_node_id: entrance.neighborhood_node_id,
+              }))
+            : [],
+        }))
+      : [],
+    outdoor_places: Array.isArray(world.outdoor_places)
+      ? world.outdoor_places.map((place) => ({
+          ...place,
+          position: normalizeCoordinate(place.city_position),
+        }))
+      : [],
+    nodes: Array.isArray(transport.nodes) ? transport.nodes : [],
+    edges: Array.isArray(transport.edges) ? transport.edges : [],
+    vehicles: Array.isArray(transport.vehicles)
+      ? transport.vehicles.map((vehicle) => ({
+          ...vehicle,
+          type: vehicle.vehicle_type,
         }))
       : [],
   };
@@ -326,6 +488,7 @@ async function loadScenario(scenario, sourceLabel = "JSON file") {
     if (revision !== state.scenarioRevision) return;
     state.scenarioId = created.scenario_id;
     state.uiState = UI_STATES.SCENARIO_READY;
+    buildScenarioPreview(buildAssignedScenario(), created);
     elements["scenario-label"].textContent =
       `Ready: ${state.loadedScenarioName} (${sourceLabel})`;
     setControlStatus("Scenario loaded. Assign characters if needed, then press Start.");
@@ -395,6 +558,7 @@ function initializeCharacterAssignments() {
     const current =
       optionalString(components.character_profile.character_id)
       ?? optionalString(components.character_profile.profile_ref);
+    if (!current) return;
     state.characterAssignments[entity.id] =
       current && availableIds.has(current) ? current : current ?? "";
   });
@@ -456,6 +620,7 @@ async function revalidateAssignedScenario(
     if (revision !== state.scenarioRevision) return;
     state.scenarioId = created.scenario_id;
     state.uiState = UI_STATES.SCENARIO_READY;
+    buildScenarioPreview(buildAssignedScenario(), created);
     setControlStatus(successMessage);
     updateControls();
     return true;
@@ -1930,7 +2095,10 @@ elements["scenario-file"].addEventListener("change", async (event) => {
   try {
     await loadScenario(JSON.parse(await file.text()), file.name);
   } catch (error) {
+    state.uiState = UI_STATES.ERROR;
+    setControlStatus(`Could not load ${file.name}: ${error.message}`, true);
     addLocalEvent("ui.scenario_invalid", {message: error.message}, "error");
+    updateControls();
   } finally {
     event.target.value = "";
   }

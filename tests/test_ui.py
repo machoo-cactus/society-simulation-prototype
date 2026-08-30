@@ -66,6 +66,10 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     assert "Telemetry gap" in script.text
     assert "scheduleReconnect" in script.text
     assert "async function loadScenario" in script.text
+    assert "function buildScenarioPreview" in script.text
+    assert "function normalizeScenarioCity" in script.text
+    assert "if (!current) return;" in script.text
+    assert "Could not load ${file.name}" in script.text
     assert "async function startLoadedScenario" in script.text
     assert "function renderCharacterAssignments" in script.text
     assert "character_id: profileId" in script.text
@@ -99,6 +103,7 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     assert "function normalizeEnvelope" in protocol.text
     assert "stage0.telemetry.v2" in protocol.text
     assert "async function api" in api_client.text
+    assert "Array.isArray(body.detail)" in api_client.text
     assert "function renderTranscriptView" in transcript.text
     assert "function createCharacterEditor" in character_editor.text
     assert "custom_sections" in character_editor.text

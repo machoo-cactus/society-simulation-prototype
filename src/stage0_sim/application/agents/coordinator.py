@@ -1,6 +1,6 @@
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
@@ -12,11 +12,14 @@ from stage0_sim.application.agents.contracts import (
 )
 from stage0_sim.application.agents.tools import ToolRegistry, ToolValidationError
 from stage0_sim.application.cognition import EmbeddingError
+from stage0_sim.application.information import InformationQuery, InformationRetriever
+from stage0_sim.application.information_context import InformationContextCapsule
 from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.domain.components import (
     ActionType,
     ControllerComponent,
     DriveComponent,
+    NavigationComponent,
     PendingSpeechComponent,
     PlanAction,
     PlanComponent,
@@ -27,12 +30,14 @@ from stage0_sim.domain.intents import (
     ActivityIntent,
     CharacterIntent,
     MoveIntent,
+    NavigationIntent,
     SkipIntent,
     SpeechIntent,
     TravelIntent,
     WaitIntent,
 )
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.world import TravelMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +45,23 @@ class _CompletedDecision:
     request: CharacterDecisionRequest
     decision: CharacterDecision | None
     error: ModelClientError | None
+    retrieval: "_RetrievalTrace | None" = None
+
+
+@dataclass(frozen=True, slots=True)
+class _DecisionExecution:
+    request: CharacterDecisionRequest
+    decision: CharacterDecision | None
+    error: ModelClientError | None
+    retrieval: "_RetrievalTrace | None" = None
+
+
+@dataclass(frozen=True, slots=True)
+class _RetrievalTrace:
+    query: InformationQuery
+    capsules: tuple[InformationContextCapsule, ...]
+    provider: str
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +82,7 @@ class AgentWorkCoordinator:
         max_input_tokens: int | None = None,
         max_output_tokens: int | None = None,
         memory_store: EpisodicMemoryStore | None = None,
+        information_retriever: InformationRetriever | None = None,
         execution_mode: str = "global_barrier",
     ) -> None:
         if max_concurrency <= 0:
@@ -77,6 +100,7 @@ class AgentWorkCoordinator:
         self.max_input_tokens = max_input_tokens
         self.max_output_tokens = max_output_tokens
         self.memory_store = memory_store
+        self.information_retriever = information_retriever
         self.execution_mode = execution_mode
         self.request_count = 0
         self.input_tokens = 0
@@ -89,7 +113,7 @@ class AgentWorkCoordinator:
             ),
             thread_name_prefix="stage0-controller",
         )
-        self._pending: dict[Future[CharacterDecision], _PendingDecision] = {}
+        self._pending: dict[Future[_DecisionExecution], _PendingDecision] = {}
         self._queued: list[CharacterDecisionRequest] = []
 
     def budget_failure(self) -> str | None:
@@ -196,11 +220,18 @@ class AgentWorkCoordinator:
                 continue
             del self._pending[future]
             try:
-                decision = future.result()
+                execution = future.result()
             except ModelClientError as error:
                 completed.append(_CompletedDecision(request, None, error))
             else:
-                completed.append(_CompletedDecision(request, decision, None))
+                completed.append(
+                    _CompletedDecision(
+                        execution.request,
+                        execution.decision,
+                        execution.error,
+                        execution.retrieval,
+                    )
+                )
         completed.sort(
             key=lambda item: (
                 item.request.requested_tick,
@@ -241,15 +272,66 @@ class AgentWorkCoordinator:
 
     async def _decide(
         self, request: CharacterDecisionRequest
-    ) -> CharacterDecision:
+    ) -> _DecisionExecution:
+        if self.information_retriever is not None:
+            query = _build_information_query(request)
+            provider = _provider_name(
+                self.information_retriever.embedding_provider
+            )
+            try:
+                capsules = self.information_retriever.retrieve(query)
+            except EmbeddingError as error:
+                model_error = ModelClientError(
+                    f"information retrieval failed: {error}",
+                    reason="information_retrieval_failed",
+                )
+                return _DecisionExecution(
+                    request,
+                    None,
+                    model_error,
+                    _RetrievalTrace(
+                        query=query,
+                        capsules=(),
+                        provider=provider,
+                        error=str(error),
+                    ),
+                )
+            enriched = replace(
+                request,
+                memories=_episode_memories(
+                    self.information_retriever,
+                    capsules,
+                ),
+                retrieved_information=capsules,
+                information_retrieval_performed=True,
+                information_query=query.text,
+            )
+            trace = _RetrievalTrace(
+                query=query,
+                capsules=capsules,
+                provider=provider,
+            )
+            try:
+                decision = await self.controller.decide(enriched)
+            except ModelClientError as error:
+                return _DecisionExecution(enriched, None, error, trace)
+            return _DecisionExecution(enriched, decision, None, trace)
         if self.memory_store is None:
-            return await self.controller.decide(request)
+            try:
+                decision = await self.controller.decide(request)
+            except ModelClientError as error:
+                return _DecisionExecution(request, None, error)
+            return _DecisionExecution(request, decision, None)
         query_parts = [
             *request.observation.goals,
             *(fact.text for fact in request.observation.facts),
         ]
         if not query_parts:
-            return await self.controller.decide(request)
+            try:
+                decision = await self.controller.decide(request)
+            except ModelClientError as error:
+                return _DecisionExecution(request, None, error)
+            return _DecisionExecution(request, decision, None)
         try:
             retrieved = self.memory_store.retrieve(
                 agent_id=request.agent_id,
@@ -258,20 +340,30 @@ class AgentWorkCoordinator:
                 top_k=5,
             )
         except EmbeddingError as error:
-            raise ModelClientError(
-                f"memory retrieval failed: {error}",
-                reason="provider_error",
-            ) from error
+            return _DecisionExecution(
+                request,
+                None,
+                ModelClientError(
+                    f"memory retrieval failed: {error}",
+                    reason="provider_error",
+                ),
+            )
         enriched = replace(
             request,
             memories=tuple(item.record.text for item in retrieved),
         )
-        return await self.controller.decide(enriched)
+        try:
+            decision = await self.controller.decide(enriched)
+        except ModelClientError as error:
+            return _DecisionExecution(enriched, None, error)
+        return _DecisionExecution(enriched, decision, None)
 
     def _apply(
         self, context: SystemContext, completed: _CompletedDecision
     ) -> None:
         request = completed.request
+        if completed.retrieval is not None:
+            self._emit_retrieval(context, request, completed.retrieval)
         if completed.error is not None:
             self._clear_pending(context, request)
             context.events.emit(
@@ -368,6 +460,70 @@ class AgentWorkCoordinator:
         )
         self._commit(context, request, call.name, intent)
 
+    @staticmethod
+    def _emit_retrieval(
+        context: SystemContext,
+        request: CharacterDecisionRequest,
+        trace: _RetrievalTrace,
+    ) -> None:
+        if trace.error is not None:
+            context.events.emit(
+                "information.retrieval_failed",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=request.agent_id,
+                payload={
+                    "decision_id": request.decision_id,
+                    "query": trace.query.text,
+                    "source_scope": list(trace.query.source_scope or ()),
+                    "token_budget": trace.query.token_budget,
+                    "provider": trace.provider,
+                    "message": trace.error,
+                    "visibility": "private",
+                },
+                correlation_id=request.decision_id,
+            )
+            return
+        context.events.emit(
+            "information.retrieved",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=request.agent_id,
+            payload={
+                "decision_id": request.decision_id,
+                "query": trace.query.text,
+                "referenced_entity_ids": list(
+                    trace.query.referenced_entity_ids
+                ),
+                "referenced_place_ids": list(
+                    trace.query.referenced_place_ids
+                ),
+                "source_scope": list(trace.query.source_scope or ()),
+                "token_budget": trace.query.token_budget,
+                "provider": trace.provider,
+                "visibility": "private",
+                "capsules": [
+                    {
+                        "document_id": capsule.document_id,
+                        "document_kind": capsule.document_kind,
+                        "source_path": capsule.source_path,
+                        "score": capsule.score,
+                        "capsule_text": capsule.rendered_content,
+                        "revision": capsule.revision,
+                        "recorded_at": capsule.recorded_at,
+                        "valid_time": (
+                            capsule.valid_time.to_dict()
+                            if capsule.valid_time is not None
+                            else None
+                        ),
+                        "source": capsule.source.to_dict(),
+                    }
+                    for capsule in trace.capsules
+                ],
+            },
+            correlation_id=request.decision_id,
+        )
+
     def _commit(
         self,
         context: SystemContext,
@@ -386,8 +542,13 @@ class AgentWorkCoordinator:
             )
             return
         if isinstance(intent, MoveIntent):
-            plan.queue.append(
-                PlanAction(action=ActionType.MOVE_TO, target=intent.target_id)
+            self._queue_navigation(
+                context,
+                request.agent_id,
+                plan,
+                intent.target_id,
+                None,
+                intent.reason,
             )
         elif isinstance(intent, ActivityIntent):
             duration = intent.duration_seconds
@@ -439,12 +600,22 @@ class AgentWorkCoordinator:
                 ),
             )
         elif isinstance(intent, TravelIntent):
-            plan.queue.append(
-                PlanAction(
-                    action=ActionType.TRAVEL_TO,
-                    target=intent.target_id,
-                    mode=intent.mode,
-                )
+            self._queue_navigation(
+                context,
+                request.agent_id,
+                plan,
+                intent.target_id,
+                intent.mode,
+                intent.reason,
+            )
+        elif isinstance(intent, NavigationIntent):
+            self._queue_navigation(
+                context,
+                request.agent_id,
+                plan,
+                intent.target_id,
+                intent.preferred_mode,
+                intent.reason,
             )
         else:
             raise TypeError(f"unsupported intent: {type(intent).__name__}")
@@ -489,6 +660,36 @@ class AgentWorkCoordinator:
                 },
                 correlation_id=request.decision_id,
             )
+
+    @staticmethod
+    def _queue_navigation(
+        context: SystemContext,
+        agent_id: str,
+        plan: PlanComponent,
+        target_id: str,
+        preferred_mode: TravelMode | None,
+        reason: str | None,
+    ) -> None:
+        if context.registry.has_component(agent_id, NavigationComponent):
+            navigation = context.registry.get_component(
+                agent_id,
+                NavigationComponent,
+            )
+        else:
+            navigation = NavigationComponent()
+            context.registry.add_component(agent_id, navigation)
+        navigation.request(
+            target_id,
+            preferred_mode=preferred_mode,
+            reason=reason,
+        )
+        plan.queue.append(
+            PlanAction(
+                action=ActionType.NAVIGATE,
+                target=target_id,
+                mode=preferred_mode,
+            )
+        )
 
     def _reject(
         self,
@@ -556,6 +757,81 @@ class AgentWorkCoordinator:
         if state.current_decision_id == request.decision_id:
             state.request_pending = False
             state.current_decision_id = None
+
+
+def _build_information_query(
+    request: CharacterDecisionRequest,
+) -> InformationQuery:
+    targets = tuple(
+        sorted(
+            request.observation.targets,
+            key=lambda target: (target.kind, target.id, target.name),
+        )
+    )
+    parts = [
+        f"cognition trigger: {request.trigger}",
+        *(
+            f"current goal: {goal}"
+            for goal in request.observation.goals
+        ),
+        *(
+            f"perceived fact: {fact.text}"
+            for fact in request.observation.facts
+        ),
+        *(
+            f"present target: {target.name} ({target.kind} {target.id})"
+            for target in targets
+        ),
+        *(
+            f"allowed tool: {tool_name}"
+            for tool_name in request.allowed_tools
+        ),
+    ]
+    return InformationQuery(
+        character_id=request.agent_id,
+        text="\n".join(parts),
+        referenced_entity_ids=_unique_ids(
+            target.id for target in targets if target.kind == "character"
+        ),
+        referenced_place_ids=_unique_ids(
+            target.id for target in targets if target.kind != "character"
+        ),
+        simulation_time=request.observation.simulation_time,
+        source_scope=("character.dossier", "memory.episode"),
+        token_budget=512,
+    )
+
+
+def _episode_memories(
+    retriever: InformationRetriever,
+    capsules: tuple[InformationContextCapsule, ...],
+) -> tuple[str, ...]:
+    memories: list[str] = []
+    seen: set[str] = set()
+    for capsule in capsules:
+        if (
+            capsule.document_kind != "memory.episode"
+            or capsule.document_id in seen
+        ):
+            continue
+        seen.add(capsule.document_id)
+        content = retriever.store.get(capsule.document_id).content
+        if isinstance(content, dict):
+            summary = content.get("summary")
+            if isinstance(summary, str):
+                memories.append(summary)
+    return tuple(memories)
+
+
+def _provider_name(provider: object | None) -> str:
+    if provider is None:
+        return "none"
+    value = getattr(provider, "provider_name", None)
+    return value if isinstance(value, str) and value else type(provider).__name__
+
+
+def _unique_ids(values: Iterable[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(values))
 
 
 def intent_payload(intent: CharacterIntent) -> dict[str, JsonValue]:

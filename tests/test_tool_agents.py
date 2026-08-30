@@ -29,6 +29,7 @@ from stage0_sim.application.agents.contracts import (
 )
 from stage0_sim.application.agents.coordinator import AgentWorkCoordinator
 from stage0_sim.application.agents.tools import ToolRegistry, ToolValidationError
+from stage0_sim.application.cognition import EmbeddingError
 from stage0_sim.application.manager import (
     SimulationConflictError,
     SimulationManager,
@@ -65,6 +66,37 @@ def _turn(name: str, arguments: dict[str, JsonValue]) -> ModelTurn:
         model="scripted-v1",
         latency_ms=0,
     )
+
+
+class _CapturingModelClient(ModelClient):
+    synchronous = True
+    provider_name = "capturing"
+
+    def __init__(self) -> None:
+        self.requests: list[ModelRequest] = []
+
+    async def complete(self, request: ModelRequest) -> ModelTurn:
+        self.requests.append(request)
+        return _turn("skip", {"reconsider_after_seconds": 30})
+
+
+class _ZeroEmbeddingProvider:
+    provider_name = "zero"
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def embed(self, texts: tuple[str, ...]) -> tuple[tuple[float, ...], ...]:
+        self.call_count += 1
+        return tuple((0.0,) for _ in texts)
+
+
+class _FailingRetrievalEmbeddingProvider:
+    provider_name = "failing"
+
+    def embed(self, texts: tuple[str, ...]) -> tuple[tuple[float, ...], ...]:
+        del texts
+        raise EmbeddingError("retrieval embeddings unavailable")
 
 
 def _tool_scenario() -> ScenarioDefinition:
@@ -136,6 +168,110 @@ def test_scripted_controller_moves_only_through_tool_commit() -> None:
     assert "tool.accepted" in event_types
     assert "tool.committed" in event_types
     assert event_types.index("tool.committed") < event_types.index("agent.moved")
+
+
+def test_controller_retrieves_dossier_and_episode_capsules() -> None:
+    payload = _tool_scenario().model_dump(mode="json")
+    profile = payload["entities"][0]["components"]["character_profile"]
+    profile["private_archive"] = {
+        "unrelated": "FULL DOSSIER SECRET " * 200
+    }
+    payload["entities"][0]["components"]["memory"] = {
+        "initial_episodes": [
+            {
+                "text": "Taking a break near the sofa helped yesterday.",
+                "simulation_time": 0,
+                "importance": 0.8,
+            }
+        ]
+    }
+    client = _CapturingModelClient()
+    provider = _ZeroEmbeddingProvider()
+    runner = create_runner(
+        ScenarioDefinition.model_validate(payload),
+        model_client=client,
+        embedding_provider=provider,
+    )
+
+    runner.run_for(1)
+
+    assert len(client.requests) == 1
+    model_request = client.requests[0]
+    prompt = "\n".join(message.content for message in model_request.messages)
+    dynamic = json.loads(model_request.messages[2].content)
+    retrieved = next(
+        event
+        for event in runner.events.events
+        if event.event_type == "information.retrieved"
+    )
+    capsules = retrieved.payload["capsules"]
+
+    assert "Retrieved information context" in prompt
+    assert "FULL DOSSIER SECRET" not in prompt
+    assert "cognition trigger: idle" in retrieved.payload["query"]
+    assert "current goal: Take a break" in retrieved.payload["query"]
+    assert "present target: Sofa (station sofa)" in retrieved.payload["query"]
+    assert "allowed tool: wait" in retrieved.payload["query"]
+    assert dynamic["memories"] == [
+        "Taking a break near the sofa helped yesterday."
+    ]
+    assert isinstance(capsules, list)
+    assert [capsule["document_id"] for capsule in capsules] == [
+        capsule["document_id"]
+        for capsule in sorted(
+            capsules,
+            key=lambda item: (
+                -item["score"],
+                item["document_kind"],
+                item["document_id"],
+                item["source_path"] or "",
+            ),
+        )
+    ]
+    assert all(
+        {
+            "document_id",
+            "source_path",
+            "score",
+            "capsule_text",
+            "source",
+            "valid_time",
+        }.issubset(capsule)
+        for capsule in capsules
+    )
+    runner.stop()
+
+
+def test_controller_information_retrieval_failure_is_explicit() -> None:
+    client = _CapturingModelClient()
+    runner = create_runner(
+        _tool_scenario(),
+        model_client=client,
+        embedding_provider=_FailingRetrievalEmbeddingProvider(),
+    )
+
+    runner.run_for(1)
+
+    information_failure = next(
+        event
+        for event in runner.events.events
+        if event.event_type == "information.retrieval_failed"
+    )
+    cognition_failure = next(
+        event
+        for event in runner.events.events
+        if event.event_type == "cognition.failed"
+    )
+    assert client.requests == []
+    assert information_failure.payload["provider"] == "failing"
+    assert information_failure.payload["message"] == (
+        "retrieval embeddings unavailable"
+    )
+    assert cognition_failure.payload["reason"] == (
+        "information_retrieval_failed"
+    )
+    assert runner.clock.tick == 1
+    runner.stop()
 
 
 def test_perception_reveals_zone_departure_not_private_destination() -> None:

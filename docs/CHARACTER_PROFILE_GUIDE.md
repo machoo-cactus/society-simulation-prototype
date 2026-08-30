@@ -61,8 +61,9 @@ Characters may be reused in multiple slots.
 
 The separate `/ui/characters.html` page creates, duplicates, deletes, renames,
 and edits character files. It exposes every `human-v1` field, plus ordered
-relationship records and custom sections as JSON arrays. Saves use content
-hashes so a stale browser tab cannot silently overwrite a newer edit.
+relationship records and custom sections as JSON arrays. Unknown top-level and
+nested section content is preserved when known fields are edited. Saves use
+content hashes so a stale browser tab cannot silently overwrite a newer edit.
 
 ## Standard sections
 
@@ -83,8 +84,8 @@ Only `identity.display_name` is required.
 
 ## Experimental extensions
 
-Use explicit custom sections instead of adding arbitrary keys. This catches
-misspellings while keeping experiments easy to author:
+Explicit custom sections remain the preferred way to add labelled values to the
+standard editor:
 
 ```json
 {
@@ -110,6 +111,12 @@ misspellings while keeping experiments easy to author:
 
 Sections and fields retain their JSON order. Set `prompt_visible` or
 `ui_visible` to `false` to exclude an experimental value from that surface.
+
+Profiles may also contain arbitrary JSON-compatible fields at the top level or
+inside any profile section. Those fields survive validation, library CRUD,
+scenario freezing, hashing, API round trips, retrieval, and editor saves.
+Unrecognized fields are descriptive information only; they do not grant action
+permissions or add simulation mechanics.
 
 ## Templates and compatibility
 

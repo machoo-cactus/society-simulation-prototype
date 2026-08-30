@@ -41,6 +41,7 @@ class CharacterProfileComponent:
 class ControllerComponent:
     enabled: bool = False
     tool_allowlist: tuple[str, ...] = (
+        "navigate_to",
         "go_to",
         "perform",
         "say",

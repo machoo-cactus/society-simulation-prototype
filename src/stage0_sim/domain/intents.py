@@ -12,6 +12,7 @@ class IntentKind(StrEnum):
     WAIT = "wait"
     SKIP = "skip"
     TRAVEL = "travel"
+    NAVIGATE = "navigate"
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,3 +57,9 @@ class SkipIntent(CharacterIntent):
 class TravelIntent(CharacterIntent):
     target_id: str = ""
     mode: TravelMode = TravelMode.WALK
+
+
+@dataclass(frozen=True, slots=True)
+class NavigationIntent(CharacterIntent):
+    target_id: str = ""
+    preferred_mode: TravelMode | None = None

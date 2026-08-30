@@ -9,10 +9,15 @@ from stage0_sim.domain.components import (
     ConversationComponent,
     DriveComponent,
     MovementComponent,
+    NavigationComponent,
+    NavigationPrimitive,
+    NavigationPrimitiveKind,
+    NavigationStatus,
     PlanAction,
     PlanComponent,
     PlannerComponent,
     PositionComponent,
+    SpatialLocationComponent,
     System1State,
     TravelComponent,
 )
@@ -27,6 +32,7 @@ from stage0_sim.domain.systems.travel import TravelSystem
 from stage0_sim.domain.world import (
     CityWorld,
     Coordinate,
+    TravelMode,
     TravelStatus,
     WorldMap,
     find_path,
@@ -99,6 +105,11 @@ class PlanExecutionSystem:
                 continue
             plan = context.registry.get_component(agent_id, PlanComponent)
             if plan.current is not None:
+                if plan.current.action is ActionType.NAVIGATE:
+                    self._advance_navigation(context, agent_id, plan)
+                    if plan.current is not None:
+                        continue
+                    continue
                 if plan.current.action is ActionType.TRAVEL_TO:
                     travel = context.registry.get_component(
                         agent_id, TravelComponent
@@ -173,6 +184,67 @@ class PlanExecutionSystem:
             movement.retry_after_tick = 0
             return
 
+        if action.action is ActionType.NAVIGATE:
+            if not context.registry.has_component(
+                agent_id,
+                NavigationComponent,
+            ):
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "navigation_component_missing",
+                )
+                return
+            navigation = context.registry.get_component(
+                agent_id,
+                NavigationComponent,
+            )
+            if action.target is None:
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "navigation_target_missing",
+                )
+                return
+            matching_active_request = (
+                navigation.target_id == action.target
+                and navigation.preferred_mode is action.mode
+                and navigation.status
+                in {
+                    NavigationStatus.REQUESTED,
+                    NavigationStatus.PLANNED,
+                    NavigationStatus.FAILED,
+                }
+            )
+            if not matching_active_request:
+                navigation.request(
+                    action.target,
+                    preferred_mode=action.mode,
+                )
+            if navigation.status is NavigationStatus.REQUESTED:
+                return
+            if navigation.status is NavigationStatus.FAILED:
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    navigation.failure_reason or "navigation_planning_failed",
+                )
+                return
+            if navigation.status is not NavigationStatus.PLANNED:
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "navigation_not_planned",
+                )
+                return
+            navigation.status = NavigationStatus.NAVIGATING
+            self._advance_navigation(context, agent_id, plan)
+            return
+
         if action.action is ActionType.TRAVEL_TO:
             if (
                 not context.registry.has_resource(CityWorld)
@@ -190,7 +262,16 @@ class PlanExecutionSystem:
                 action.target,
                 action.mode,
             ):
-                self._fail(context, agent_id, plan, "route_not_found")
+                travel = context.registry.get_component(
+                    agent_id,
+                    TravelComponent,
+                )
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    travel.failure_reason or "route_not_found",
+                )
             return
 
         if action.action in {
@@ -256,6 +337,308 @@ class PlanExecutionSystem:
             ),
         )
         plan.waiting_for_affordance = True
+
+    def _advance_navigation(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        plan: PlanComponent,
+    ) -> None:
+        if not context.registry.has_component(agent_id, NavigationComponent):
+            self._fail(
+                context,
+                agent_id,
+                plan,
+                "navigation_component_missing",
+            )
+            return
+        navigation = context.registry.get_component(
+            agent_id,
+            NavigationComponent,
+        )
+        if navigation.status is NavigationStatus.FAILED:
+            self._fail(
+                context,
+                agent_id,
+                plan,
+                navigation.failure_reason or "navigation_planning_failed",
+            )
+            return
+        if navigation.status not in {
+            NavigationStatus.PLANNED,
+            NavigationStatus.NAVIGATING,
+        }:
+            return
+        navigation.status = NavigationStatus.NAVIGATING
+        while navigation.current_primitive_index < len(
+            navigation.primitives
+        ):
+            primitive = navigation.primitives[
+                navigation.current_primitive_index
+            ]
+            if primitive.kind is NavigationPrimitiveKind.MOVE:
+                if self._advance_navigation_move(
+                    context,
+                    agent_id,
+                    plan,
+                    navigation,
+                    primitive,
+                ):
+                    continue
+                return
+            if self._advance_navigation_travel(
+                context,
+                agent_id,
+                plan,
+                navigation,
+                primitive,
+            ):
+                continue
+            return
+        navigation.status = NavigationStatus.ARRIVED
+        context.events.emit(
+            "navigation.arrived",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "target_id": navigation.target_id,
+                "destination": (
+                    {
+                        "space_id": navigation.route.destination.space_id,
+                        "local_reference": (
+                            navigation.route.destination.local_reference
+                        ),
+                    }
+                    if navigation.route is not None
+                    else None
+                ),
+                "completed_route_legs": navigation.completed_route_legs,
+            },
+            correlation_id=navigation.correlation_id,
+        )
+        self._complete(context, agent_id, plan)
+
+    def _advance_navigation_move(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        plan: PlanComponent,
+        navigation: NavigationComponent,
+        primitive: NavigationPrimitive,
+    ) -> bool:
+        if (
+            not context.registry.has_component(agent_id, MovementComponent)
+            or not context.registry.has_component(
+                agent_id,
+                SpatialLocationComponent,
+            )
+        ):
+            self._fail_navigation(
+                context,
+                agent_id,
+                plan,
+                navigation,
+                "movement_precondition_failed",
+            )
+            return False
+        current = context.registry.get_component(
+            agent_id,
+            SpatialLocationComponent,
+        ).locator
+        if current == primitive.destination:
+            self._complete_navigation_primitive(navigation, primitive)
+            return True
+        if current is None or current.space_id != primitive.destination.space_id:
+            self._fail_navigation(
+                context,
+                agent_id,
+                plan,
+                navigation,
+                "navigation_space_mismatch",
+            )
+            return False
+        reference = primitive.destination.local_reference
+        x = reference.get("x") if isinstance(reference, dict) else None
+        y = reference.get("y") if isinstance(reference, dict) else None
+        if (
+            not isinstance(reference, dict)
+            or reference.get("kind") != "coordinate"
+            or not isinstance(x, int)
+            or isinstance(x, bool)
+            or not isinstance(y, int)
+            or isinstance(y, bool)
+        ):
+            self._fail_navigation(
+                context,
+                agent_id,
+                plan,
+                navigation,
+                "unsupported_local_locator",
+            )
+            return False
+        destination = Coordinate(x, y)
+        movement = context.registry.get_component(
+            agent_id,
+            MovementComponent,
+        )
+        if movement.destination is None:
+            self._emit_navigation_leg_started(
+                context,
+                agent_id,
+                navigation,
+                primitive,
+            )
+            movement.destination = destination
+            movement.path = ()
+            movement.retry_after_tick = 0
+            movement.path_correlation_id = navigation.correlation_id
+        elif movement.destination != destination:
+            self._fail_navigation(
+                context,
+                agent_id,
+                plan,
+                navigation,
+                "conflicting_movement",
+            )
+        return False
+
+    def _advance_navigation_travel(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        plan: PlanComponent,
+        navigation: NavigationComponent,
+        primitive: NavigationPrimitive,
+    ) -> bool:
+        if not context.registry.has_component(agent_id, TravelComponent):
+            self._fail_navigation(
+                context,
+                agent_id,
+                plan,
+                navigation,
+                "travel_precondition_failed",
+            )
+            return False
+        travel = context.registry.get_component(agent_id, TravelComponent)
+        if travel.status is TravelStatus.IDLE:
+            self._emit_navigation_leg_started(
+                context,
+                agent_id,
+                navigation,
+                primitive,
+            )
+            if not TravelSystem().request(
+                context,
+                agent_id,
+                primitive.destination_id or "",
+                primitive.mode or TravelMode.WALK,
+                entrance_transition_id=primitive.entrance_transition_id,
+                outbound_transition_id=primitive.outbound_transition_id,
+                origin_network_node_id=primitive.origin_network_node_id,
+                allowed_edge_ids=frozenset(primitive.route_edge_ids),
+            ):
+                self._fail_navigation(
+                    context,
+                    agent_id,
+                    plan,
+                    navigation,
+                    travel.failure_reason or "route_not_found",
+                )
+            return False
+        if travel.status in {
+            TravelStatus.ROUTE_PLANNED,
+            TravelStatus.TRAVELLING,
+        }:
+            return False
+        if travel.status is TravelStatus.ARRIVED:
+            travel.status = TravelStatus.IDLE
+            self._complete_navigation_primitive(navigation, primitive)
+            return True
+        if travel.status is TravelStatus.CANCELLED:
+            navigation.status = NavigationStatus.INTERRUPTED
+            context.events.emit(
+                "navigation.interrupted",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=agent_id,
+                payload={
+                    "target_id": navigation.target_id,
+                    "reason": "travel_interrupted",
+                },
+                correlation_id=navigation.correlation_id,
+            )
+            return False
+        self._fail_navigation(
+            context,
+            agent_id,
+            plan,
+            navigation,
+            "travel_blocked",
+        )
+        return False
+
+    @staticmethod
+    def _complete_navigation_primitive(
+        navigation: NavigationComponent,
+        primitive: NavigationPrimitive,
+    ) -> None:
+        navigation.completed_route_legs = primitive.route_leg_end
+        navigation.current_primitive_index += 1
+
+    @staticmethod
+    def _emit_navigation_leg_started(
+        context: SystemContext,
+        agent_id: str,
+        navigation: NavigationComponent,
+        primitive: NavigationPrimitive,
+    ) -> None:
+        context.events.emit(
+            "navigation.leg_started",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "target_id": navigation.target_id,
+                "primitive_index": navigation.current_primitive_index,
+                "primitive_kind": primitive.kind.value,
+                "route_leg_start": primitive.route_leg_start,
+                "route_leg_end": primitive.route_leg_end,
+                "origin": {
+                    "space_id": primitive.origin.space_id,
+                    "local_reference": primitive.origin.local_reference,
+                },
+                "destination": {
+                    "space_id": primitive.destination.space_id,
+                    "local_reference": primitive.destination.local_reference,
+                },
+            },
+            correlation_id=navigation.correlation_id,
+        )
+
+    def _fail_navigation(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        plan: PlanComponent,
+        navigation: NavigationComponent,
+        reason: str,
+    ) -> None:
+        navigation.status = NavigationStatus.FAILED
+        navigation.failure_reason = reason
+        context.events.emit(
+            "navigation.failed",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "target_id": navigation.target_id,
+                "reason": reason,
+                "completed_route_legs": navigation.completed_route_legs,
+            },
+            correlation_id=navigation.correlation_id,
+        )
+        self._fail(context, agent_id, plan, reason)
 
     def _check_affordance(
         self,

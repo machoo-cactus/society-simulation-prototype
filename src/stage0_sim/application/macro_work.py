@@ -12,7 +12,11 @@ from stage0_sim.application.cognition import (
     PlannerError,
     PlanValidationError,
 )
-from stage0_sim.application.memory import EpisodicMemoryStore
+from stage0_sim.application.information_context import InformationContextCapsule
+from stage0_sim.application.memory import (
+    EpisodicMemoryStore,
+    memory_context_capsules,
+)
 from stage0_sim.application.planning import action_payload, validate_plan
 from stage0_sim.domain.components import (
     AffordanceExecutionComponent,
@@ -311,13 +315,17 @@ class MacroWorkCoordinator:
             )
             return
 
-        memories = self._retrieve(
+        memories, retrieved_information = self._retrieve(
             context,
             agent_id=work.agent_id,
             query=work.memory_query,
             top_k=work.top_k,
         )
-        planner_context = replace(work.context, memories=memories)
+        planner_context = replace(
+            work.context,
+            memories=memories,
+            retrieved_information=retrieved_information,
+        )
         requested = context.events.emit(
             "planner.requested",
             simulation_tick=context.clock.tick,
@@ -328,6 +336,9 @@ class MacroWorkCoordinator:
                 "zone_count": len(planner_context.zones),
                 "station_count": len(planner_context.stations),
                 "memory_count": len(planner_context.memories),
+                "information_capsule_count": len(
+                    planner_context.retrieved_information
+                ),
                 "provider": provider,
             },
         )
@@ -404,7 +415,7 @@ class MacroWorkCoordinator:
             work.agent_id, ConversationComponent
         )
         provider = _provider_name(self.dialogue_generator)
-        memories = self._retrieve(
+        memories, retrieved_information = self._retrieve(
             context,
             agent_id=work.agent_id,
             query=work.prompt,
@@ -415,6 +426,7 @@ class MacroWorkCoordinator:
             simulation_time=context.clock.simulation_time,
             prompt=work.prompt,
             memories=memories,
+            retrieved_information=retrieved_information,
         )
         try:
             result = self.dialogue_generator.generate(dialogue_context)
@@ -487,9 +499,12 @@ class MacroWorkCoordinator:
         agent_id: str,
         query: str | None,
         top_k: int,
-    ) -> tuple[str, ...]:
+    ) -> tuple[
+        tuple[str, ...],
+        tuple[InformationContextCapsule, ...],
+    ]:
         if query is None:
-            return ()
+            return (), ()
         try:
             retrieved = self.memory_store.retrieve(
                 agent_id=agent_id,
@@ -511,7 +526,7 @@ class MacroWorkCoordinator:
                     ),
                 },
             )
-            return ()
+            return (), ()
         if retrieved:
             context.events.emit(
                 "memory.retrieved",
@@ -524,7 +539,10 @@ class MacroWorkCoordinator:
                     "scores": [item.score for item in retrieved],
                 },
             )
-        return tuple(item.record.text for item in retrieved)
+        return (
+            tuple(item.record.text for item in retrieved),
+            memory_context_capsules(self.memory_store, retrieved),
+        )
 
 
 def _provider_name(provider: object) -> str:

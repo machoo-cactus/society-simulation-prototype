@@ -8,6 +8,7 @@ from stage0_sim.domain.components import (
     DriveComponent,
     HomeostasisComponent,
     MovementComponent,
+    NavigationComponent,
     PerceptionComponent,
     PlanAction,
     PlanComponent,
@@ -100,6 +101,33 @@ class AgentStateProjector:
                 "current_leg_index": travel.current_leg_index,
                 "leg_count": len(travel.route),
                 "vehicle_id": travel.vehicle_id,
+            }
+        if registry.has_component(agent_id, NavigationComponent):
+            navigation = registry.get_component(
+                agent_id,
+                NavigationComponent,
+            )
+            state["navigation"] = {
+                "target_id": navigation.target_id,
+                "preferred_mode": (
+                    navigation.preferred_mode.value
+                    if navigation.preferred_mode is not None
+                    else None
+                ),
+                "status": navigation.status.value,
+                "current_primitive_index": (
+                    navigation.current_primitive_index
+                ),
+                "primitive_count": len(navigation.primitives),
+                "completed_route_legs": (
+                    navigation.completed_route_legs
+                ),
+                "route_leg_count": (
+                    len(navigation.route.legs)
+                    if navigation.route is not None
+                    else 0
+                ),
+                "failure_reason": navigation.failure_reason,
             }
         if registry.has_component(agent_id, HomeostasisComponent):
             state["homeostasis"] = registry.get_component(

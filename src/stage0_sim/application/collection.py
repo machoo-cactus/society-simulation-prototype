@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.application.dataset import AgentStateProjector, DatasetRecord
+from stage0_sim.application.information import InformationStore
 from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import SimulationRunner
 from stage0_sim.domain.components import (
@@ -61,6 +62,11 @@ class RunDataCollector:
                     },
                     None,
                 )
+        elif runner.registry.has_resource(InformationStore):
+            runner.registry.get_resource(InformationStore).bind_persistence(
+                store,
+                self.run_id,
+            )
         runner.events.subscribe(self._collect)
         runner.subscribe_tick_completed(self._commit_tick)
 
@@ -133,6 +139,8 @@ class RunDataCollector:
             record_type = "dialogue"
         elif event.event_type.startswith("memory."):
             record_type = "memory_reference"
+        elif event.event_type.startswith("information."):
+            record_type = "information_retrieval"
         elif event.event_type.startswith("perception."):
             record_type = "perception"
         elif event.event_type.startswith("speech."):

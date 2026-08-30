@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.api.app import app
 from stage0_sim.application.characters import prepare_scenario
+from stage0_sim.application.information import InformationStore
 from stage0_sim.application.scenario import (
     ScenarioDefinition,
     create_runner,
@@ -17,6 +18,7 @@ from stage0_sim.domain.components import (
     SpatialLocationComponent,
     TravelComponent,
 )
+from stage0_sim.domain.information import character_information_namespace_id
 from stage0_sim.domain.world import (
     CityWorld,
     SpatialScale,
@@ -59,6 +61,48 @@ def test_city_schema_and_references_are_validated() -> None:
         ScenarioDefinition.model_validate(payload)
 
 
+@pytest.mark.parametrize(
+    ("outdoor_places", "field", "value", "message"),
+    [
+        ([], "local_map_id", "missing-map", "references unknown local map"),
+        (
+            None,
+            "entrance_node",
+            "missing-node",
+            "entrance entrance-home references unknown node",
+        ),
+        (
+            [],
+            "entrance_coordinate",
+            {"x": 99, "y": 0},
+            "entrance entrance-home is outside local map",
+        ),
+    ],
+)
+def test_every_building_reference_is_validated_independently(
+    outdoor_places: list[object] | None,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    payload = load_scenario(SCENARIO_PATH).model_dump(mode="json")
+    if outdoor_places is not None:
+        payload["world"]["outdoor_places"] = outdoor_places
+    if field == "entrance_node":
+        payload["world"]["buildings"][0]["entrances"][0][
+            "neighborhood_node_id"
+        ] = value
+    elif field == "entrance_coordinate":
+        payload["world"]["buildings"][0]["entrances"][0][
+            "local_coordinate"
+        ] = value
+    else:
+        payload["world"]["buildings"][0][field] = value
+
+    with pytest.raises(ValueError, match=message):
+        ScenarioDefinition.model_validate(payload)
+
+
 def test_sparse_route_is_deterministic_and_uses_access_legs() -> None:
     runner = create_city_runner()
     city = runner.registry.get_resource(CityWorld)
@@ -90,20 +134,31 @@ def test_scripted_car_trip_arrives_without_teleporting() -> None:
     runner = create_city_runner(run_id="city-trip")
 
     runner.run_for(575)
-    before = runner.registry.get_component(
+    before_component = runner.registry.get_component(
         "agent-001", SpatialLocationComponent
-    ).location
+    )
+    before = before_component.location
     assert before.scale is SpatialScale.CITY
     assert before.edge_id is not None
+    assert before_component.locator is not None
+    assert before_component.locator.space_id == "demo-city"
+    assert before_component.locator.local_reference == {
+        "kind": "edge",
+        "edge_id": before.edge_id,
+        "progress": before.edge_progress,
+    }
 
     runner.run_for(2)
-    after = runner.registry.get_component(
+    after_component = runner.registry.get_component(
         "agent-001", SpatialLocationComponent
-    ).location
+    )
+    after = after_component.location
     travel = runner.registry.get_component("agent-001", TravelComponent)
 
     assert after.scale is SpatialScale.BUILDING
     assert after.place_id == "building-office"
+    assert after_component.locator is not None
+    assert after_component.locator.space_id == "building-office"
     assert travel.status is TravelStatus.ARRIVED
     event_types = [event.event_type for event in runner.events.events]
     assert "building.exited" in event_types
@@ -111,6 +166,34 @@ def test_scripted_car_trip_arrives_without_teleporting() -> None:
     assert "vehicle.moved" in event_types
     assert "vehicle.exited" in event_types
     assert "travel.arrived" in event_types
+    learned = next(
+        document
+        for document in runner.registry.get_resource(
+            InformationStore
+        ).documents(
+            namespace_id=character_information_namespace_id("agent-001"),
+            kinds=("knowledge.route",),
+        )
+        if document.source.type == "DIRECT_EXPERIENCE"
+    )
+    arrived = next(
+        event
+        for event in runner.events.events
+        if event.event_type == "travel.arrived"
+    )
+    assert learned.content["destination_id"] == "building-office"
+    assert learned.content["locator"] == {
+        "space_id": "building-office",
+        "local_reference": {"kind": "coordinate", "x": 0, "y": 1},
+    }
+    assert learned.content["transition_ids"] == [
+        *(leg.edge_id for leg in travel.route),
+        travel.destination_entrance_id,
+    ]
+    assert learned.source.reference_ids == (
+        arrived.event_id,
+        arrived.correlation_id,
+    )
 
 
 def test_city_bootstrap_omits_unrequested_local_map_grids() -> None:

@@ -27,11 +27,19 @@ from stage0_sim.application.cognition import (
     Planner,
 )
 from stage0_sim.application.dialogue import MacroDialogueSystem
+from stage0_sim.application.information import InformationRetriever, InformationStore
 from stage0_sim.application.macro_work import MacroWorkCoordinator
 from stage0_sim.application.memory import EpisodicMemoryStore, MemoryConfiguration
 from stage0_sim.application.memory_recording import (
     MemoryRecordingSystem,
     observation_metadata,
+)
+from stage0_sim.application.navigation import (
+    InformationKnownTopologyProjection,
+    NavigationKnowledgeRecordingSystem,
+    NavigationPlanningSystem,
+    NavigationService,
+    RecursiveRoutePlanner,
 )
 from stage0_sim.application.perception import (
     PerceptionConfiguration,
@@ -52,8 +60,10 @@ from stage0_sim.domain.components import (
     DriveType,
     HomeostasisComponent,
     HomeostasisConfiguration,
+    InformationNamespaceComponent,
     MemoryComponent,
     MovementComponent,
+    NavigationComponent,
     PerceptionComponent,
     PlanAction,
     PlanComponent,
@@ -68,6 +78,15 @@ from stage0_sim.domain.components import (
 )
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.information import (
+    InformationDocument,
+    InformationSource,
+    TimeRange,
+    VisibilityLevel,
+    VisibilityPolicy,
+    character_dossier_document_id,
+    character_information_namespace_id,
+)
 from stage0_sim.domain.systems import SystemExecutor
 from stage0_sim.domain.systems.affordances import AffordanceExecutionSystem
 from stage0_sim.domain.systems.homeostasis import (
@@ -88,13 +107,19 @@ from stage0_sim.domain.world import (
     CityWorld,
     Coordinate,
     District,
+    GridTopology,
     HomeostasisEffect,
     MapPoint,
     OutdoorPlace,
+    Space,
+    SpaceRegistry,
+    SparseGraphTopology,
     SpatialScale,
+    Transition,
     TransportEdge,
     TransportNode,
     TravelMode,
+    TraversalContext,
     Vehicle,
     VehicleRegistry,
     VehicleState,
@@ -391,18 +416,9 @@ class CityWorldDefinition(BaseModel):
                 raise ValueError(
                     f"building {building.id} references unknown district"
                 )
-        for place in self.outdoor_places:
-            if place.district_id not in district_ids:
-                raise ValueError(
-                f"outdoor place {place.id} references unknown district"
-                )
-            if place.network_node_id not in node_ids:
-                raise ValueError(
-                f"outdoor place {place.id} references unknown node"
-                )
             if building.local_map_id not in map_ids:
                 raise ValueError(
-                    f"building {building.id} references unknown local map"
+                f"building {building.id} references unknown local map"
                 )
             local_map = self.local_maps[building.local_map_id]
             for entrance in building.entrances:
@@ -418,6 +434,15 @@ class CityWorldDefinition(BaseModel):
                     raise ValueError(
                         f"entrance {entrance.id} references unknown node"
                     )
+        for place in self.outdoor_places:
+            if place.district_id not in district_ids:
+                raise ValueError(
+                f"outdoor place {place.id} references unknown district"
+                )
+            if place.network_node_id not in node_ids:
+                raise ValueError(
+                f"outdoor place {place.id} references unknown node"
+                )
         for edge in self.transport.edges:
             if edge.from_node_id not in node_ids or edge.to_node_id not in node_ids:
                 raise ValueError(f"edge {edge.id} references unknown node")
@@ -572,6 +597,7 @@ class CognitionSettingsDefinition(BaseModel):
     max_total_output_tokens: int | None = Field(default=None, gt=0)
     tool_allowlist: list[str] = Field(
         default_factory=lambda: [
+            "navigate_to",
             "go_to",
             "perform",
             "say",
@@ -588,6 +614,7 @@ class CognitionSettingsDefinition(BaseModel):
         if self.max_read_tool_rounds != 0:
             raise ValueError("read-only tool rounds are not implemented")
         unknown = set(self.tool_allowlist) - {
+            "navigate_to",
             "go_to",
             "perform",
             "say",
@@ -743,15 +770,24 @@ def create_runner(
 ) -> SimulationRunner:
     registry = Registry()
     systems = SystemExecutor()
+    information_store = InformationStore()
+    resolved_embedding_provider = embedding_provider or FakeEmbeddingProvider()
     memory_store = EpisodicMemoryStore(
-        embedding_provider or FakeEmbeddingProvider(),
+        resolved_embedding_provider,
         scenario.memory.to_domain(),
+        information_store,
+    )
+    information_retriever = InformationRetriever(
+        information_store,
+        resolved_embedding_provider,
     )
     macro_work = MacroWorkCoordinator(
         planner=planner or FakePlanner(),
         dialogue_generator=dialogue_generator or FakeDialogueGenerator(),
         memory_store=memory_store,
     )
+    registry.set_resource(information_store)
+    registry.set_resource(information_retriever)
     registry.set_resource(memory_store)
     registry.set_resource(macro_work)
     registry.set_resource(scenario.homeostasis.to_domain())
@@ -792,10 +828,26 @@ def create_runner(
         systems.add(TravelSystem())
     if world is not None:
         registry.set_resource(world)
+        space_registry = _build_space_registry(world, city_world)
+        registry.set_resource(space_registry)
+        known_topology = InformationKnownTopologyProjection(
+            information_store,
+            space_registry,
+            registry,
+        )
+        registry.set_resource(
+            NavigationService(
+                registry,
+                space_registry,
+                known_topology,
+            )
+        )
         systems.add(PathfindingSystem())
+        systems.add(NavigationPlanningSystem())
         systems.add(PlanExecutionSystem())
         systems.add(AffordanceExecutionSystem())
         systems.add(MovementSystem())
+        systems.add(NavigationKnowledgeRecordingSystem())
         systems.add(PerceptionSystem())
 
     tool_registry = ToolRegistry()
@@ -842,6 +894,7 @@ def create_runner(
                 max_input_tokens=scenario.cognition.max_input_tokens,
                 max_output_tokens=scenario.cognition.max_total_output_tokens,
                 memory_store=memory_store,
+                information_retriever=information_retriever,
                 execution_mode=scenario.cognition.execution_mode,
             )
         )
@@ -864,7 +917,10 @@ def create_runner(
             _validate_spatial_location(city_world, spatial_location)
             registry.add_component(
                 entity_id,
-                SpatialLocationComponent(spatial_location),
+                SpatialLocationComponent(
+                    spatial_location,
+                    city_space_id=city_world.id,
+                ),
             )
             registry.add_component(entity_id, TravelComponent())
             if spatial_location.local_coordinate is not None:
@@ -978,6 +1034,16 @@ def create_runner(
             if not registry.has_component(entity_id, PlanComponent):
                 registry.add_component(entity_id, PlanComponent())
 
+        information_values = raw_components.pop("information", None)
+        information_definition = (
+            _validate_component(
+                InformationComponentDefinition,
+                information_values,
+                entity_id,
+            )
+            if information_values is not None
+            else InformationComponentDefinition()
+        )
         profile_values = raw_components.pop("character_profile", None)
         metadata_values = raw_components.get("metadata", {})
         profile_definition, profile_id = _resolve_character_profile(
@@ -1021,6 +1087,79 @@ def create_runner(
                 description=rendered_profile.markdown,
                 ui_data=_profile_ui_payload(profile_payload),
                 goals=tuple(profile_definition.motivations.goals),
+            ),
+        )
+        namespace_id = character_information_namespace_id(entity_id)
+        dossier = information_store.register(
+            InformationDocument.create(
+                id=character_dossier_document_id(entity_id),
+                namespace_id=namespace_id,
+                kind="character.dossier",
+                schema_id=(
+                    f"character-profile.{profile_definition.template_id}."
+                    f"v{template.schema_version}"
+                ),
+                subject_ids=(entity_id,),
+                content=profile_payload,
+                source=InformationSource(
+                    type="SCENARIO_PROFILE",
+                    reference_ids=(profile_id,),
+                    metadata={
+                        "profile_id": profile_id,
+                        "template_id": profile_definition.template_id,
+                        "template_version": template.schema_version,
+                    },
+                ),
+                visibility=VisibilityPolicy(
+                    level=VisibilityLevel.PRIVATE,
+                    owner_ids=(entity_id,),
+                ),
+            )
+        )
+        document_ids = [dossier.id]
+        for document_definition in information_definition.documents:
+            document = information_store.register(
+                InformationDocument.create(
+                    id=document_definition.id,
+                    namespace_id=namespace_id,
+                    kind=document_definition.kind,
+                    schema_id=document_definition.schema_id,
+                    subject_ids=tuple(
+                        document_definition.subject_ids or [entity_id]
+                    ),
+                    content=document_definition.content,
+                    source=InformationSource(
+                        type=document_definition.source.type,
+                        observer_id=document_definition.source.observer_id,
+                        reference_ids=tuple(
+                            document_definition.source.reference_ids
+                        ),
+                        metadata=document_definition.source.metadata,
+                    ),
+                    valid_time=(
+                        document_definition.valid_time.to_domain()
+                        if document_definition.valid_time is not None
+                        else None
+                    ),
+                    recorded_at=document_definition.recorded_at,
+                    visibility=VisibilityPolicy(
+                        level=document_definition.visibility.level,
+                        owner_ids=tuple(
+                            document_definition.visibility.owner_ids
+                            or [entity_id]
+                        ),
+                        reader_ids=tuple(
+                            document_definition.visibility.reader_ids
+                        ),
+                    ),
+                )
+            )
+            document_ids.append(document.id)
+        registry.add_component(
+            entity_id,
+            InformationNamespaceComponent(
+                namespace_id=namespace_id,
+                document_ids=tuple(document_ids),
             ),
         )
 
@@ -1125,6 +1264,28 @@ def create_runner(
                     )
                 ),
             )
+        if (
+            registry.has_component(entity_id, SpatialLocationComponent)
+            and not registry.has_component(entity_id, NavigationComponent)
+        ):
+            navigation = NavigationComponent()
+            if registry.has_component(entity_id, PlanComponent):
+                plan = registry.get_component(entity_id, PlanComponent)
+                first_action = plan.current or (
+                    plan.queue[0] if plan.queue else None
+                )
+                if (
+                    first_action is not None
+                    and first_action.action is ActionType.NAVIGATE
+                    and first_action.target is not None
+                ):
+                    navigation.request(
+                        first_action.target,
+                        preferred_mode=first_action.mode,
+                    )
+            registry.add_component(entity_id, navigation)
+    if world is not None:
+        _synthesize_navigation_knowledge(registry, information_store)
     return SimulationRunner(
         RunConfiguration(
             seed=scenario.seed,
@@ -1181,8 +1342,13 @@ class SpatialLocationDefinition(BaseModel):
         )
 
 
-class CharacterIdentityDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class ExtensibleCharacterProfileModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+
+
+class CharacterIdentityDefinition(ExtensibleCharacterProfileModel):
 
     display_name: str = Field(min_length=1)
     age: int | None = Field(default=None, ge=0, le=150)
@@ -1191,8 +1357,7 @@ class CharacterIdentityDefinition(BaseModel):
     occupation: str = ""
 
 
-class CharacterAppearanceDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterAppearanceDefinition(ExtensibleCharacterProfileModel):
 
     summary: str = ""
     height: str = ""
@@ -1203,8 +1368,7 @@ class CharacterAppearanceDefinition(BaseModel):
     distinguishing_features: list[str] = Field(default_factory=list)
 
 
-class CharacterPersonalityDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterPersonalityDefinition(ExtensibleCharacterProfileModel):
 
     summary: str = ""
     traits: list[str] = Field(default_factory=list)
@@ -1215,8 +1379,7 @@ class CharacterPersonalityDefinition(BaseModel):
     flaws: list[str] = Field(default_factory=list)
 
 
-class CharacterBackgroundDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterBackgroundDefinition(ExtensibleCharacterProfileModel):
 
     birthplace: str = ""
     residence: str = ""
@@ -1224,8 +1387,7 @@ class CharacterBackgroundDefinition(BaseModel):
     history: str = ""
 
 
-class CharacterMotivationsDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterMotivationsDefinition(ExtensibleCharacterProfileModel):
 
     values: list[str] = Field(default_factory=list)
     goals: list[str] = Field(default_factory=list)
@@ -1234,16 +1396,14 @@ class CharacterMotivationsDefinition(BaseModel):
     current_priorities: list[str] = Field(default_factory=list)
 
 
-class CharacterCapabilitiesDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterCapabilitiesDefinition(ExtensibleCharacterProfileModel):
 
     skills: list[str] = Field(default_factory=list)
     knowledge_areas: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
 
 
-class CharacterPreferencesDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterPreferencesDefinition(ExtensibleCharacterProfileModel):
 
     likes: list[str] = Field(default_factory=list)
     dislikes: list[str] = Field(default_factory=list)
@@ -1251,8 +1411,7 @@ class CharacterPreferencesDefinition(BaseModel):
     routines: list[str] = Field(default_factory=list)
 
 
-class CharacterRelationshipDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterRelationshipDefinition(ExtensibleCharacterProfileModel):
 
     target_id: str = Field(min_length=1)
     relationship: str = Field(min_length=1)
@@ -1260,8 +1419,7 @@ class CharacterRelationshipDefinition(BaseModel):
     notes: str = ""
 
 
-class CharacterCustomFieldDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterCustomFieldDefinition(ExtensibleCharacterProfileModel):
 
     key: str = Field(min_length=1)
     label: str = Field(min_length=1)
@@ -1270,8 +1428,7 @@ class CharacterCustomFieldDefinition(BaseModel):
     ui_visible: bool = True
 
 
-class CharacterCustomSectionDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterCustomSectionDefinition(ExtensibleCharacterProfileModel):
 
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
@@ -1287,8 +1444,7 @@ class CharacterCustomSectionDefinition(BaseModel):
         return self
 
 
-class CharacterProfileDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CharacterProfileDefinition(ExtensibleCharacterProfileModel):
 
     profile_ref: str | None = Field(default=None, min_length=1)
     template_id: str = "human-v1"
@@ -1370,6 +1526,7 @@ class ControllerDefinition(BaseModel):
     enabled: bool = True
     tool_allowlist: list[str] = Field(
         default_factory=lambda: [
+            "navigate_to",
             "go_to",
             "perform",
             "say",
@@ -1382,6 +1539,7 @@ class ControllerDefinition(BaseModel):
     @model_validator(mode="after")
     def tools_are_supported(self) -> "ControllerDefinition":
         unknown = set(self.tool_allowlist) - {
+            "navigate_to",
             "go_to",
             "perform",
             "say",
@@ -1421,8 +1579,11 @@ class PlanActionDefinition(BaseModel):
         if self.action is ActionType.TRAVEL_TO:
             if self.target is None or self.mode is None:
                 raise ValueError("TRAVEL_TO requires target and mode")
+        elif self.action is ActionType.NAVIGATE:
+            if self.target is None:
+                raise ValueError("NAVIGATE requires target")
         elif self.mode is not None:
-            raise ValueError("mode is only valid for TRAVEL_TO")
+            raise ValueError("mode is only valid for TRAVEL_TO or NAVIGATE")
         return self
 
     def to_domain(self) -> PlanAction:
@@ -1446,6 +1607,72 @@ class PlannerComponentDefinition(BaseModel):
 
     daily_goals: list[str] = Field(default_factory=list)
     needs_plan: bool = True
+
+
+class InitialInformationSourceDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: str = Field(default="SCENARIO", min_length=1)
+    observer_id: str | None = Field(default=None, min_length=1)
+    reference_ids: list[str] = Field(default_factory=list)
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class InitialInformationVisibilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: VisibilityLevel = VisibilityLevel.PRIVATE
+    owner_ids: list[str] = Field(default_factory=list)
+    reader_ids: list[str] = Field(default_factory=list)
+
+
+class InitialInformationTimeRangeDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: float | None = None
+    end: float | None = None
+
+    @model_validator(mode="after")
+    def has_bound(self) -> "InitialInformationTimeRangeDefinition":
+        if self.start is None and self.end is None:
+            raise ValueError("information valid_time requires start or end")
+        return self
+
+    def to_domain(self) -> TimeRange:
+        return TimeRange(start=self.start, end=self.end)
+
+
+class InitialInformationDocumentDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    schema_id: str = Field(default="generic.v1", min_length=1)
+    subject_ids: list[str] = Field(default_factory=list)
+    content: JsonValue
+    source: InitialInformationSourceDefinition = Field(
+        default_factory=InitialInformationSourceDefinition
+    )
+    valid_time: InitialInformationTimeRangeDefinition | None = None
+    recorded_at: float | None = None
+    visibility: InitialInformationVisibilityDefinition = Field(
+        default_factory=InitialInformationVisibilityDefinition
+    )
+
+
+class InformationComponentDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    documents: list[InitialInformationDocumentDefinition] = Field(
+        default_factory=list
+    )
+
+    @model_validator(mode="after")
+    def document_ids_are_unique(self) -> "InformationComponentDefinition":
+        document_ids = [document.id for document in self.documents]
+        if len(document_ids) != len(set(document_ids)):
+            raise ValueError("initial information document IDs must be unique")
+        return self
 
 
 class InitialMemoryDefinition(BaseModel):
@@ -1700,6 +1927,239 @@ def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
         car_speed_mps=definition.transport.car_speed_mps,
         metro_speed_mps=definition.transport.metro_speed_mps,
     )
+
+
+def _build_space_registry(
+    world: WorldMap,
+    city: CityWorld | None,
+) -> SpaceRegistry:
+    registry = SpaceRegistry()
+    if city is None:
+        topology = GridTopology("implicit-building", world)
+        registry.register_space(
+            Space(
+                id="implicit-building",
+                topology=topology,
+                kind="building",
+            )
+        )
+        _register_map_destinations(registry, topology, world)
+        return registry
+
+    city_topology = SparseGraphTopology(city.id, city)
+    registry.register_space(
+        Space(
+            id=city.id,
+            topology=city_topology,
+            kind="city",
+        )
+    )
+    building_topologies: dict[str, GridTopology] = {}
+    for building in sorted(city.buildings, key=lambda item: item.id):
+        local_map = city.local_map_for_building(building.id)
+        topology = GridTopology(building.id, local_map)
+        building_topologies[building.id] = topology
+        registry.register_space(
+            Space(
+                id=building.id,
+                topology=topology,
+                kind="building",
+                metadata={"local_map_id": building.local_map_id},
+            )
+        )
+        registry.register_containment(city.id, building.id)
+        _register_map_destinations(registry, topology, local_map)
+
+    for building in sorted(city.buildings, key=lambda item: item.id):
+        topology = building_topologies[building.id]
+        for entrance in sorted(building.entrances, key=lambda item: item.id):
+            building_locator = topology.locator(entrance.local_coordinate)
+            city_locator = city_topology.node_locator(entrance.network_node_id)
+            registry.register_transition(
+                Transition(
+                    id=entrance.id,
+                    from_locator=building_locator,
+                    to_locator=city_locator,
+                    traversal_kind="building_entrance",
+                    executor_id="travel",
+                    cost_model_id="entrance",
+                    bidirectional=True,
+                    metadata={
+                        "building_id": building.id,
+                        "network_node_id": entrance.network_node_id,
+                    },
+                )
+            )
+            registry.register_destination(building.id, building_locator)
+
+    for place in sorted(city.outdoor_places, key=lambda item: item.id):
+        registry.register_destination(
+            place.id,
+            city_topology.node_locator(place.network_node_id),
+        )
+    return registry
+
+
+def _register_map_destinations(
+    registry: SpaceRegistry,
+    topology: GridTopology,
+    world: WorldMap,
+) -> None:
+    for zone in sorted(world.zones, key=lambda item: item.id):
+        for coordinate in sorted(zone.tiles, key=lambda item: (item.y, item.x)):
+            registry.register_destination(
+                zone.id,
+                topology.locator(coordinate),
+            )
+    for station in sorted(world.stations, key=lambda item: item.id):
+        registry.register_destination(
+            station.id,
+            topology.locator(station.position),
+        )
+
+
+def _synthesize_navigation_knowledge(
+    registry: Registry,
+    information: InformationStore,
+) -> None:
+    topology = registry.get_resource(SpaceRegistry)
+    service = registry.get_resource(NavigationService)
+    planner = RecursiveRoutePlanner()
+    for character_id in registry.query_entities(
+        InformationNamespaceComponent,
+        SpatialLocationComponent,
+    ):
+        spatial = registry.get_component(
+            character_id,
+            SpatialLocationComponent,
+        )
+        origin = spatial.locator
+        if origin is None:
+            continue
+        known_ids = {
+            destination.id
+            for destination in service.known_topology.destinations(character_id)
+        }
+        requested: dict[str, TravelMode | None] = {}
+        current_place_id = spatial.location.place_id
+        if (
+            current_place_id not in known_ids
+            and topology.destination_locators(current_place_id)
+        ):
+            requested[current_place_id] = None
+        if registry.has_component(character_id, PlanComponent):
+            plan = registry.get_component(character_id, PlanComponent)
+            actions = (
+                *((plan.current,) if plan.current is not None else ()),
+                *plan.queue,
+            )
+            for action in actions:
+                if (
+                    action.action
+                    not in {
+                        ActionType.MOVE_TO,
+                        ActionType.TRAVEL_TO,
+                        ActionType.NAVIGATE,
+                    }
+                    or action.target is None
+                    or action.target in known_ids
+                ):
+                    continue
+                requested[action.target] = action.mode
+        for target_id in sorted(requested):
+            document_id = (
+                f"navigation-compatibility:{character_id}:{target_id}"
+            )
+            if information.has(document_id):
+                continue
+            target_locators = topology.destination_locators(target_id)
+            if target_id == current_place_id:
+                route_destination = origin
+                transition_ids = tuple(
+                    sorted(
+                        {
+                            transition.id.removesuffix(":reverse")
+                            for transition in (
+                                topology.registered_transitions_from_space(
+                                    origin.space_id
+                                )
+                            )
+                        }
+                    )
+                )
+            elif target_locators:
+                requested_mode = requested[target_id]
+                try:
+                    route = planner.plan(
+                        topology,
+                        origin,
+                        target_locators,
+                        TraversalContext(
+                            character_id=character_id,
+                            requested_mode=(
+                                requested_mode.value
+                                if requested_mode is not None
+                                else TravelMode.WALK.value
+                            ),
+                        ),
+                    )
+                except (KeyError, ValueError):
+                    continue
+                route_destination = route.destination
+                transition_ids = tuple(
+                    sorted(
+                        {
+                            leg.transition_id.removesuffix(":reverse")
+                            for leg in route.legs
+                            if leg.transition_id is not None
+                        }
+                    )
+                )
+            else:
+                continue
+            document = information.register(
+                InformationDocument.create(
+                    id=document_id,
+                    namespace_id=character_information_namespace_id(
+                        character_id
+                    ),
+                    kind="knowledge.place",
+                    schema_id="navigation-knowledge.v1",
+                    subject_ids=(character_id, target_id),
+                    content={
+                        "destination_id": target_id,
+                        "locators": [
+                            {
+                                "space_id": route_destination.space_id,
+                                "local_reference": (
+                                    route_destination.local_reference
+                                ),
+                            }
+                        ],
+                        "transition_ids": list(transition_ids),
+                        "compatibility_synthesized": True,
+                    },
+                    source=InformationSource(
+                        type="SCENARIO_NAVIGATION_COMPATIBILITY",
+                        reference_ids=(target_id,),
+                    ),
+                    visibility=VisibilityPolicy(
+                        level=VisibilityLevel.PRIVATE,
+                        owner_ids=(character_id,),
+                    ),
+                )
+            )
+            namespace = registry.get_component(
+                character_id,
+                InformationNamespaceComponent,
+            )
+            registry.set_component(
+                character_id,
+                InformationNamespaceComponent(
+                    namespace_id=namespace.namespace_id,
+                    document_ids=(*namespace.document_ids, document.id),
+                ),
+            )
 
 
 def _initial_city_local_map(

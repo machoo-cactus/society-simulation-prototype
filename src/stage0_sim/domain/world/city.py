@@ -220,11 +220,15 @@ def find_transport_route(
     origin_node_id: str,
     destination_node_id: str,
     requested_mode: TravelMode,
+    *,
+    allowed_edge_ids: frozenset[str] | None = None,
 ) -> tuple[TravelLeg, ...] | None:
     if origin_node_id == destination_node_id:
         return ()
     edges_from: dict[str, list[tuple[str, TransportEdge]]] = {}
     for edge in city.edges:
+        if allowed_edge_ids is not None and edge.id not in allowed_edge_ids:
+            continue
         try:
             edge_mode(edge, requested_mode)
         except ValueError:

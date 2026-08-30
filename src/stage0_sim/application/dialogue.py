@@ -5,7 +5,10 @@ from stage0_sim.application.cognition import (
     DialogueGenerator,
     DialogueResult,
 )
-from stage0_sim.application.memory import EpisodicMemoryStore
+from stage0_sim.application.memory import (
+    EpisodicMemoryStore,
+    memory_context_capsules,
+)
 from stage0_sim.domain.components import (
     ActionType,
     ConversationComponent,
@@ -43,6 +46,10 @@ class MemoryAwareDialogueGenerator:
                 simulation_time=simulation_time,
                 prompt=prompt,
                 memories=tuple(item.record.text for item in retrieved),
+                retrieved_information=memory_context_capsules(
+                    self.memory_store,
+                    retrieved,
+                ),
             )
         )
 

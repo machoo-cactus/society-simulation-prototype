@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from stage0_sim.application.information_context import InformationContextCapsule
 from stage0_sim.domain.events import JsonValue
 
 
@@ -112,6 +113,9 @@ class CharacterDecisionRequest:
     observation: CharacterObservation
     memories: tuple[str, ...]
     allowed_tools: tuple[str, ...]
+    retrieved_information: tuple[InformationContextCapsule, ...] = ()
+    information_retrieval_performed: bool = False
+    information_query: str = ""
 
 
 @dataclass(frozen=True, slots=True)

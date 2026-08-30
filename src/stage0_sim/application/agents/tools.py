@@ -14,6 +14,7 @@ from stage0_sim.domain.intents import (
     CharacterIntent,
     IntentKind,
     MoveIntent,
+    NavigationIntent,
     SkipIntent,
     SpeechIntent,
     TravelIntent,
@@ -68,13 +69,21 @@ class TravelToArguments(BaseModel):
     reason: str | None = Field(default=None, max_length=300)
 
 
+class NavigateToArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_id: str = Field(min_length=1)
+    preferred_mode: Literal["WALK", "CYCLE", "CAR", "METRO"] | None = None
+    reason: str | None = Field(default=None, max_length=300)
+
+
 ToolArguments = Annotated[
     GoToArguments
     | PerformArguments
     | SayArguments
     | WaitArguments
     | SkipArguments
-    | TravelToArguments,
+    | TravelToArguments
+    | NavigateToArguments,
     Field(discriminator=None),
 ]
 
@@ -88,6 +97,7 @@ class ToolRegistry:
             "wait": WaitArguments,
             "skip": SkipArguments,
             "travel_to": TravelToArguments,
+            "navigate_to": NavigateToArguments,
         }
 
     def definitions(self, allowed: tuple[str, ...]) -> tuple[ToolDefinition, ...]:
@@ -198,6 +208,38 @@ class ToolRegistry:
                 args.target_id,
                 TravelMode(args.mode),
             )
+        if isinstance(args, NavigateToArguments):
+            target = targets.get(args.target_id)
+            if target is None or target.kind not in {
+                "zone",
+                "station",
+                "building",
+                "outdoor",
+            }:
+                raise ToolValidationError(
+                    "destination_not_known", args.target_id
+                )
+            if (
+                args.preferred_mode is not None
+                and args.preferred_mode
+                not in request.observation.available_travel_modes
+            ):
+                raise ToolValidationError(
+                    "mode_not_available", args.preferred_mode
+                )
+            return NavigationIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.NAVIGATE,
+                args.reason,
+                args.target_id,
+                (
+                    TravelMode(args.preferred_mode)
+                    if args.preferred_mode is not None
+                    else None
+                ),
+            )
         raise ToolValidationError("invalid_arguments", call.name)
 
 
@@ -212,4 +254,8 @@ _DESCRIPTIONS = {
     "wait": "Remain intentionally idle for a bounded duration.",
     "skip": "Take no intentional action now and reconsider later.",
     "travel_to": "Travel to a known building using a selected transport mode.",
+    "navigate_to": (
+        "Navigate to a known zone, station, building, or outdoor place, "
+        "optionally preferring a transport mode."
+    ),
 }

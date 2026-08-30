@@ -15,6 +15,7 @@ class ActionType(StrEnum):
     RELAX = "RELAX"
     IDLE = "IDLE"
     TRAVEL_TO = "TRAVEL_TO"
+    NAVIGATE = "NAVIGATE"
 
 
 @dataclass(frozen=True, slots=True)

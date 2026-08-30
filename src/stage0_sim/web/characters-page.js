@@ -7,10 +7,11 @@ const importInput = document.getElementById("import-character");
 const exportButton = document.getElementById("export-character");
 let hashes = {};
 let persistedProfiles = {};
+let schemaVersions = {};
 
 function profilePayload(id, profile) {
   return {
-    schema_version: 1,
+    schema_version: schemaVersions[id] ?? 1,
     id,
     ...structuredClone(profile),
   };
@@ -35,7 +36,12 @@ async function loadLibrary() {
         `/characters/${encodeURIComponent(summary.id)}`
       );
       const character = profileFromCharacter(response.character);
-      return [summary.id, character, response.content_hash];
+      return [
+        summary.id,
+        character,
+        response.content_hash,
+        response.character.schema_version,
+      ];
     })
   );
   persistedProfiles = Object.fromEntries(
@@ -43,6 +49,9 @@ async function loadLibrary() {
   );
   hashes = Object.fromEntries(
     entries.map(([id, , contentHash]) => [id, contentHash])
+  );
+  schemaVersions = Object.fromEntries(
+    entries.map(([id, , , schemaVersion]) => [id, schemaVersion])
   );
   editor.setScenario({character_profiles: persistedProfiles, entities: []});
 }
@@ -68,7 +77,9 @@ async function persistScenario(nextScenario) {
       }
     );
     hashes[newId] = renamed.content_hash;
+    schemaVersions[newId] = schemaVersions[oldId] ?? 1;
     delete hashes[oldId];
+    delete schemaVersions[oldId];
     previousIds.delete(oldId);
     previousIds.add(newId);
     if (
@@ -91,6 +102,7 @@ async function persistScenario(nextScenario) {
         body: JSON.stringify(profilePayload(id, nextProfiles[id])),
       });
       hashes[id] = created.content_hash;
+      schemaVersions[id] = created.character.schema_version;
     }
     for (const id of deleted) {
       await api(
@@ -100,6 +112,7 @@ async function persistScenario(nextScenario) {
         {method: "DELETE"}
       );
       delete hashes[id];
+      delete schemaVersions[id];
     }
   }
 

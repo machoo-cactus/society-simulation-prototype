@@ -82,6 +82,17 @@ function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function deepMergePreservingUnknown(base, edited) {
+  if (!isObject(base) || !isObject(edited)) return structuredClone(edited);
+  const merged = structuredClone(base);
+  for (const [key, value] of Object.entries(edited)) {
+    merged[key] = isObject(value) && isObject(merged[key])
+      ? deepMergePreservingUnknown(merged[key], value)
+      : structuredClone(value);
+  }
+  return merged;
+}
+
 function emptyProfile(displayName = "New character") {
   return {
     template_id: "human-v1",
@@ -492,12 +503,12 @@ export function createCharacterEditor({root, onScenarioChange}) {
       if (nextId !== selectedId && Object.hasOwn(profiles(), nextId)) {
         throw new Error(`Profile ID "${nextId}" already exists`);
       }
-      const next = emptyProfile();
-      next.template_id = String(data.get("profile.template_id") ?? "").trim();
+      const edited = emptyProfile();
+      edited.template_id = String(data.get("profile.template_id") ?? "").trim();
       for (const section of SECTIONS) {
         for (const [field, , type] of section.fields) {
           const raw = String(data.get(`${section.id}.${field}`) ?? "");
-          next[section.id][field] =
+          edited[section.id][field] =
             type === "list"
               ? parseList(raw)
               : type === "number"
@@ -505,13 +516,17 @@ export function createCharacterEditor({root, onScenarioChange}) {
                 : raw.trim();
         }
       }
-      next.relationships = parseArrayJson(
+      edited.relationships = parseArrayJson(
         String(data.get("relationships") ?? "[]"),
         "Relationships"
       );
-      next.custom_sections = parseArrayJson(
+      edited.custom_sections = parseArrayJson(
         String(data.get("custom_sections") ?? "[]"),
         "Custom sections"
+      );
+      const next = deepMergePreservingUnknown(
+        profiles()[selectedId],
+        edited
       );
       if (nextId !== selectedId) {
         delete profiles()[selectedId];

@@ -31,6 +31,22 @@ from stage0_sim.domain.world.model import (
     default_affordance_action,
 )
 from stage0_sim.domain.world.pathfinding import find_path
+from stage0_sim.domain.world.topology import (
+    LocalRoute,
+    Locator,
+    Route,
+    RouteLeg,
+    Space,
+    SpaceRegistry,
+    SpaceTopology,
+    TopologyView,
+    Transition,
+    TraversalContext,
+)
+from stage0_sim.domain.world.topology_adapters import (
+    GridTopology,
+    SparseGraphTopology,
+)
 
 __all__ = [
     "AffordanceAction",
@@ -42,11 +58,23 @@ __all__ = [
     "Coordinate",
     "District",
     "HomeostasisEffect",
+    "GridTopology",
+    "LocalRoute",
+    "Locator",
     "MapPoint",
     "OutdoorPlace",
+    "Route",
+    "RouteLeg",
+    "Space",
+    "SpaceRegistry",
+    "SpaceTopology",
     "SpatialScale",
+    "SparseGraphTopology",
+    "TopologyView",
     "TransportEdge",
     "TransportNode",
+    "Transition",
+    "TraversalContext",
     "TravelLeg",
     "TravelMode",
     "TravelStatus",

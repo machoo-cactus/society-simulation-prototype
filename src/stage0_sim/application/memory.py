@@ -1,9 +1,20 @@
 import math
 from dataclasses import dataclass
-from typing import Protocol
+from functools import partial
+from typing import Protocol, runtime_checkable
 
 from stage0_sim.application.cognition import EmbeddingProvider
+from stage0_sim.application.information import InformationPersistence, InformationStore
+from stage0_sim.application.information_context import InformationContextCapsule
 from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.information import (
+    InformationDocument,
+    InformationSource,
+    TimeRange,
+    VisibilityLevel,
+    VisibilityPolicy,
+    character_information_namespace_id,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,10 +57,30 @@ class RetrievedMemory:
     recency_score: float
 
 
-class MemoryPersistence(Protocol):
+class MemoryPersistence(InformationPersistence, Protocol):
     def save_memory(self, run_id: str, record: MemoryRecord) -> None: ...
 
     def load_memories(self, run_id: str) -> tuple[MemoryRecord, ...]: ...
+
+
+@runtime_checkable
+class AtomicMemoryPersistence(Protocol):
+    def save_memory_episode(
+        self,
+        run_id: str,
+        record: MemoryRecord,
+        document: InformationDocument,
+    ) -> None: ...
+
+
+@runtime_checkable
+class AtomicMemoryBindingPersistence(Protocol):
+    def save_memory_binding(
+        self,
+        run_id: str,
+        documents: tuple[InformationDocument, ...],
+        episodes: tuple[tuple[MemoryRecord, InformationDocument], ...],
+    ) -> None: ...
 
 
 class EpisodicMemoryStore:
@@ -57,9 +88,11 @@ class EpisodicMemoryStore:
         self,
         embedding_provider: EmbeddingProvider,
         configuration: MemoryConfiguration | None = None,
+        information_store: InformationStore | None = None,
     ) -> None:
         self.embedding_provider = embedding_provider
         self.configuration = configuration or MemoryConfiguration()
+        self.information_store = information_store or InformationStore()
         self._records: list[MemoryRecord] = []
         self._next_id = 1
         self._persistence: MemoryPersistence | None = None
@@ -68,6 +101,12 @@ class EpisodicMemoryStore:
     @property
     def records(self) -> tuple[MemoryRecord, ...]:
         return tuple(self._records)
+
+    def document(self, memory_id: str) -> InformationDocument:
+        document = self.information_store.get(memory_id)
+        if document.kind != "memory.episode":
+            raise KeyError(f"information document is not a memory episode: {memory_id}")
+        return document
 
     def bind_persistence(
         self,
@@ -78,26 +117,181 @@ class EpisodicMemoryStore:
     ) -> None:
         if self._persistence is not None:
             raise RuntimeError("memory persistence is already bound")
+        information_was_bound = self.information_store.persistence_bound
+        if information_was_bound:
+            if (
+                self.information_store.bound_run_id != run_id
+                or self.information_store.bound_persistence is not persistence
+            ):
+                raise RuntimeError(
+                    "memory and information persistence must use the same "
+                    "persistence and run ID"
+                )
+            candidate_information = self.information_store._clone_unbound()
+            documents_to_flush: tuple[InformationDocument, ...] = ()
+        else:
+            (
+                candidate_information,
+                documents_to_flush,
+            ) = self.information_store._prepare_persistence_binding(
+                persistence,
+                run_id,
+                rehydrate=rehydrate,
+            )
+        candidate_records = list(self._records)
+        if rehydrate:
+            self._stage_rehydration(
+                candidate_information,
+                candidate_records,
+                persistence.load_memories(run_id),
+            )
+        for record in candidate_records:
+            self._ensure_episode_document(candidate_information, record)
+        episodes = tuple(
+            (record, candidate_information.get(record.id))
+            for record in sorted(candidate_records, key=lambda item: item.id)
+        )
+        paired_ids = frozenset(record.id for record, _ in episodes)
+        standalone_documents = tuple(
+            document
+            for document in documents_to_flush
+            if document.id not in paired_ids
+        )
+        atomic_binding = self._atomic_binding_persistence(persistence)
+        if atomic_binding is not None:
+            atomic_binding.save_memory_binding(
+                run_id,
+                standalone_documents,
+                episodes,
+            )
+        else:
+            for document in standalone_documents:
+                persistence.save_information_document(run_id, document)
+            atomic_persistence = (
+                persistence
+                if isinstance(persistence, AtomicMemoryPersistence)
+                else None
+            )
+            for record, document in episodes:
+                if atomic_persistence is not None:
+                    atomic_persistence.save_memory_episode(
+                        run_id,
+                        record,
+                        document,
+                    )
+                else:
+                    persistence.save_information_document(run_id, document)
+                    persistence.save_memory(run_id, record)
+        if information_was_bound:
+            self.information_store._commit_candidate_history(
+                candidate_information
+            )
+        else:
+            self.information_store._commit_persistence_binding(
+                candidate_information,
+                persistence,
+                run_id,
+            )
+        self._records = candidate_records
+        self._refresh_next_id()
         self._persistence = persistence
         self._run_id = run_id
-        if rehydrate:
-            self.rehydrate(persistence.load_memories(run_id))
-        for record in self._records:
-            persistence.save_memory(run_id, record)
+
+    @staticmethod
+    def _stage_rehydration(
+        information_store: InformationStore,
+        candidate_records: list[MemoryRecord],
+        records: tuple[MemoryRecord, ...],
+    ) -> None:
+        existing_ids = {record.id for record in candidate_records}
+        for record in sorted(records, key=lambda item: item.id):
+            EpisodicMemoryStore._ensure_episode_document(
+                information_store,
+                record,
+            )
+            if record.id not in existing_ids:
+                candidate_records.append(record)
+                existing_ids.add(record.id)
+
+    @staticmethod
+    def _ensure_episode_document(
+        information_store: InformationStore,
+        record: MemoryRecord,
+    ) -> None:
+        document = _episode_document(record)
+        if not information_store.has(record.id):
+            information_store.register(document)
+            return
+        persisted_document = information_store.get(record.id)
+        if persisted_document.kind != "memory.episode":
+            raise ValueError(
+                "memory ID collides with non-episode document: "
+                f"{record.id}"
+            )
+        if (
+            persisted_document.namespace_id
+            != character_information_namespace_id(record.agent_id)
+        ):
+            raise ValueError(
+                "memory episode namespace does not match legacy "
+                f"memory owner: {record.id}"
+            )
+
+    @staticmethod
+    def _atomic_binding_persistence(
+        persistence: MemoryPersistence,
+    ) -> AtomicMemoryBindingPersistence | None:
+        if isinstance(persistence, AtomicMemoryBindingPersistence):
+            return persistence
+        return None
 
     def rehydrate(self, records: tuple[MemoryRecord, ...]) -> None:
+        self._rehydrate(
+            records,
+            persistence=self._persistence,
+            run_id=self._run_id,
+        )
+
+    def _rehydrate(
+        self,
+        records: tuple[MemoryRecord, ...],
+        *,
+        persistence: MemoryPersistence | None,
+        run_id: str | None,
+    ) -> None:
         existing_ids = {record.id for record in self._records}
         for record in sorted(records, key=lambda item: item.id):
+            document = _episode_document(record)
+            if not self.information_store.has(record.id):
+                atomic_persistence = (
+                    self._atomic_persistence(persistence)
+                    if persistence is not None
+                    else None
+                )
+                if (
+                    atomic_persistence is not None
+                    and run_id is not None
+                ):
+                    self.information_store.register_with_persistence(
+                        document,
+                        partial(
+                            atomic_persistence.save_memory_episode,
+                            run_id,
+                            record,
+                            document,
+                        ),
+                    )
+                else:
+                    self.information_store.register(document)
+            else:
+                self._ensure_episode_document(
+                    self.information_store,
+                    record,
+                )
             if record.id not in existing_ids:
                 self._records.append(record)
                 existing_ids.add(record.id)
-        numeric_ids = [
-            int(record.id.removeprefix("memory-"))
-            for record in self._records
-            if record.id.startswith("memory-")
-            and record.id.removeprefix("memory-").isdigit()
-        ]
-        self._next_id = max(numeric_ids, default=0) + 1
+        self._refresh_next_id()
 
     def record(
         self,
@@ -112,6 +306,7 @@ class EpisodicMemoryStore:
             raise ValueError("memory text must not be empty")
         if not 0 <= importance <= 1:
             raise ValueError("memory importance must be between 0 and 1")
+        self._refresh_next_id()
         embedding = self.embedding_provider.embed((text,))[0]
         record = MemoryRecord(
             id=f"memory-{self._next_id:08d}",
@@ -122,11 +317,64 @@ class EpisodicMemoryStore:
             embedding=embedding,
             metadata=dict(metadata or {}),
         )
-        self._next_id += 1
+        document = _episode_document(record)
+        try:
+            persistence = self._persistence
+            run_id = self._run_id
+            atomic_persistence = (
+                self._atomic_persistence(persistence)
+                if persistence is not None
+                else None
+            )
+            if (
+                atomic_persistence is not None
+                and run_id is not None
+            ):
+                self.information_store.register_with_persistence(
+                    document,
+                    partial(
+                        atomic_persistence.save_memory_episode,
+                        run_id,
+                        record,
+                        document,
+                    ),
+                )
+            else:
+                self.information_store.register(document)
+                if persistence is not None and run_id is not None:
+                    persistence.save_memory(run_id, record)
+        except Exception:
+            self._refresh_next_id()
+            raise
         self._records.append(record)
-        if self._persistence is not None and self._run_id is not None:
-            self._persistence.save_memory(self._run_id, record)
+        self._next_id += 1
         return record
+
+    def _atomic_persistence(
+        self,
+        persistence: MemoryPersistence,
+    ) -> AtomicMemoryPersistence | None:
+        if (
+            isinstance(persistence, AtomicMemoryPersistence)
+            and self.information_store.bound_persistence is persistence
+        ):
+            return persistence
+        return None
+
+    def _refresh_next_id(self) -> None:
+        candidate_ids = {
+            record.id for record in self._records
+        }
+        candidate_ids.update(
+            document.id for document in self.information_store.documents()
+        )
+        numeric_ids = [
+            int(candidate_id.removeprefix("memory-"))
+            for candidate_id in candidate_ids
+            if candidate_id.startswith("memory-")
+            and candidate_id.removeprefix("memory-").isdigit()
+        ]
+        self._next_id = max(numeric_ids, default=0) + 1
 
     def retrieve(
         self,
@@ -168,6 +416,69 @@ class EpisodicMemoryStore:
             )
         )
         return tuple(ranked[:top_k])
+
+
+def memory_context_capsules(
+    store: EpisodicMemoryStore,
+    retrieved: tuple[RetrievedMemory, ...],
+) -> tuple[InformationContextCapsule, ...]:
+    capsules: list[InformationContextCapsule] = []
+    for item in retrieved:
+        document = store.document(item.record.id)
+        capsules.append(
+            InformationContextCapsule(
+                document_id=document.id,
+                document_kind=document.kind,
+                source_path="$",
+                rendered_content=item.record.text,
+                source=document.source,
+                valid_time=document.valid_time,
+                score=item.score,
+                revision=document.revision,
+                recorded_at=document.recorded_at,
+            )
+        )
+    return tuple(capsules)
+
+
+def _episode_document(record: MemoryRecord) -> InformationDocument:
+    source_type = "MEMORY_RECORD"
+    raw_source = record.metadata.get("source")
+    if isinstance(raw_source, str):
+        source_type = f"{raw_source.upper()}_MEMORY"
+    elif isinstance(record.metadata.get("event_id"), str):
+        source_type = "DIRECT_PERCEPTION"
+    reference_ids = tuple(
+        value
+        for key in ("event_id", "source_document_id")
+        if isinstance((value := record.metadata.get(key)), str)
+    )
+    return InformationDocument.create(
+        id=record.id,
+        namespace_id=character_information_namespace_id(record.agent_id),
+        kind="memory.episode",
+        schema_id="memory.episode.v1",
+        subject_ids=(record.agent_id,),
+        content={
+            "summary": record.text,
+            "importance": record.importance,
+            "metadata": dict(record.metadata),
+        },
+        source=InformationSource(
+            type=source_type,
+            observer_id=record.agent_id,
+            reference_ids=reference_ids,
+        ),
+        valid_time=TimeRange(
+            start=record.simulation_time,
+            end=record.simulation_time,
+        ),
+        recorded_at=record.simulation_time,
+        visibility=VisibilityPolicy(
+            level=VisibilityLevel.PRIVATE,
+            owner_ids=(record.agent_id,),
+        ),
+    )
 
 
 def _cosine_similarity(

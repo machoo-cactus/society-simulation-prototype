@@ -10,7 +10,14 @@ from stage0_sim.domain.components.cognition import (
     ConversationComponent,
     PlannerComponent,
 )
+from stage0_sim.domain.components.information import InformationNamespaceComponent
 from stage0_sim.domain.components.memory import MemoryComponent
+from stage0_sim.domain.components.navigation import (
+    NavigationComponent,
+    NavigationPrimitive,
+    NavigationPrimitiveKind,
+    NavigationStatus,
+)
 from stage0_sim.domain.components.perception import (
     KnowledgeRecord,
     PerceptionComponent,
@@ -59,8 +66,13 @@ __all__ = [
     "DriveType",
     "HomeostasisComponent",
     "HomeostasisConfiguration",
+    "InformationNamespaceComponent",
     "MemoryComponent",
     "MovementComponent",
+    "NavigationComponent",
+    "NavigationPrimitive",
+    "NavigationPrimitiveKind",
+    "NavigationStatus",
     "KnowledgeRecord",
     "PendingSpeechComponent",
     "PerceptionComponent",

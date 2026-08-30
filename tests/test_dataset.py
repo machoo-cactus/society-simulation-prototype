@@ -17,10 +17,20 @@ from stage0_sim.application.dataset import (
     DatasetRecord,
 )
 from stage0_sim.application.manager import SimulationManager
-from stage0_sim.application.scenario import create_runner, load_scenario
+from stage0_sim.application.scenario import (
+    ScenarioDefinition,
+    create_runner,
+    load_scenario,
+)
 from stage0_sim.cli import main
 from stage0_sim.domain.components import HomeostasisComponent
 from stage0_sim.domain.ecs import Registry
+from stage0_sim.domain.information import (
+    InformationDocument,
+    InformationSource,
+    VisibilityLevel,
+    VisibilityPolicy,
+)
 
 
 def scenario_path(name: str) -> Path:
@@ -246,3 +256,138 @@ def test_newer_database_schema_is_rejected_explicitly(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="newer than supported"):
         SQLiteDatasetStore(database)
+
+
+def test_jsonl_export_includes_every_information_document_revision(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "documents.sqlite3"
+    store = SQLiteDatasetStore(database)
+    store.begin_run(
+        run_id="document-export",
+        seed=1,
+        dt=1,
+        initial_speed=1,
+        scenario={"name": "document-export"},
+    )
+    original = InformationDocument.create(
+        id="known-place",
+        namespace_id="character:agent-001",
+        kind="knowledge.place",
+        schema_id="knowledge.place.v1",
+        subject_ids=("agent-001", "place-a"),
+        content={"name": "First name", "nested": {"values": [1, 2]}},
+        source=InformationSource(
+            type="SCENARIO",
+            observer_id="agent-001",
+            reference_ids=("source-1",),
+            metadata={"confidence": 0.8},
+        ),
+        recorded_at=1,
+        visibility=VisibilityPolicy(
+            level=VisibilityLevel.SHARED,
+            owner_ids=("agent-001",),
+            reader_ids=("agent-002",),
+        ),
+    )
+    revised = InformationDocument.create(
+        id=original.id,
+        namespace_id=original.namespace_id,
+        kind=original.kind,
+        schema_id=original.schema_id,
+        subject_ids=original.subject_ids,
+        content={"name": "Revised name", "nested": {"values": [1, 2, 3]}},
+        source=original.source,
+        recorded_at=2,
+        visibility=original.visibility,
+        revision=2,
+    )
+    store.save_information_document("document-export", revised)
+    store.save_information_document("document-export", original)
+
+    exported = parse_export(store, "document-export")
+    store.close()
+
+    documents = [
+        record
+        for record in exported
+        if record["record_type"] == "information_document"
+    ]
+    assert [record["sequence"] for record in exported] == [0, 1, 2]
+    assert [record["payload"] for record in documents] == [
+        original.to_dict(),
+        revised.to_dict(),
+    ]
+
+
+def test_completed_navigation_knowledge_is_persisted_and_exported(
+    tmp_path: Path,
+) -> None:
+    scenario = ScenarioDefinition.model_validate(
+        {
+            "name": "persist-learned-route",
+            "world": {
+                "width": 2,
+                "height": 1,
+                "zones": [
+                    {
+                        "id": "lounge",
+                        "name": "Lounge",
+                        "type": "LOUNGE",
+                        "tiles": [{"x": 1, "y": 0}],
+                    }
+                ],
+            },
+            "entities": [
+                {
+                    "id": "agent-001",
+                    "components": {
+                        "position": {"x": 0, "y": 0},
+                        "homeostasis": {
+                            "satiety": 80,
+                            "energy": 80,
+                            "stress": 20,
+                        },
+                        "plan": {
+                            "queue": [
+                                {"action": "NAVIGATE", "target": "lounge"}
+                            ]
+                        },
+                    },
+                }
+            ],
+        }
+    )
+    runner = create_runner(scenario, run_id="persist-learned-route")
+    store = SQLiteDatasetStore(tmp_path / "learned-route.sqlite3")
+    collector = RunDataCollector(
+        store=store,
+        runner=runner,
+        scenario=scenario.model_dump(mode="json"),
+    )
+
+    runner.run_for(5)
+    collector.finalize()
+
+    persisted = tuple(
+        document
+        for document in store.load_information_documents(
+            "persist-learned-route"
+        )
+        if document.kind == "knowledge.route"
+        and document.source.type == "DIRECT_EXPERIENCE"
+    )
+    exported = [
+        record
+        for record in parse_export(store, "persist-learned-route")
+        if record["record_type"] == "information_document"
+        and isinstance(record["payload"], dict)
+        and record["payload"]["kind"] == "knowledge.route"
+    ]
+    store.close()
+
+    assert len(persisted) == 1
+    assert persisted[0].content["destination_id"] == "lounge"
+    assert [record["payload"] for record in exported] == [
+        persisted[0].to_dict()
+    ]

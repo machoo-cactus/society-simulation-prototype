@@ -152,9 +152,11 @@ def test_saved_memory_survives_close_without_run_finalization(
 
     reopened = SQLiteDatasetStore(database)
     persisted = reopened.load_memories("durable-memory")
+    persisted_documents = reopened.load_information_documents("durable-memory")
     reopened.close()
 
     assert persisted == (recorded,)
+    assert persisted_documents == (memory.document(recorded.id),)
 
 
 def test_meaningful_events_are_recorded_but_routine_ticks_are_not() -> None:

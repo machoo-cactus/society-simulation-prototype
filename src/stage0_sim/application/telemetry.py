@@ -11,6 +11,7 @@ from stage0_sim.domain.components import (
     HomeostasisComponent,
     MemoryComponent,
     MovementComponent,
+    NavigationComponent,
     PerceptionComponent,
     PlanAction,
     PlanComponent,
@@ -426,6 +427,26 @@ def build_agent_snapshot(
             "vehicle_id": travel.vehicle_id,
             "interruption_requested": travel.interruption_requested,
         }
+    if registry.has_component(agent_id, NavigationComponent):
+        navigation = registry.get_component(agent_id, NavigationComponent)
+        payload["navigation"] = {
+            "target_id": navigation.target_id,
+            "preferred_mode": (
+                navigation.preferred_mode.value
+                if navigation.preferred_mode is not None
+                else None
+            ),
+            "status": navigation.status.value,
+            "current_primitive_index": navigation.current_primitive_index,
+            "primitive_count": len(navigation.primitives),
+            "completed_route_legs": navigation.completed_route_legs,
+            "route_leg_count": (
+                len(navigation.route.legs)
+                if navigation.route is not None
+                else 0
+            ),
+            "failure_reason": navigation.failure_reason,
+        }
     if registry.has_component(agent_id, HomeostasisComponent):
         payload["homeostasis"] = registry.get_component(
             agent_id, HomeostasisComponent
@@ -538,7 +559,7 @@ def _plan_action_payload(action: PlanAction | None) -> JsonValue:
 def _message_type_for_event(event_type: str) -> str:
     if event_type == "homeostasis.changed":
         return "homeostasis_delta"
-    if event_type.startswith(("plan.", "planner.")):
+    if event_type.startswith(("plan.", "planner.", "navigation.")):
         return "plan_changed"
     if event_type.startswith("system1.") or event_type == "threshold.breached":
         return "system1_event"

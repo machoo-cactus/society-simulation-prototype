@@ -295,9 +295,11 @@ A **plan action** is a validated command from the closed domain vocabulary:
 - `RELAX`
 - `IDLE`
 - `TRAVEL_TO`
+- `NAVIGATE`
 
-The tool-agent design translates tool calls into these actions or typed domain
-intents.
+`NAVIGATE` retains one generalized route and progress record while compiling
+physical work into existing local movement and city travel primitives.
+`MOVE_TO` and `TRAVEL_TO` remain valid scenario compatibility actions.
 
 ### 6.17 Tool
 
@@ -305,6 +307,7 @@ A **tool** is a typed capability offered to a character controller.
 
 Initial tools:
 
+- `navigate_to`
 - `go_to`
 - `travel_to`
 - `perform`
@@ -602,6 +605,8 @@ Current implementation:
 - unified tool-calling character controller;
 - validated plan and intent vocabularies;
 - explicit `say` speech and `travel_to` city travel;
+- recursive `navigate_to` planning over known topology, with compatibility
+  translations for `go_to` and `travel_to`;
 - observer-specific perceptual context;
 - asynchronous OpenAI-compatible model clients;
 - provider recording and deterministic replay;
@@ -610,6 +615,10 @@ Current implementation:
 ## 12. Movement and spatial grounding
 
 Local maps are rectangular discrete grids where a character occupies one tile.
+The implemented navigation abstraction represents grids, sparse city graphs,
+and buildings as registered spaces with typed locators and transitions. The
+recursive planner composes local topology routes with cross-space transitions;
+it does not flatten the world into one giant graph.
 
 Schema-version-2 city scenarios add an explicit hierarchy above local grids:
 
@@ -620,7 +629,28 @@ city -> district -> building -> local map -> zone -> tile/station
 Exterior movement uses sparse typed transport nodes and edges rather than a
 city-sized dense grid. `SpatialLocationComponent` remains authoritative across
 building, neighborhood, and city scales; `TravelComponent` records route legs,
-mode, progress, vehicle, and interruption state.
+mode, progress, vehicle, and interruption state. `NavigationComponent` retains
+the generalized route, compiled primitive progress, status, and failure reason.
+Authoritative execution always resolves against `SpaceRegistry`.
+
+Controller destination context comes from the character's
+`KnownTopologyProjection`, backed by `knowledge.place` and `knowledge.route`
+documents in the unified `InformationStore`. It does not enumerate every city
+building or outdoor place. As a compatibility policy, all zones and stations
+in the character's current local space, plus transitions originating there,
+are treated as locally aware. Explicitly queued scenario destinations may
+receive deterministic compatibility knowledge so legacy scenarios continue to
+run without all-city omniscience.
+
+The current execution compiler supports grid movement, building entrances, and
+sparse city travel. Other transition executors can be planned but fail
+explicitly until an execution adapter exists. Stale or invalid known locators
+also fail explicitly when checked against authoritative topology. Successful
+general navigation and standalone travel create deterministic, private
+`knowledge.route` documents for the navigating character. The documents record
+the final locator, route transition IDs, simulation time, and causal event
+references with `DIRECT_EXPERIENCE` provenance, and are immediately reusable by
+that character's known-topology projection without provider calls.
 
 Movement uses deterministic A* with:
 
@@ -704,8 +734,9 @@ opportunity.
 
 | Tool | Meaning | Typical domain translation |
 | --- | --- | --- |
-| `go_to(target_id, reason)` | Attempt to move to a known target | `MOVE_TO` or movement intent |
-| `travel_to(target_id, mode, reason)` | Travel to a known city place | `TRAVEL_TO` / travel intent |
+| `navigate_to(target_id, preferred_mode, reason)` | Navigate to a known local or global target | `NAVIGATE` / navigation intent |
+| `go_to(target_id, reason)` | Compatibility alias for a known local target | `NAVIGATE` |
+| `travel_to(target_id, mode, reason)` | Compatibility alias for known city travel | `NAVIGATE` |
 | `perform(action, target_id, duration, reason)` | Attempt a supported activity | Timed action or affordance request |
 | `say(target_id, text, reason)` | Speak exact in-world words | Speech intent |
 | `wait(duration, reason)` | Intentionally remain idle | `IDLE` |
@@ -721,7 +752,7 @@ Tool lifecycle:
 ```text
 proposed
   -> schema validated
-  -> authorized
+  -> offered-tool and known-reference validated
   -> current-state validated
   -> accepted as intent
   -> committed
@@ -730,6 +761,10 @@ proposed
 ```
 
 The model cannot collapse this lifecycle by saying an action succeeded.
+Profile facts such as age, licences, skills, preferences, legality, and
+allergies are information, not navigation authorization. Route feasibility is
+limited by physical topology and existing mechanics such as connectivity,
+vehicle existence, and capacity.
 
 ## 16. Sensing model
 

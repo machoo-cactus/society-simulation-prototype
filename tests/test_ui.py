@@ -99,8 +99,10 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     assert "function createCharacterEditor" in character_editor.text
     assert "custom_sections" in character_editor.text
     assert "relationships" in character_editor.text
+    assert "deepMergePreservingUnknown" in character_editor.text
     assert "syncScenario(nextScenario)" in character_editor.text
     assert "persistScenario" in characters_page.text
+    assert "schemaVersions" in characters_page.text
     assert 'id="character-studio-panel"' in characters_html.text
     assert 'href="/ui/"' in characters_html.text
 

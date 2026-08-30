@@ -1,10 +1,29 @@
 # Unified Character Information, Memory, and Navigation Architecture Proposal
 
-**Status:** Proposed for review  
+**Status:** Partially implemented; initial navigation cutover complete
 **Date:** 2026-08-30  
 **Scope:** Character information, memory, controller context, spatial knowledge,
 and navigation across nested environments  
 **Near-term non-scope:** Implementing online behavior or a live internet model
+
+**Implemented cutover (2026-08-30):** Canonical information documents,
+retrieval, topology contracts/adapters, recursive route composition,
+character-known topology projection, and the additive `NAVIGATE` execution path
+are implemented. `navigate_to` is the primary controller tool;
+`go_to`/`travel_to` remain accepted compatibility translations. Existing
+`MOVE_TO`, `TRAVEL_TO`, `MovementComponent`, and `TravelComponent` execution
+remain supported.
+
+The initial physical compiler refines grid legs into existing movement and
+collapses city/building transition legs into existing travel, followed by local
+movement inside the destination building. The general planner can compose
+arbitrary registered transitions, but execution adapters beyond current grid,
+building-entrance, and sparse-city travel mechanics still require an executor.
+Completed navigation and standalone travel deterministically author private,
+character-owned `knowledge.route` documents from direct experience. These
+documents retain the final locator, traversed transition IDs, simulation time,
+and causal event references, and immediately participate in known-topology
+projection without embedding or model calls.
 
 ## 1. Executive proposal
 
@@ -878,6 +897,8 @@ not become authoritative character data.
 
 ### Phase 4: General topology contracts
 
+**Initial implementation complete.**
+
 1. Introduce `Space`, `Locator`, `Transition`, and topology protocols.
 2. Adapt the existing `WorldMap` and A* implementation as `GridTopology`.
 3. Adapt the existing city transport graph as `SparseGraphTopology`.
@@ -887,6 +908,8 @@ not become authoritative character data.
 
 ### Phase 5: Recursive navigation
 
+**Initial implementation complete, with compatibility execution adapters.**
+
 1. Add destination-to-locator resolution.
 2. Plan high-level space transitions and refine local legs through adapters.
 3. Introduce a unified navigation intent and route state.
@@ -895,6 +918,10 @@ not become authoritative character data.
    than relying on fixed city-scale assumptions.
 
 ### Phase 6: Character-known topology
+
+**Projection, scenario initialization, and direct-experience route learning are
+complete. Knowledge updates from communication and richer perception remain
+future work.**
 
 1. Store place and route knowledge as information documents.
 2. Build a known-topology projection for each navigation decision.
@@ -997,6 +1024,7 @@ Navigation
     -> known locator and known topology
     -> recursive route across spaces and transitions
     -> authoritative physical execution
+    -> private direct-experience route documents
     -> observations and new memory documents
 ```
 

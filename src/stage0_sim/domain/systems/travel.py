@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from stage0_sim.domain.components import (
+    ActionType,
     DriveComponent,
     PlanComponent,
     PositionComponent,
@@ -53,12 +54,18 @@ class TravelSystem:
         agent_id: str,
         destination_id: str,
         mode: TravelMode,
+        *,
+        entrance_transition_id: str | None = None,
+        outbound_transition_id: str | None = None,
+        origin_network_node_id: str | None = None,
+        allowed_edge_ids: frozenset[str] | None = None,
     ) -> bool:
         city = context.registry.get_resource(CityWorld)
         location = context.registry.get_component(
             agent_id, SpatialLocationComponent
         )
         travel = context.registry.get_component(agent_id, TravelComponent)
+        travel.failure_reason = None
         try:
             destination = city.building(destination_id)
         except KeyError:
@@ -85,14 +92,54 @@ class TravelSystem:
                 "travel_in_progress",
             )
             return False
-        origin_node = self._origin_node(city, location.location)
+        requested_entrance_id = (
+            entrance_transition_id.removesuffix(":reverse")
+            if entrance_transition_id is not None
+            else None
+        )
+        selected_entrance = None
+        if destination is not None and requested_entrance_id is not None:
+            selected_entrance = next(
+                (
+                    entrance
+                    for entrance in destination.entrances
+                    if entrance.id == requested_entrance_id
+                ),
+                None,
+            )
+            if selected_entrance is None:
+                self._failure(
+                    context,
+                    agent_id,
+                    destination_id,
+                    mode,
+                    "invalid_destination_entrance",
+                )
+                return False
+        if destination is not None and selected_entrance is None:
+            selected_entrance = destination.entrances[0]
         destination_node = (
-            destination.entrances[0].network_node_id
-            if destination is not None
+            selected_entrance.network_node_id
+            if selected_entrance is not None
             else outdoor.network_node_id
             if outdoor is not None
             else ""
         )
+        origin_node, origin_failure = self._origin_node(
+            city,
+            location.location,
+            outbound_transition_id=outbound_transition_id,
+            origin_network_node_id=origin_network_node_id,
+        )
+        if origin_failure is not None:
+            self._failure(
+                context,
+                agent_id,
+                destination_id,
+                mode,
+                origin_failure,
+            )
+            return False
         if origin_node is None:
             self._failure(
                 context,
@@ -134,7 +181,11 @@ class TravelSystem:
                 return False
             vehicle_id = vehicle.id
         route = find_transport_route(
-            city, origin_node, destination_node, mode
+            city,
+            origin_node,
+            destination_node,
+            mode,
+            allowed_edge_ids=allowed_edge_ids,
         )
         if route is None:
             self._failure(
@@ -163,6 +214,12 @@ class TravelSystem:
         travel.leg_elapsed_seconds = 0.0
         travel.status = TravelStatus.ROUTE_PLANNED
         travel.vehicle_id = vehicle_id
+        travel.destination_entrance_id = (
+            selected_entrance.id
+            if selected_entrance is not None
+            else None
+        )
+        travel.failure_reason = None
         travel.correlation_id = requested.event_id
         context.events.emit(
             "travel.route_planned",
@@ -336,7 +393,14 @@ class TravelSystem:
         except KeyError:
             destination = None
         if destination is not None:
-            entrance = destination.entrances[0]
+            entrance = next(
+                (
+                    candidate
+                    for candidate in destination.entrances
+                    if candidate.id == travel.destination_entrance_id
+                ),
+                destination.entrances[0],
+            )
             context.registry.set_resource(
                 city.local_map_for_building(destination_id)
             )
@@ -431,6 +495,11 @@ class TravelSystem:
         if not context.registry.has_component(agent_id, PlanComponent):
             return
         plan = context.registry.get_component(agent_id, PlanComponent)
+        if (
+            plan.current is not None
+            and plan.current.action is ActionType.NAVIGATE
+        ):
+            return
         if plan.current is not None:
             context.events.emit(
                 "plan.action_completed",
@@ -452,14 +521,81 @@ class TravelSystem:
 
     @staticmethod
     def _origin_node(
-        city: CityWorld, location: WorldLocation
-    ) -> str | None:
-        if location.network_node_id is not None:
-            return location.network_node_id
+        city: CityWorld,
+        location: WorldLocation,
+        *,
+        outbound_transition_id: str | None = None,
+        origin_network_node_id: str | None = None,
+    ) -> tuple[str | None, str | None]:
         if location.scale is SpatialScale.BUILDING:
             building = city.building(location.place_id)
-            return building.entrances[0].network_node_id
-        return None
+            if outbound_transition_id is not None:
+                entrance_id = outbound_transition_id.removesuffix(":reverse")
+                entrance = next(
+                    (
+                        candidate
+                        for candidate in building.entrances
+                        if candidate.id == entrance_id
+                    ),
+                    None,
+                )
+                if entrance is None:
+                    return None, "invalid_origin_entrance"
+                if (
+                    location.local_coordinate != entrance.local_coordinate
+                    or (
+                        origin_network_node_id is not None
+                        and entrance.network_node_id
+                        != origin_network_node_id
+                    )
+                ):
+                    return None, "origin_entrance_mismatch"
+                return entrance.network_node_id, None
+            if origin_network_node_id is not None:
+                entrance = next(
+                    (
+                        candidate
+                        for candidate in building.entrances
+                        if candidate.network_node_id == origin_network_node_id
+                        and (
+                            location.local_coordinate is None
+                            or candidate.local_coordinate
+                            == location.local_coordinate
+                        )
+                    ),
+                    None,
+                )
+                if entrance is None:
+                    return None, "origin_entrance_mismatch"
+                return entrance.network_node_id, None
+            if location.local_coordinate is not None:
+                entrance = next(
+                    (
+                        candidate
+                        for candidate in sorted(
+                            building.entrances,
+                            key=lambda item: item.id,
+                        )
+                        if candidate.local_coordinate
+                        == location.local_coordinate
+                    ),
+                    None,
+                )
+                if entrance is not None:
+                    return entrance.network_node_id, None
+            if location.network_node_id is not None:
+                return location.network_node_id, None
+            return building.entrances[0].network_node_id, None
+        if outbound_transition_id is not None:
+            return None, "invalid_origin_entrance"
+        if (
+            origin_network_node_id is not None
+            and location.network_node_id != origin_network_node_id
+        ):
+            return None, "origin_network_node_mismatch"
+        if location.network_node_id is not None:
+            return location.network_node_id, None
+        return None, None
 
     @staticmethod
     def _emit_leg(
@@ -556,6 +692,11 @@ class TravelSystem:
         mode: TravelMode,
         reason: str,
     ) -> None:
+        if context.registry.has_component(agent_id, TravelComponent):
+            context.registry.get_component(
+                agent_id,
+                TravelComponent,
+            ).failure_reason = reason
         payload: dict[str, JsonValue] = {
             "destination_id": destination_id,
             "mode": mode.value,

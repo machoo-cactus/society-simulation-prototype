@@ -7,8 +7,12 @@ from pathlib import Path
 from stage0_sim.application.dataset import DATASET_SCHEMA_VERSION, DatasetRecord
 from stage0_sim.application.memory import MemoryRecord
 from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.information import (
+    InformationDocument,
+    information_document_from_dict,
+)
 
-_DATABASE_SCHEMA_VERSION = 2
+_DATABASE_SCHEMA_VERSION = 3
 
 
 class SQLiteDatasetStore:
@@ -143,6 +147,7 @@ class SQLiteDatasetStore:
                 """,
                 (run_id,),
             )
+            next_sequence = 1
             for row in rows:
                 record = DatasetRecord(
                     run_id=str(row["run_id"]),
@@ -164,6 +169,35 @@ class SQLiteDatasetStore:
                     payload=json.loads(str(row["payload_json"])),
                 )
                 yield _json(record.to_dict())
+                next_sequence = max(next_sequence, record.sequence + 1)
+            document_rows = export_connection.execute(
+                """
+                SELECT document_json FROM information_documents
+                WHERE run_id = ?
+                ORDER BY namespace_id, kind, document_id, revision
+                """,
+                (run_id,),
+            )
+            for row in document_rows:
+                document = information_document_from_dict(
+                    json.loads(str(row["document_json"]))
+                )
+                record = DatasetRecord(
+                    run_id=run_id,
+                    sequence=next_sequence,
+                    record_type="information_document",
+                    simulation_tick=0,
+                    simulation_time=(
+                        document.recorded_at
+                        if document.recorded_at is not None
+                        else 0.0
+                    ),
+                    agent_id=None,
+                    source_event_id=None,
+                    payload=document.to_dict(),
+                )
+                yield _json(record.to_dict())
+                next_sequence += 1
         finally:
             export_connection.close()
 
@@ -203,6 +237,10 @@ class SQLiteDatasetStore:
         }
 
     def save_memory(self, run_id: str, record: MemoryRecord) -> None:
+        self._insert_memory(run_id, record)
+        self._connection.commit()
+
+    def _insert_memory(self, run_id: str, record: MemoryRecord) -> None:
         self._connection.execute(
             """
             INSERT OR REPLACE INTO episodic_memories (
@@ -221,7 +259,6 @@ class SQLiteDatasetStore:
                 _json(record.metadata),
             ),
         )
-        self._connection.commit()
 
     def load_memories(self, run_id: str) -> tuple[MemoryRecord, ...]:
         rows = self._connection.execute(
@@ -244,6 +281,95 @@ class SQLiteDatasetStore:
                     for value in json.loads(str(row["embedding_json"]))
                 ),
                 metadata=json.loads(str(row["metadata_json"])),
+            )
+            for row in rows
+        )
+
+    def save_information_document(
+        self,
+        run_id: str,
+        document: InformationDocument,
+    ) -> None:
+        self._insert_information_document(run_id, document)
+        self._connection.commit()
+
+    def _insert_information_document(
+        self,
+        run_id: str,
+        document: InformationDocument,
+    ) -> None:
+        self._connection.execute(
+            """
+            INSERT OR REPLACE INTO information_documents (
+                run_id, document_id, revision, namespace_id, kind,
+                content_hash, document_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                document.id,
+                document.revision,
+                document.namespace_id,
+                document.kind,
+                document.content_hash,
+                _json(document.to_dict()),
+            ),
+        )
+
+    def save_memory_episode(
+        self,
+        run_id: str,
+        record: MemoryRecord,
+        document: InformationDocument,
+    ) -> None:
+        savepoint = "memory_episode_write"
+        self._connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            self._insert_memory(run_id, record)
+            self._insert_information_document(run_id, document)
+        except Exception:
+            self._connection.execute(f"ROLLBACK TO {savepoint}")
+            self._connection.execute(f"RELEASE {savepoint}")
+            raise
+        self._connection.execute(f"RELEASE {savepoint}")
+        self._connection.commit()
+
+    def save_memory_binding(
+        self,
+        run_id: str,
+        documents: tuple[InformationDocument, ...],
+        episodes: tuple[tuple[MemoryRecord, InformationDocument], ...],
+    ) -> None:
+        savepoint = "memory_binding_write"
+        self._connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            for document in documents:
+                self._insert_information_document(run_id, document)
+            for record, document in episodes:
+                self._insert_memory(run_id, record)
+                self._insert_information_document(run_id, document)
+        except Exception:
+            self._connection.execute(f"ROLLBACK TO {savepoint}")
+            self._connection.execute(f"RELEASE {savepoint}")
+            raise
+        self._connection.execute(f"RELEASE {savepoint}")
+        self._connection.commit()
+
+    def load_information_documents(
+        self,
+        run_id: str,
+    ) -> tuple[InformationDocument, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT document_json FROM information_documents
+            WHERE run_id = ?
+            ORDER BY namespace_id, kind, document_id, revision
+            """,
+            (run_id,),
+        )
+        return tuple(
+            information_document_from_dict(
+                json.loads(str(row["document_json"]))
             )
             for row in rows
         )
@@ -314,6 +440,27 @@ class SQLiteDatasetStore:
                 CREATE INDEX IF NOT EXISTS memories_run_agent_time
                 ON episodic_memories(run_id, agent_id, simulation_time);
                 PRAGMA user_version = 2;
+                """
+            )
+            self._connection.commit()
+            current = 2
+        if current < 3:
+            self._connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS information_documents (
+                    run_id TEXT NOT NULL,
+                    document_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    namespace_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    document_json TEXT NOT NULL,
+                    PRIMARY KEY (run_id, document_id, revision),
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+                );
+                CREATE INDEX IF NOT EXISTS information_run_namespace_kind
+                ON information_documents(run_id, namespace_id, kind);
+                PRAGMA user_version = 3;
                 """
             )
             self._connection.commit()

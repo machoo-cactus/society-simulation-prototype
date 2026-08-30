@@ -55,6 +55,22 @@ class CharacterDescriptionRenderer:
                     ),
                 ]
             )
+        standard_keys = {
+            "template_id",
+            "custom_sections",
+            *sections,
+        }
+        for section_id, value in profile.items():
+            if section_id in standard_keys or value in (None, "", [], {}):
+                continue
+            blocks.extend(
+                [
+                    "",
+                    f"## {_title(section_id)}",
+                    "",
+                    _render_value(value),
+                ]
+            )
         custom_sections = profile.get("custom_sections")
         if isinstance(custom_sections, list):
             for raw_section in custom_sections:

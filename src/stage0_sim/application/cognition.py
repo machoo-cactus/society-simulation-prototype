@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
+from stage0_sim.application.information_context import InformationContextCapsule
 from stage0_sim.domain.components import PlanAction
 
 
@@ -45,6 +46,7 @@ class PlannerContext:
     stations: tuple[StationContext, ...]
     daily_goals: tuple[str, ...]
     memories: tuple[str, ...] = ()
+    retrieved_information: tuple[InformationContextCapsule, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +65,7 @@ class DialogueContext:
     simulation_time: float
     prompt: str
     memories: tuple[str, ...] = ()
+    retrieved_information: tuple[InformationContextCapsule, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

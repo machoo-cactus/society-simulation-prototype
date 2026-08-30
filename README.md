@@ -94,6 +94,7 @@ stage0-sim run scenarios/homeostasis.json --ticks 60
 stage0-sim run scenarios/system1-preemption.json --ticks 20
 stage0-sim run scenarios/fake-llm-planning.json --ticks 30
 stage0-sim run scenarios/sparse-city-car-demo.json --ticks 700
+stage0-sim run scenarios/greyford-office-evening.json --ticks 3000
 ```
 
 | Scenario | What it demonstrates |
@@ -105,6 +106,7 @@ stage0-sim run scenarios/sparse-city-car-demo.json --ticks 700
 | `fake-llm-planning.json` | Post-tick planning, memory retrieval, and validated routines without an external model |
 | `real-llm-tool-agent.json` | Observer-specific sensing and externally configured typed-tool character control |
 | `sparse-city-car-demo.json` | Hierarchical location, sparse city routing, explicit car travel, and city UI |
+| `greyford-office-evening.json` | Large provincial-capital city, detailed office neighborhood, explicit character knowledge, dinner, and mixed walk/metro travel home |
 
 By default, canonical events are written to standard output and a SQLite dataset
 is created under `data/runs/`. Canonical events omit run IDs and wall-clock

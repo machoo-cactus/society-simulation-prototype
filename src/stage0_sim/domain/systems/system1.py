@@ -10,6 +10,8 @@ from stage0_sim.domain.components import (
     DriveType,
     HomeostasisComponent,
     MovementComponent,
+    NavigationComponent,
+    NavigationStatus,
     PlanComponent,
     PlannerComponent,
     PositionComponent,
@@ -393,6 +395,37 @@ class System1ArbitrationSystem:
         if not context.registry.has_component(agent_id, PlanComponent):
             return
         plan = context.registry.get_component(agent_id, PlanComponent)
+        if (
+            context.registry.has_component(agent_id, NavigationComponent)
+            and context.registry.get_component(
+                agent_id,
+                NavigationComponent,
+            ).status
+            in {
+                NavigationStatus.REQUESTED,
+                NavigationStatus.PLANNED,
+                NavigationStatus.NAVIGATING,
+            }
+        ):
+            navigation = context.registry.get_component(
+                agent_id,
+                NavigationComponent,
+            )
+            navigation.status = NavigationStatus.INTERRUPTED
+            context.events.emit(
+                "navigation.interrupted",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=agent_id,
+                payload={
+                    "target_id": navigation.target_id,
+                    "reason": "system1_preemption",
+                    "completed_route_legs": (
+                        navigation.completed_route_legs
+                    ),
+                },
+                correlation_id=navigation.correlation_id,
+            )
         cleared_count = plan.clear()
         if cleared_count:
             System1ArbitrationSystem._emit(

@@ -17,10 +17,12 @@ from stage0_sim.application.characters import (
     character_content_hash,
     prepare_scenario,
 )
+from stage0_sim.application.information import InformationStore
 from stage0_sim.application.manager import SimulationManager
-from stage0_sim.application.scenario import ScenarioDefinition
+from stage0_sim.application.scenario import ScenarioDefinition, create_runner
 from stage0_sim.cli import main
 from stage0_sim.domain.components import CharacterProfileComponent
+from stage0_sim.domain.information import character_dossier_document_id
 
 
 def character(character_id: str, display_name: str) -> CharacterDefinition:
@@ -205,6 +207,102 @@ def test_character_api_crud_uses_content_hashes(tmp_path: Path) -> None:
             params={"expected_hash": renamed.json()["content_hash"]},
         )
         assert deleted.json()["status"] == "deleted"
+
+
+def test_extensible_character_content_round_trips_and_freezes(
+    tmp_path: Path,
+) -> None:
+    raw = {
+        "schema_version": 1,
+        "id": "alex",
+        "template_id": "human-v1",
+        "identity": {
+            "display_name": "Alex",
+            "birth_event": {
+                "date": "1992-04-03",
+                "place": {"id": "place-shanghai", "coordinates": [1, 2]},
+            },
+        },
+        "capabilities": {
+            "skills": ["analysis"],
+            "driving": {
+                "experience": "moderate",
+                "licences": ["car"],
+                "assessment": {"wet_weather": "cautious"},
+            },
+        },
+        "experimental": {
+            "spatial_reasoning": {
+                "style": "landmark-oriented",
+                "weights": [1, 2, {"future": True}],
+            }
+        },
+    }
+    library = FileSystemCharacterLibrary(tmp_path / "characters")
+    created = library.create(CharacterDefinition.model_validate(raw))
+    created_hash = character_content_hash(created)
+    loaded_payload = library.get("alex").model_dump(mode="json")
+
+    assert loaded_payload["identity"]["birth_event"] == (
+        raw["identity"]["birth_event"]
+    )
+    assert loaded_payload["capabilities"]["driving"] == (
+        raw["capabilities"]["driving"]
+    )
+    assert loaded_payload["experimental"] == raw["experimental"]
+
+    api = FastAPI()
+    api.state.character_library = library
+    api.include_router(character_router)
+    with TestClient(api) as client:
+        response = client.get("/characters/alex")
+        assert response.status_code == 200
+        assert response.json()["character"]["experimental"] == raw["experimental"]
+        updated_payload = response.json()["character"]
+        updated_payload["identity"]["pronouns"] = "they/them"
+        updated = client.put(
+            "/characters/alex",
+            json={
+                "expected_hash": created_hash,
+                "character": updated_payload,
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["character"]["capabilities"]["driving"] == (
+            raw["capabilities"]["driving"]
+        )
+
+    scenario = external_scenario("alex")
+    prepared = prepare_scenario(scenario, library)
+    frozen_payload = prepared.dataset_payload()
+    resolved = frozen_payload["resolved_characters"]
+    assert isinstance(resolved, dict)
+    resolved_alex = resolved["alex"]
+    assert isinstance(resolved_alex, dict)
+    frozen_data = resolved_alex["data"]
+    assert isinstance(frozen_data, dict)
+    assert frozen_data["experimental"] == raw["experimental"]
+
+    latest = library.get("alex")
+    changed = latest.model_copy(deep=True)
+    changed.experimental["spatial_reasoning"]["style"] = "route-oriented"
+    library.update("alex", changed, character_content_hash(latest))
+    frozen_character = prepared.characters["alex"]
+    runner = create_runner(
+        prepared.scenario,
+        resolved_characters={"alex": frozen_character.profile()},
+    )
+    dossier = runner.registry.get_resource(InformationStore).get(
+        character_dossier_document_id("agent-001")
+    )
+
+    assert dossier.content["experimental"] == raw["experimental"]
+    profile = runner.registry.get_component(
+        "agent-001",
+        CharacterProfileComponent,
+    )
+    assert "Spatial Reasoning" in profile.description
+    assert len(profile.content_hash) == 64
 
 
 def test_character_extract_cli_is_dry_run_first(

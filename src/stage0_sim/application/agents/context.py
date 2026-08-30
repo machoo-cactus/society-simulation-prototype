@@ -1,8 +1,11 @@
+from typing import Literal, cast
+
 from stage0_sim.application.agents.contracts import (
     CharacterObservation,
     ObservationFact,
     ObservedTarget,
 )
+from stage0_sim.application.navigation import NavigationService
 from stage0_sim.application.perception.renderer import (
     DeterministicPerceptionRenderer,
 )
@@ -34,42 +37,25 @@ def build_character_observation(
     world = local_world_for_agent(registry, agent_id)
     renderer = DeterministicPerceptionRenderer()
     known_characters = set(perception.visible_now) | set(perception.knowledge)
+    navigation = registry.get_resource(NavigationService)
     targets = [
-        ObservedTarget(id=zone.id, kind="zone", name=zone.name)
-        for zone in sorted(world.zones, key=lambda item: item.id)
-    ]
-    targets.extend(
         ObservedTarget(
-            id=station.id,
-            kind="station",
-            name=station.name,
-            supported_actions=station.supported_actions,
-            available=station.available,
+            id=destination.id,
+            kind=cast(
+                Literal["zone", "station", "building", "outdoor"],
+                destination.kind,
+            ),
+            name=destination.name,
+            supported_actions=destination.supported_actions,
+            available=destination.available,
         )
-        for station in sorted(world.stations, key=lambda item: item.id)
-    )
-    available_travel_modes: tuple[str, ...] = ()
+        for destination in navigation.known_topology.destinations(agent_id)
+        if destination.kind in {"zone", "station", "building", "outdoor"}
+    ]
+    available_travel_modes: tuple[str, ...] = (TravelMode.WALK.value,)
     spatial_payload: dict[str, JsonValue] | None = None
     if registry.has_resource(CityWorld):
         city = registry.get_resource(CityWorld)
-        targets.extend(
-            ObservedTarget(
-                id=building.id,
-                kind="building",
-                name=building.name,
-            )
-            for building in sorted(city.buildings, key=lambda item: item.id)
-        )
-        targets.extend(
-            ObservedTarget(
-                id=place.id,
-                kind="outdoor",
-                name=place.name,
-            )
-            for place in sorted(
-                city.outdoor_places, key=lambda item: item.id
-            )
-        )
         available = {TravelMode.WALK}
         available.update(vehicle.vehicle_type for vehicle in city.vehicles)
         if any(

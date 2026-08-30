@@ -12,6 +12,8 @@ import {
   controlAvailability,
   uiStateForRunStatus,
 } from "./ui-state.js";
+import {renderTranscriptView} from "./transcript-view.js";
+import {createCharacterEditor} from "./character-editor.js";
 
 const state = {
   uiState: UI_STATES.EMPTY,
@@ -79,6 +81,7 @@ const elements = Object.fromEntries(
     "resume-button", "step-button", "stop-button", "speed-select",
     "scenario-label", "run-label", "control-status",
     "character-assignment-panel", "character-assignments",
+    "character-studio-panel",
     "event-filter", "event-search", "event-order", "auto-scroll",
     "load-older-events", "expand-log", "clear-log", "event-log", "event-count",
     "event-detail-dialog", "event-detail-title", "event-detail-meta",
@@ -92,6 +95,15 @@ const elements = Object.fromEntries(
 
 const canvas = elements["world-canvas"];
 const context = canvas.getContext("2d");
+const characterEditor = createCharacterEditor({
+  root: elements["character-studio-panel"],
+  onScenarioChange: async (scenario, successMessage) => {
+    state.loadedScenario = structuredClone(scenario);
+    initializeCharacterAssignments();
+    renderCharacterAssignments();
+    return revalidateAssignedScenario(successMessage);
+  },
+});
 
 function normalizeAgent(raw, fallbackId = "unknown-agent", staticAgent = null) {
   const agent = isObject(raw) ? raw : {};
@@ -296,6 +308,7 @@ async function loadScenario(scenario, sourceLabel = "JSON file") {
   state.loadedScenarioName = optionalString(scenario.name) ?? "Unnamed scenario";
   initializeCharacterAssignments();
   renderCharacterAssignments();
+  characterEditor.setScenario(state.loadedScenario);
   setControlStatus(`Validating ${state.loadedScenarioName}...`);
   updateControls();
   try {
@@ -404,6 +417,19 @@ function renderCharacterAssignments() {
     select.value = selectedProfile;
     select.addEventListener("change", async (event) => {
       state.characterAssignments[entityId] = event.target.value;
+      const entity = state.loadedScenario.entities.find(
+        (candidate) => candidate.id === entityId
+      );
+      if (entity) {
+        entity.components ??= {};
+        entity.components.character_profile = {
+          ...(isObject(entity.components.character_profile)
+            ? entity.components.character_profile
+            : {}),
+          profile_ref: event.target.value,
+        };
+        characterEditor.syncScenario(state.loadedScenario);
+      }
       await revalidateAssignedScenario();
     });
     row.append(slot, select);
@@ -411,7 +437,9 @@ function renderCharacterAssignments() {
   }
 }
 
-async function revalidateAssignedScenario() {
+async function revalidateAssignedScenario(
+  successMessage = "Character assignments ready."
+) {
   const revision = ++state.scenarioRevision;
   state.uiState = UI_STATES.SCENARIO_LOADING;
   state.scenarioId = null;
@@ -425,13 +453,16 @@ async function revalidateAssignedScenario() {
     if (revision !== state.scenarioRevision) return;
     state.scenarioId = created.scenario_id;
     state.uiState = UI_STATES.SCENARIO_READY;
-    setControlStatus("Character assignments ready.");
+    setControlStatus(successMessage);
+    updateControls();
+    return true;
   } catch (error) {
     if (revision !== state.scenarioRevision) return;
     state.uiState = UI_STATES.ERROR;
     setControlStatus(`Assignment invalid: ${error.message}`, true);
+    updateControls();
+    return false;
   }
-  updateControls();
 }
 
 function buildAssignedScenario() {
@@ -441,7 +472,12 @@ function buildAssignedScenario() {
     const profileId = state.characterAssignments[entity.id];
     if (!profileId) continue;
     entity.components ??= {};
-    entity.components.character_profile = {profile_ref: profileId};
+    entity.components.character_profile = {
+      ...(isObject(entity.components.character_profile)
+        ? entity.components.character_profile
+        : {}),
+      profile_ref: profileId,
+    };
   }
   return scenario;
 }
@@ -874,6 +910,71 @@ function renderPlan(agent) {
   }
 }
 
+function updateAutomaticView() {
+  if (state.viewMode !== "AUTO") return;
+  const scale = selectedAgent()?.spatialLocation.scale;
+  state.viewLevel = scale === "BUILDING" ? "BUILDING" : "CITY";
+}
+
+function worldBreadcrumb() {
+  const agent = selectedAgent();
+  if (!agent) return "No location";
+  const location = agent.spatialLocation;
+  const city = state.bootstrap?.city;
+  const building = city?.buildings?.find(
+    (item) => item.id === location.placeId
+  );
+  const district = city?.districts?.find(
+    (item) => item.id === building?.district_id
+  );
+  return [
+    city?.name,
+    district?.name,
+    building?.name ?? location.placeId,
+    location.edgeId,
+  ].filter(Boolean).join(" / ") || "Local world";
+}
+
+function activeBuildingWorld() {
+  const buildingId = selectedAgent()?.spatialLocation.placeId;
+  return state.buildingMaps[buildingId] ?? state.snapshot?.world;
+}
+
+async function ensureFocusedBuildingMap() {
+  if (!state.runId) return;
+  const agent = selectedAgent();
+  if (!agent || agent.spatialLocation.scale !== "BUILDING") return;
+  const buildingId = agent.spatialLocation.placeId;
+  if (
+    !buildingId
+    || state.buildingMaps[buildingId]
+    || state.buildingMapRequests.has(buildingId)
+    || !state.bootstrap?.city
+  ) {
+    return;
+  }
+  state.buildingMapRequests.add(buildingId);
+  try {
+    const response = await api(
+      `/simulation/runs/${encodeURIComponent(state.runId)}/world/buildings/${
+        encodeURIComponent(buildingId)
+      }`
+    );
+    state.buildingMaps[buildingId] = normalizeStaticWorld(
+      response.building.local_map
+    );
+    drawWorld();
+  } catch (error) {
+    addLocalEvent(
+      "ui.building_map_failed",
+      {building_id: buildingId, message: error.message},
+      "error"
+    );
+  } finally {
+    state.buildingMapRequests.delete(buildingId);
+  }
+}
+
 function drawWorld() {
   const rect = canvas.getBoundingClientRect();
   const ratio = Math.max(1, window.devicePixelRatio || 1);
@@ -885,232 +986,45 @@ function drawWorld() {
   }
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, rect.width, rect.height);
-  const world = activeBuildingWorld();
   const city = state.bootstrap?.city;
   if (state.viewLevel !== "BUILDING" && city) {
     drawCityWorld(rect, city);
     return;
   }
-
-  function activeBuildingWorld() {
-    const buildingId = selectedAgent()?.spatialLocation.placeId;
-    return state.buildingMaps[buildingId] ?? state.snapshot?.world;
-  }
-
-  async function ensureFocusedBuildingMap() {
-    if (!state.runId) return;
-    const agent = selectedAgent();
-    if (!agent || agent.spatialLocation.scale !== "BUILDING") return;
-    const buildingId = agent.spatialLocation.placeId;
-    if (
-      !buildingId
-      || state.buildingMaps[buildingId]
-      || state.buildingMapRequests.has(buildingId)
-      || !state.bootstrap?.city
-    ) {
-      return;
-    }
-    state.buildingMapRequests.add(buildingId);
-    try {
-      const response = await api(
-        `/simulation/runs/${encodeURIComponent(state.runId)}/world/buildings/${
-          encodeURIComponent(buildingId)
-        }`
-      );
-      state.buildingMaps[buildingId] = normalizeStaticWorld(
-        response.building.local_map
-      );
-      drawWorld();
-    } catch (error) {
-      addLocalEvent(
-        "ui.building_map_failed",
-        {building_id: buildingId, message: error.message},
-        "error"
-      );
-    } finally {
-      state.buildingMapRequests.delete(buildingId);
-    }
-  }
+  const world = activeBuildingWorld();
   if (!world) return;
+  drawBuildingWorld(rect, world);
+}
 
+function drawBuildingWorld(rect, world) {
   const padding = 30;
   const tile = Math.max(
     4,
-    Math.min((rect.width - padding * 2) / world.width, (rect.height - padding * 2) / world.height)
+    Math.min(
+      (rect.width - padding * 2) / world.width,
+      (rect.height - padding * 2) / world.height
+    )
   );
   const originX = (rect.width - tile * world.width) / 2;
   const originY = (rect.height - tile * world.height) / 2;
-
   context.fillStyle = "#0a141e";
   context.fillRect(originX, originY, tile * world.width, tile * world.height);
   for (const zone of world.zones) {
     context.fillStyle = zoneColor(zone.type);
     for (const coordinate of zone.tiles) {
-      context.fillRect(originX + coordinate.x * tile, originY + coordinate.y * tile, tile, tile);
-    }
-
-    function updateAutomaticView() {
-      if (state.viewMode !== "AUTO") return;
-      const scale = selectedAgent()?.spatialLocation.scale;
-      state.viewLevel = scale === "BUILDING" ? "BUILDING" : "CITY";
-    }
-
-    function worldBreadcrumb() {
-      const agent = selectedAgent();
-      if (!agent) return "No location";
-      const location = agent.spatialLocation;
-      const city = state.bootstrap?.city;
-      const building = city?.buildings?.find(
-        (item) => item.id === location.placeId
+      context.fillRect(
+        originX + coordinate.x * tile,
+        originY + coordinate.y * tile,
+        tile,
+        tile
       );
-      const district = city?.districts?.find(
-        (item) => item.id === building?.district_id
-      );
-      return [
-        city?.name,
-        district?.name,
-        building?.name ?? location.placeId,
-        location.edgeId,
-      ].filter(Boolean).join(" / ") || "Local world";
-    }
-
-    function drawCityWorld(rect, city) {
-      const bounds = city.bounds;
-      if (!isObject(bounds)) return;
-      const baseScale = Math.min(
-        (rect.width - 60) / Math.max(1, bounds.max_x - bounds.min_x),
-        (rect.height - 60) / Math.max(1, bounds.max_y - bounds.min_y)
-      );
-      const scale = baseScale * state.camera.zoom;
-      const project = (point) => ({
-        x: rect.width / 2
-          + (point.x - (bounds.min_x + bounds.max_x) / 2 + state.camera.x) * scale,
-        y: rect.height / 2
-          + (point.y - (bounds.min_y + bounds.max_y) / 2 + state.camera.y) * scale,
-      });
-      context.fillStyle = "#08131d";
-      context.fillRect(0, 0, rect.width, rect.height);
-      for (const edge of city.edges ?? []) {
-        const geometry = edge.geometry ?? [];
-        if (geometry.length < 2) continue;
-        context.beginPath();
-        geometry.forEach((point, index) => {
-          const projected = project(point);
-          index
-            ? context.lineTo(projected.x, projected.y)
-            : context.moveTo(projected.x, projected.y);
-        });
-        context.strokeStyle = edge.allowed_modes?.includes("CAR")
-          ? "#52697d"
-          : edge.allowed_modes?.includes("METRO")
-            ? "#b779d0"
-            : "#65866f";
-        context.lineWidth = edge.allowed_modes?.includes("CAR") ? 4 : 2;
-        context.stroke();
-      }
-      for (const building of city.buildings ?? []) {
-        const point = project(building.position);
-        context.fillStyle = "#d9c46c";
-        context.fillRect(point.x - 8, point.y - 8, 16, 16);
-        context.fillStyle = "#d8e8f4";
-        context.font = "11px system-ui";
-        context.textAlign = "center";
-        context.textBaseline = "top";
-        context.fillText(building.name, point.x, point.y + 10);
-      }
-      for (const place of city.outdoor_places ?? []) {
-        const point = project(place.position);
-        context.beginPath();
-        context.arc(point.x, point.y, 6, 0, Math.PI * 2);
-        context.fillStyle = "#54d78b";
-        context.fill();
-        context.fillStyle = "#d8e8f4";
-        context.font = "11px system-ui";
-        context.textAlign = "center";
-        context.textBaseline = "top";
-        context.fillText(place.name, point.x, point.y + 8);
-      }
-      for (const vehicle of city.vehicles ?? []) {
-        const vehicleState = state.vehicleStates[vehicle.id] ?? vehicle;
-        const point = cityTransportPoint(vehicleState, city);
-        if (!point) continue;
-        const projected = project(point);
-        context.fillStyle = vehicle.type === "CAR" ? "#f4be5b" : "#8bc2d9";
-        context.fillRect(projected.x - 6, projected.y - 4, 12, 8);
-        context.fillStyle = "#d8e8f4";
-        context.font = "10px system-ui";
-        context.textAlign = "center";
-        context.textBaseline = "bottom";
-        context.fillText(vehicle.name, projected.x, projected.y - 6);
-      }
-      for (const agent of state.snapshot?.agents ?? []) {
-        const point = cityAgentPoint(agent, city);
-        if (!point) continue;
-        const projected = project(point);
-        context.beginPath();
-        context.arc(projected.x, projected.y, 7, 0, Math.PI * 2);
-        context.fillStyle = agent.id === state.selectedAgentId ? "#67d7da" : "#8fa8bc";
-        context.fill();
-        if (state.overlayOptions.names) {
-          context.fillStyle = "#e7edf5";
-          context.font = "700 11px system-ui";
-          context.textAlign = "center";
-          context.textBaseline = "bottom";
-          context.fillText(agent.displayName, projected.x, projected.y - 9);
-        }
-        drawAgentOverlays(agent, projected.x, projected.y, 28);
-      }
-    }
-
-    function cityAgentPoint(agent, city) {
-      const location = agent.spatialLocation;
-      if (location.edgeId) {
-        const edge = city.edges?.find((item) => item.id === location.edgeId);
-        if (!edge?.geometry?.length) return null;
-        return interpolateGeometry(edge.geometry, location.edgeProgress ?? 0);
-      }
-
-      function cityTransportPoint(location, city) {
-        if (location.edge_id) {
-          const edge = city.edges?.find((item) => item.id === location.edge_id);
-          if (!edge?.geometry?.length) return null;
-          return interpolateGeometry(edge.geometry, location.edge_progress ?? 0);
-        }
-        if (location.network_node_id) {
-          return city.nodes?.find(
-            (item) => item.id === location.network_node_id
-          )?.position ?? null;
-        }
-        return null;
-      }
-      if (location.networkNodeId) {
-        return city.nodes?.find(
-          (item) => item.id === location.networkNodeId
-        )?.position ?? null;
-      }
-      if (location.placeId) {
-        return city.buildings?.find(
-          (item) => item.id === location.placeId
-        )?.position ?? city.outdoor_places?.find(
-          (item) => item.id === location.placeId
-        )?.position ?? null;
-      }
-      return null;
-    }
-
-    function interpolateGeometry(geometry, progress) {
-      if (geometry.length === 1) return geometry[0];
-      const segmentProgress = Math.max(0, Math.min(1, progress)) * (geometry.length - 1);
-      const index = Math.min(geometry.length - 2, Math.floor(segmentProgress));
-      const local = segmentProgress - index;
-      return {
-        x: geometry[index].x + (geometry[index + 1].x - geometry[index].x) * local,
-        y: geometry[index].y + (geometry[index + 1].y - geometry[index].y) * local,
-      };
     }
     if (zone.tiles.length) {
       const center = zone.tiles.reduce(
-        (sum, coordinate) => ({x: sum.x + coordinate.x, y: sum.y + coordinate.y}),
+        (sum, coordinate) => ({
+          x: sum.x + coordinate.x,
+          y: sum.y + coordinate.y,
+        }),
         {x: 0, y: 0}
       );
       context.fillStyle = "#9eb2c4";
@@ -1151,19 +1065,169 @@ function drawWorld() {
     const x = originX + (station.position.x + 0.5) * tile;
     const y = originY + (station.position.y + 0.5) * tile;
     context.fillStyle = station.available ? "#d9c46c" : "#6c7780";
-    context.fillRect(x - tile * 0.22, y - tile * 0.22, tile * 0.44, tile * 0.44);
+    context.fillRect(
+      x - tile * 0.22,
+      y - tile * 0.22,
+      tile * 0.44,
+      tile * 0.44
+    );
     context.fillStyle = "#101820";
     context.font = `700 ${Math.max(8, tile * 0.24)}px system-ui`;
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.fillText(stationLabel(station), x, y);
   }
-  for (const agent of state.snapshot.agents) {
+  for (const agent of state.snapshot?.agents ?? []) {
+    if (agent.spatialLocation.scale !== "BUILDING") continue;
+    if (
+      selectedAgent()?.spatialLocation.placeId
+      && agent.spatialLocation.placeId
+        !== selectedAgent().spatialLocation.placeId
+    ) {
+      continue;
+    }
     drawAgent(agent, originX, originY, tile);
   }
   canvas.dataset.originX = String(originX);
   canvas.dataset.originY = String(originY);
   canvas.dataset.tile = String(tile);
+}
+
+function drawCityWorld(rect, city) {
+  const bounds = city.bounds;
+  if (!isObject(bounds)) return;
+  const baseScale = Math.min(
+    (rect.width - 60) / Math.max(1, bounds.max_x - bounds.min_x),
+    (rect.height - 60) / Math.max(1, bounds.max_y - bounds.min_y)
+  );
+  const scale = baseScale * state.camera.zoom;
+  const project = (point) => ({
+    x: rect.width / 2
+      + (point.x - (bounds.min_x + bounds.max_x) / 2 + state.camera.x)
+        * scale,
+    y: rect.height / 2
+      + (point.y - (bounds.min_y + bounds.max_y) / 2 + state.camera.y)
+        * scale,
+  });
+  context.fillStyle = "#08131d";
+  context.fillRect(0, 0, rect.width, rect.height);
+  for (const edge of city.edges ?? []) {
+    const geometry = edge.geometry ?? [];
+    if (geometry.length < 2) continue;
+    context.beginPath();
+    geometry.forEach((point, index) => {
+      const projected = project(point);
+      index
+        ? context.lineTo(projected.x, projected.y)
+        : context.moveTo(projected.x, projected.y);
+    });
+    context.strokeStyle = edge.allowed_modes?.includes("CAR")
+      ? "#52697d"
+      : edge.allowed_modes?.includes("METRO")
+        ? "#b779d0"
+        : "#65866f";
+    context.lineWidth = edge.allowed_modes?.includes("CAR") ? 4 : 2;
+    context.stroke();
+  }
+  for (const building of city.buildings ?? []) {
+    const point = project(building.position);
+    context.fillStyle = "#d9c46c";
+    context.fillRect(point.x - 8, point.y - 8, 16, 16);
+    context.fillStyle = "#d8e8f4";
+    context.font = "11px system-ui";
+    context.textAlign = "center";
+    context.textBaseline = "top";
+    context.fillText(building.name, point.x, point.y + 10);
+  }
+  for (const place of city.outdoor_places ?? []) {
+    const point = project(place.position);
+    context.beginPath();
+    context.arc(point.x, point.y, 6, 0, Math.PI * 2);
+    context.fillStyle = "#54d78b";
+    context.fill();
+    context.fillStyle = "#d8e8f4";
+    context.font = "11px system-ui";
+    context.textAlign = "center";
+    context.textBaseline = "top";
+    context.fillText(place.name, point.x, point.y + 8);
+  }
+  for (const vehicle of city.vehicles ?? []) {
+    const vehicleState = state.vehicleStates[vehicle.id] ?? vehicle;
+    const point = cityTransportPoint(vehicleState, city);
+    if (!point) continue;
+    const projected = project(point);
+    context.fillStyle = vehicle.type === "CAR" ? "#f4be5b" : "#8bc2d9";
+    context.fillRect(projected.x - 6, projected.y - 4, 12, 8);
+    context.fillStyle = "#d8e8f4";
+    context.font = "10px system-ui";
+    context.textAlign = "center";
+    context.textBaseline = "bottom";
+    context.fillText(vehicle.name, projected.x, projected.y - 6);
+  }
+  for (const agent of state.snapshot?.agents ?? []) {
+    const point = cityAgentPoint(agent, city);
+    if (!point) continue;
+    const projected = project(point);
+    context.beginPath();
+    context.arc(projected.x, projected.y, 7, 0, Math.PI * 2);
+    context.fillStyle =
+      agent.id === state.selectedAgentId ? "#67d7da" : "#8fa8bc";
+    context.fill();
+    drawAgentOverlays(agent, projected.x, projected.y, 28);
+  }
+}
+
+function cityAgentPoint(agent, city) {
+  const location = agent.spatialLocation;
+  if (location.edgeId) {
+    const edge = city.edges?.find((item) => item.id === location.edgeId);
+    if (!edge?.geometry?.length) return null;
+    return interpolateGeometry(edge.geometry, location.edgeProgress ?? 0);
+  }
+  if (location.networkNodeId) {
+    return city.nodes?.find(
+      (item) => item.id === location.networkNodeId
+    )?.position ?? null;
+  }
+  if (location.placeId) {
+    return city.buildings?.find(
+      (item) => item.id === location.placeId
+    )?.position ?? city.outdoor_places?.find(
+      (item) => item.id === location.placeId
+    )?.position ?? null;
+  }
+  return null;
+}
+
+function cityTransportPoint(location, city) {
+  if (location.edge_id) {
+    const edge = city.edges?.find((item) => item.id === location.edge_id);
+    if (!edge?.geometry?.length) return null;
+    return interpolateGeometry(edge.geometry, location.edge_progress ?? 0);
+  }
+  if (location.network_node_id) {
+    return city.nodes?.find(
+      (item) => item.id === location.network_node_id
+    )?.position ?? null;
+  }
+  return null;
+}
+
+function interpolateGeometry(geometry, progress) {
+  if (geometry.length === 1) return geometry[0];
+  const segmentProgress =
+    Math.max(0, Math.min(1, progress)) * (geometry.length - 1);
+  const index = Math.min(
+    geometry.length - 2,
+    Math.floor(segmentProgress)
+  );
+  const local = segmentProgress - index;
+  return {
+    x: geometry[index].x
+      + (geometry[index + 1].x - geometry[index].x) * local,
+    y: geometry[index].y
+      + (geometry[index + 1].y - geometry[index].y) * local,
+  };
 }
 
 function drawAgent(agent, originX, originY, tile) {
@@ -1469,42 +1533,6 @@ function renderEventLog() {
         keyboardEvent.preventDefault();
         showEventDetail(event);
       }
-
-      function renderTranscript() {
-        const transcript = elements["conversation-transcript"];
-        const entries = state.events.filter((event) =>
-          /^(speech\.delivered|dialogue\.generated)$/.test(event.type)
-        );
-        transcript.replaceChildren();
-        if (!entries.length) {
-          const empty = document.createElement("p");
-          empty.className = "muted";
-          empty.textContent = "No speech yet";
-          transcript.append(empty);
-          return;
-        }
-        for (const event of entries.slice(-100).reverse()) {
-          const entry = document.createElement("article");
-          entry.className = "transcript-entry";
-          const recipients = Array.isArray(event.payload.recipient_ids)
-            ? event.payload.recipient_ids.map(agentDisplayName).join(", ")
-            : optionalString(event.payload.target_id)
-              ? agentDisplayName(event.payload.target_id)
-              : "unspecified";
-          const meta = document.createElement("div");
-          meta.className = "transcript-entry__meta";
-          meta.textContent = `t${event.tick} · ${
-            agentDisplayName(event.agentId ?? "unknown")
-          } → ${recipients}${
-            event.type === "dialogue.generated" ? " · legacy dialogue" : ""
-          }`;
-          const quote = document.createElement("blockquote");
-          quote.textContent = String(event.payload.text ?? "");
-          entry.append(meta, quote);
-          entry.addEventListener("click", () => showEventDetail(event));
-          transcript.append(entry);
-        }
-      }
     });
     fragment.append(row);
   }
@@ -1513,6 +1541,16 @@ function renderEventLog() {
   if (state.autoScroll && state.eventOrder === "oldest") {
     elements["event-log"].scrollTop = elements["event-log"].scrollHeight;
   }
+}
+
+function renderTranscript() {
+  renderTranscriptView({
+    container: elements["conversation-transcript"],
+    events: state.events,
+    displayName: agentDisplayName,
+    showDetail: showEventDetail,
+    optionalString,
+  });
 }
 
 function eventMatchesFilter(event) {
@@ -1620,6 +1658,7 @@ function updateControls() {
   elements["speed-select"].disabled = !availability.speed;
   elements["scenario-file"].disabled = !availability.loadScenario;
   elements["load-example-button"].disabled = !availability.loadScenario;
+  characterEditor.setDisabled(!availability.loadScenario);
   elements["load-older-events"].disabled = !availability.loadHistory;
   elements["vitals-form"].querySelectorAll("input, button").forEach((control) => {
     control.disabled = !availability.mutate;
@@ -1837,3 +1876,11 @@ fetch("/health")
   .catch(() => setConnection("offline", "API unavailable"));
 
 render();
+
+export function runUiRuntimeSelfCheck() {
+  renderTranscript();
+  updateAutomaticView();
+  worldBreadcrumb();
+  activeBuildingWorld();
+  return true;
+}

@@ -12,6 +12,11 @@ def test_ui_assets_are_installed_as_package_data() -> None:
     assert web.joinpath("index.html").is_file()
     assert web.joinpath("styles.css").is_file()
     assert web.joinpath("app.js").is_file()
+    assert web.joinpath("api-client.js").is_file()
+    assert web.joinpath("protocol.js").is_file()
+    assert web.joinpath("transcript-view.js").is_file()
+    assert web.joinpath("character-editor.js").is_file()
+    assert web.joinpath("ui-state.js").is_file()
     assert web.joinpath("demo.json").is_file()
 
 
@@ -28,6 +33,8 @@ def test_root_redirects_to_python_served_ui() -> None:
     assert 'id="event-log"' in page.text
     assert 'id="start-button"' in page.text
     assert 'id="character-assignments"' in page.text
+    assert 'id="character-studio-panel"' in page.text
+    assert 'data-action="add-profile"' in page.text
     assert 'id="event-detail-dialog"' in page.text
     assert 'src="/ui/app.js"' in page.text
 
@@ -53,6 +60,7 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     assert "async function loadScenario" in script.text
     assert "async function startLoadedScenario" in script.text
     assert "function renderCharacterAssignments" in script.text
+    assert "...(isObject(entity.components.character_profile)" in script.text
     assert "function showEventDetail" in script.text
     assert 'filter === "dialogue"' in script.text
     assert "/^(dialogue|speech)\\./" in script.text
@@ -65,6 +73,8 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     assert "function drawCityWorld" in script.text
     assert "function ensureFocusedBuildingMap" in script.text
     assert "after_snapshot_revision" in script.text
+    assert "function renderTranscript()" in script.text
+    assert "runUiRuntimeSelfCheck" in script.text
     assert styles.status_code == 200
     assert "text/css" in styles.headers["content-type"]
     assert "#world-canvas" in styles.text
@@ -72,9 +82,16 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     with TestClient(app) as client:
         protocol = client.get("/ui/protocol.js")
         api_client = client.get("/ui/api-client.js")
+        transcript = client.get("/ui/transcript-view.js")
+        character_editor = client.get("/ui/character-editor.js")
     assert "function normalizeEnvelope" in protocol.text
     assert "stage0.telemetry.v2" in protocol.text
     assert "async function api" in api_client.text
+    assert "function renderTranscriptView" in transcript.text
+    assert "function createCharacterEditor" in character_editor.text
+    assert "custom_sections" in character_editor.text
+    assert "relationships" in character_editor.text
+    assert "syncScenario(nextScenario)" in character_editor.text
 
 
 def test_ui_state_module_defines_explicit_pending_states() -> None:

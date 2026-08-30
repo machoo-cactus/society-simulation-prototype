@@ -15,6 +15,12 @@ implementation: deterministic visual/auditory facts and knowledge, strict
 client, bounded asynchronous completion handling, and record/replay adapters.
 The richer Phase E interaction features remain deferred.
 
+**Current note (2026-08-30):** The controller now uses reusable structured
+character profiles, a separate general controller prompt, and a dedicated
+character-description message. `travel_to` is available for hierarchical city
+scenarios. The standalone fake server and real providers share the
+OpenAI-compatible `/v1/chat/completions` contract.
+
 ## 1. Executive proposal
 
 Replace the current distinction between "planner output" and "dialogue output"

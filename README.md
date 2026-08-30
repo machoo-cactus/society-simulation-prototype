@@ -53,6 +53,33 @@ Open <http://127.0.0.1:8000/ui/>. The health endpoint is
 <http://127.0.0.1:8000/health>, and OpenAPI documentation is available at
 <http://127.0.0.1:8000/docs>.
 
+## Update an existing checkout
+
+On Windows, run the repository update script from PowerShell:
+
+```powershell
+.\update.ps1
+```
+
+It performs a fast-forward-only `git pull`, creates `.venv` with Python 3.12 if
+needed, upgrades pip, refreshes the editable `.[dev]` installation, and creates
+`.env` from `.env.example` only when `.env` does not already exist. It does not
+delete datasets or overwrite local environment settings.
+
+To refresh only the environment without pulling:
+
+```powershell
+.\update.ps1 -SkipPull
+```
+
+Equivalent manual commands:
+
+```powershell
+git pull --ff-only
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
 ## Try the included experiments
 
 After installation, `stage0-sim` runs a scenario without the browser:
@@ -109,6 +136,10 @@ It is intentionally plain HTML, CSS, and JavaScript:
 - no Node.js build;
 - no duplicated simulation logic in the browser.
 
+The browser code uses native ES modules. API access, telemetry protocol parsing,
+lifecycle state, and transcript rendering are separated into focused modules;
+all `web/*.js` files are shipped as package data.
+
 From the UI you can:
 
 - load and validate a scenario without starting it;
@@ -116,7 +147,6 @@ From the UI you can:
 - start, pause, single-step, resume, stop, and restart the loaded scenario;
 - inspect positions, paths, destinations, activities, plans, and memories;
 - watch satiety, energy, and stress change;
-- pause, resume, single-step, change speed, or stop a run;
 - mutate vitals to force survival behavior;
 - search and filter planning, survival, perception, cognition, speech, dialogue,
   and failure events;
@@ -142,7 +172,7 @@ stage0-sim run scenarios/my-experiment.json --ticks 120 \
   --export data/runs/my-experiment.jsonl
 ```
 
-Every scenario uses schema version 1:
+Legacy single-grid scenarios use schema version 1:
 
 ```json
 {
@@ -161,6 +191,10 @@ Every scenario uses schema version 1:
   "entities": []
 }
 ```
+
+Sparse city scenarios use schema version 2. See
+`scenarios/sparse-city-car-demo.json` for the current city, local-map,
+transport-network, vehicle, and hierarchical-location schema.
 
 Common experiment variables include:
 

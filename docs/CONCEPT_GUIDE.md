@@ -36,16 +36,14 @@ than silently accepted.
 
 ## 2. Project in one paragraph
 
-Stage 0 is a deterministic, fully materialized simulation of people acting in a
-small spatial world. Every simulated person has continuous physiological state,
-moves through a discrete grid, performs explicit activities at physical
-affordances, and can be interrupted by non-negotiable survival needs. Slow or
-expensive cognition is separated from fast physical simulation. The current
-prototype uses deterministic fake/scripted cognition, episodic memory, a browser
-telemetry interface, and reproducible SQLite/JSONL datasets. The next major
-direction is to add observer-specific sensing and a real LLM character controller
-that chooses actions through typed tools while the simulation remains the only
-authority over what actually happens.
+Stage 0 is a deterministic, fully materialized simulation of people acting in
+local grid worlds and sparse hierarchical cities. Every simulated person has
+continuous physiological state, explicit location, deterministic movement and
+travel, physical affordances, situated perception, episodic memory, and
+non-negotiable survival behavior. Slow cognition is separated from physical
+simulation. Characters may use scripted, replayed, fake-API, or real
+OpenAI-compatible tool controllers while the simulation remains the only
+authority over outcomes.
 
 ## 3. Why Stage 0 exists
 
@@ -91,9 +89,9 @@ latency must not become part of physical rules.
 
 ### 4.5 Situated knowledge
 
-The planned sensing system will ensure characters know the world through their
-own state, observations, communication, and memory—not through omniscient access
-to simulation internals.
+Characters know the world through their own state, observations,
+communication, initialized common knowledge, and memory—not through omniscient
+simulation internals.
 
 ### 4.6 Reproducible research data
 
@@ -291,17 +289,19 @@ A **plan action** is a validated command from the closed domain vocabulary:
 - `SLEEP`
 - `RELAX`
 - `IDLE`
+- `TRAVEL_TO`
 
-The planned tool-agent design may translate tool calls into these existing
-actions or into new typed domain intents.
+The tool-agent design translates tool calls into these actions or typed domain
+intents.
 
 ### 6.17 Tool
 
 A **tool** is a typed capability offered to a character controller.
 
-Planned initial tools:
+Initial tools:
 
 - `go_to`
+- `travel_to`
 - `perform`
 - `say`
 - `wait`
@@ -319,17 +319,17 @@ simulation execution. Provider code proposes; domain code disposes.
 
 ### 6.19 Speech
 
-**Speech** is an in-world utterance produced by a character. In the planned
-architecture, literal speech is emitted only through `say`.
+**Speech** is an in-world utterance produced by a character. Literal
+tool-controller speech is emitted only through `say`.
 
 The controller's rationale, prompt, and hidden reasoning are not speech.
 
 ### 6.20 Dialogue
 
 **Dialogue** is a sequence of delivered speech interactions between characters.
-The current prototype has a simpler generated-dialogue path associated with
-`SOCIALIZE`. The planned `say` tool and speech system will make individual
-utterances explicit.
+The legacy generated-dialogue path remains associated with `SOCIALIZE`.
+Tool-controller utterances are explicit `say` actions resolved by the speech
+and hearing systems.
 
 ### 6.21 Observation
 
@@ -450,9 +450,9 @@ Default `dt` is one simulated second.
 The **macro boundary** is the application-controlled point outside the ordered
 system pass where cognition, embeddings, and later real model work are handled.
 
-Current fake providers are drained after the ordered tick. Planned real providers
-will use asynchronous workers and commit completed results at deterministic
-boundaries.
+Legacy synchronous providers and asynchronous real providers are both isolated
+behind post-tick coordinators. Completed controller results are committed in
+stable order at deterministic boundaries.
 
 ### 7.4 Telemetry clock
 
@@ -509,7 +509,7 @@ advance fixed clock
 The exact system order is code-level semantics. Do not reorder systems based only
 on aesthetic preference.
 
-Planned sensing insertion:
+Implemented sensing and cognition insertion:
 
 ```text
 physical/action state transitions
@@ -585,24 +585,18 @@ If correction is impossible, the character enters observable
 
 Current implementation:
 
-- deterministic fake/scripted planner;
-- validated plan vocabulary;
-- generated dialogue associated with social activity;
-- memory retrieval for planning/dialogue;
-- provider work outside the ordered micro-system stack.
-
-Planned implementation:
-
-- unified character controller;
-- tool calls rather than arbitrary plan prose;
-- explicit `say` speech;
+- deterministic fake/scripted legacy planner and dialogue;
+- unified tool-calling character controller;
+- validated plan and intent vocabularies;
+- explicit `say` speech and `travel_to` city travel;
 - observer-specific perceptual context;
-- asynchronous real model clients;
-- deterministic replay.
+- asynchronous OpenAI-compatible model clients;
+- provider recording and deterministic replay;
+- memory retrieval outside the ordered micro-system stack.
 
 ## 12. Movement and spatial grounding
 
-The world is a rectangular discrete grid. A character occupies one tile.
+Local maps are rectangular discrete grids where a character occupies one tile.
 
 Schema-version-2 city scenarios add an explicit hierarchy above local grids:
 
@@ -657,10 +651,10 @@ Cognition has three separable concerns:
 
 These concerns must remain replaceable independently.
 
-Current `MacroWorkCoordinator` provides a post-tick boundary for planner,
-dialogue, and memory provider calls. The real-run design will replace direct
-synchronous inference with queues and workers while preserving deterministic
-commit order.
+`MacroWorkCoordinator` provides the post-tick boundary for legacy planner,
+dialogue, and memory calls. `AgentWorkCoordinator` uses bounded queues and
+workers for tool-controller inference and applies completions in deterministic
+order.
 
 Correctness must not depend on successful provider cancellation. Every late
 result is checked for:
@@ -671,7 +665,7 @@ result is checked for:
 - current action eligibility;
 - current target/preconditions.
 
-## 15. Planned character-controller model
+## 15. Character-controller model
 
 The character controller receives:
 
@@ -697,6 +691,7 @@ opportunity.
 | Tool | Meaning | Typical domain translation |
 | --- | --- | --- |
 | `go_to(target_id, reason)` | Attempt to move to a known target | `MOVE_TO` or movement intent |
+| `travel_to(target_id, mode, reason)` | Travel to a known city place | `TRAVEL_TO` / travel intent |
 | `perform(action, target_id, duration, reason)` | Attempt a supported activity | Timed action or affordance request |
 | `say(target_id, text, reason)` | Speak exact in-world words | Speech intent |
 | `wait(duration, reason)` | Intentionally remain idle | `IDLE` |
@@ -721,7 +716,7 @@ proposed
 
 The model cannot collapse this lifecycle by saying an action succeeded.
 
-## 16. Planned sensing model
+## 16. Sensing model
 
 The sensing architecture has three representations:
 
@@ -731,7 +726,7 @@ The sensing architecture has three representations:
 
 ### 16.1 Disclosure classes
 
-Planned disclosure classes:
+Disclosure classes:
 
 - `SELF`
 - `DIRECT_PARTICIPANTS`
@@ -744,7 +739,7 @@ The safe default is `ADMIN_ONLY`.
 
 ### 16.2 Vision
 
-Initial deterministic vision will use:
+Deterministic local vision uses:
 
 - configurable range;
 - grid line-of-sight;
@@ -1034,9 +1029,10 @@ scenarios/            Runnable scenario definitions
 docs/                 Requirements, plans, assessment, concept guide
 ```
 
-Planned additions belong in focused `application/agents` and
+Controller and perception additions belong in focused `application/agents` and
 `application/perception` packages rather than expanding `macro_work.py` into a
-monolithic cognition module.
+monolithic cognition module. Browser API, protocol, UI-state, and transcript
+logic remain separate native ES modules under `web/`.
 
 ## 26. Rules for extending the project
 
@@ -1247,8 +1243,8 @@ Before accepting a substantial feature, confirm:
 - `docs/CONCEPT_GUIDE.md`: canonical vocabulary and advanced mental model.
 - `docs/starting_basic_PRD.md`: original Stage 0 product requirements.
 - `docs/IMPLEMENTATION_PLAN.md`: phased implementation of the prototype.
-- `docs/REAL_LLM_TOOL_AGENT_PLAN.md`: detailed planned sensing and real-LLM
-  controller architecture.
+- `docs/REAL_LLM_TOOL_AGENT_PLAN.md`: detailed sensing and real-LLM controller
+  architecture and implementation record.
 - `docs/PROJECT_STATE_ASSESSMENT.md`: historical assessment and completion
   record.
 

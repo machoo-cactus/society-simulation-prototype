@@ -11,6 +11,9 @@ py -3.12 -m venv .venv
 python -m pip install -e ".[dev]"
 ```
 
+Existing Windows checkouts can use `.\update.ps1` to fast-forward pull and
+refresh the editable development environment.
+
 Run the standard checks from the repository root:
 
 ```powershell
@@ -51,8 +54,8 @@ stage0-sim run scenarios\real-llm-tool-agent.json --ticks 30
 ```
 
 The browser is dependency-free HTML/CSS/JavaScript under
-`src\stage0_sim\web\`; there is no Node build step. Use `node --check
-src\stage0_sim\web\app.js` when Node is available.
+`src\stage0_sim\web\`; there is no Node build step. When Node is available,
+syntax-check every changed web module, not only `app.js`.
 
 ## Architecture
 
@@ -64,8 +67,8 @@ domain <- application orchestration <- adapters/API/UI
 ```
 
 - `domain` owns authoritative ECS state, grid/pathfinding, physiology,
-  System 1 survival arbitration, plans, affordances, speech, and ordered
-  deterministic systems.
+  sparse city transport, System 1 survival arbitration, plans, affordances,
+  speech, and ordered deterministic systems.
 - `application` owns scenario construction, the runner and post-tick boundary,
   perception projection, controller scheduling, tool validation/commit,
   memory, telemetry projection, and dataset collection.
@@ -87,10 +90,10 @@ stations, and remains active until recovery. Correctness for late model results
 depends on decision IDs and state revisions, not successful network
 cancellation.
 
-Character controllers propose one typed action through `go_to`, `perform`,
-`say`, or `wait`. Tool calls are validated, converted to immutable intents, and
-committed at a deterministic boundary. They never directly mutate ECS state or
-declare that an action succeeded.
+Character controllers propose one typed action through `go_to`, `travel_to`,
+`perform`, `say`, or `wait`. Tool calls are validated, converted to immutable
+intents, and committed at a deterministic boundary. They never directly mutate
+ECS state or declare that an action succeeded.
 
 Perception separates authoritative events from privacy-safe perceptible facts
 and observer-specific perceived facts. Telemetry is intentionally omniscient
@@ -103,6 +106,9 @@ world configuration. Provider credentials and endpoints belong in
 `STAGE0_*` environment settings, never scenario JSON. Reusable character
 profiles use the structured `human-v1` template and explicit `custom_sections`;
 the UI can assign a scenario profile to each entity slot before creating a run.
+Legacy grids use schema version 1; sparse hierarchical cities use schema version
+2 with buildings, local maps, outdoor places, transport graphs, vehicles, and
+hierarchical locations.
 
 SQLite/JSONL datasets are research records, not resumable checkpoints. The
 collector subscribes to domain events and projects specialized records plus
@@ -143,6 +149,9 @@ and dataset projections.
 - The browser stores full event envelopes for inspection and uses summarized
   text only for collapsed rows. Include both `speech.*` and legacy
   `dialogue.*` in dialogue-oriented views.
+- Browser helpers used during startup/reset must be module-level or imported
+  functions. JavaScript syntax checks do not detect accidentally nested
+  function declarations; exercise startup/reset paths when changing scopes.
 - When adding scenario fields, update the Pydantic definition, domain
   construction, representative scenario JSON, and any operator projection that
   should expose the field.

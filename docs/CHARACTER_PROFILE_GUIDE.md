@@ -62,6 +62,12 @@ The browser shows one profile selector for every entity when the loaded scenario
 has a profile catalog. The selected assignments are validated before Start and
 are used to create the run. Profiles may be reused in multiple slots.
 
+The browser Character Studio can create, duplicate, delete, rename, and edit
+profiles before a run starts. It exposes every `human-v1` field, plus ordered
+relationship records and custom sections as JSON arrays. Saving a renamed
+profile updates entity references, and changing a slot assignment preserves
+any entity-specific profile overrides.
+
 ## Standard sections
 
 The built-in `human-v1` template supports:

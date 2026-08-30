@@ -45,6 +45,7 @@ class ControllerComponent:
         "perform",
         "say",
         "wait",
+        "skip",
         "travel_to",
     )
     state_revision: int = 0
@@ -52,3 +53,4 @@ class ControllerComponent:
     request_pending: bool = False
     current_decision_id: str | None = None
     last_outcome: str | None = None
+    next_decision_time: float = 0.0

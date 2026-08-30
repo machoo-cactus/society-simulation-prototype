@@ -85,7 +85,11 @@ prompt, or command a critically hungry character to continue working.
 ### 4.4 Separated cognition
 
 Potentially slow cognition runs outside the ordered physical system pass. Model
-latency must not become part of physical rules.
+latency does not change physical rules. In the default `global_barrier` mode,
+the simulation clock intentionally remains frozen until every controller
+request from the current tick has completed, failed, timed out, or been
+cancelled. `background` mode retains the earlier non-blocking behavior for
+explicit compatibility and research comparisons.
 
 ### 4.5 Situated knowledge
 
@@ -306,6 +310,7 @@ Initial tools:
 - `perform`
 - `say`
 - `wait`
+- `skip`
 
 A tool call expresses what the controller wants the character to attempt. It
 does not prove that the action happened.
@@ -453,7 +458,10 @@ system pass where cognition, embeddings, and later real model work are handled.
 
 Legacy synchronous providers and asynchronous real providers are both isolated
 behind post-tick coordinators. Completed controller results are committed in
-stable order at deterministic boundaries.
+stable order at deterministic boundaries. Tool-controller requests use a
+global barrier by default: a batch is dispatched concurrently, the simulation
+clock remains fixed while it settles, and no fast result commits before the
+slowest batch member reaches a terminal outcome.
 
 ### 7.4 Telemetry clock
 
@@ -463,8 +471,9 @@ reads authoritative state and never advances simulation time.
 ### 7.5 Wall-clock time
 
 **Wall-clock time** is real elapsed time used for pacing, request latency,
-timestamps, and operator experience. It must not alter deterministic physical
-outcomes.
+timeouts, timestamps, and operator experience. It determines how long an
+operator waits at a cognition barrier, but not which physical systems execute
+or how much simulated time passes.
 
 ## 8. Authority model
 
@@ -519,6 +528,9 @@ physical/action state transitions
   -> update perception inbox and timestamped knowledge
   -> capture cognition eligibility and controller context
   -> run providers outside the ordered system pass
+  -> await the complete cognition batch in global-barrier mode
+  -> validate and commit settled results in stable order
+  -> emit simulation.tick
 ```
 
 ## 10. Homeostasis
@@ -652,10 +664,11 @@ Cognition has three separable concerns:
 
 These concerns must remain replaceable independently.
 
-`MacroWorkCoordinator` provides the post-tick boundary for legacy planner,
-dialogue, and memory calls. `AgentWorkCoordinator` uses bounded queues and
-workers for tool-controller inference and applies completions in deterministic
-order.
+`MacroWorkCoordinator` provides the boundary for legacy planner, dialogue, and
+memory calls. `AgentWorkCoordinator` uses a bounded worker pool for
+tool-controller inference. In default `global_barrier` mode it waits for the
+entire concurrent batch and then applies completions in deterministic order.
+Explicit `background` mode polls completions across later ticks.
 
 Correctness must not depend on successful provider cancellation. Every late
 result is checked for:
@@ -696,6 +709,7 @@ opportunity.
 | `perform(action, target_id, duration, reason)` | Attempt a supported activity | Timed action or affordance request |
 | `say(target_id, text, reason)` | Speak exact in-world words | Speech intent |
 | `wait(duration, reason)` | Intentionally remain idle | `IDLE` |
+| `skip(reconsider_after_seconds, reason)` | No useful decision is needed now | No physical plan; defer cognition eligibility |
 
 `reason` is private controller metadata. It is never automatically audible or
 visible.
@@ -945,7 +959,7 @@ Examples:
 Do not:
 
 - silently treat failure as success;
-- let a provider exception stop physical ticks;
+- let a provider exception crash the run or leave a barrier unresolved;
 - invent a success-shaped fallback;
 - retry indefinitely;
 - ask an LLM to reinterpret a deterministic precondition failure.
@@ -989,10 +1003,10 @@ Do not make a provider swap require changes to domain systems.
 | Telemetry API/WebSocket/UI | Implemented | Operator-facing, omniscient |
 | Ground-truth dataset export | Implemented | SQLite and JSONL |
 | Real LLM model client | Implemented, opt-in | OpenAI-compatible async HTTP adapter |
-| Typed controller tools | Implemented | `go_to`, `perform`, `say`, `wait` |
+| Typed controller tools | Implemented | `go_to`, `travel_to`, `perform`, `say`, `wait`, `skip` |
 | Observer-specific sensing | Implemented | Vision, hearing, inbox, timestamped knowledge |
 | Optional narrator | Planned, optional | Non-authoritative translation only |
-| Async model worker pool | Implemented | Bounded concurrency and deterministic commit |
+| Async model worker pool | Implemented | Global-barrier default, background compatibility, bounded concurrency, deterministic commit |
 | Model response recording/replay | Implemented | Sanitized JSONL recording and deterministic replay |
 | Live-run checkpoint/resume | Out of current scope | Dataset persistence is not a checkpoint |
 
@@ -1212,7 +1226,8 @@ If Alex's energy becomes critical before departure:
 - the controller cannot override correction;
 - observers may see Alex change direction or use a bed;
 - they do not automatically receive Alex's numeric energy or private drive;
-- a late model result is rejected as stale.
+- a result logically cancelled by Stop, or made stale in explicit background
+  mode, is rejected rather than committed.
 
 This example captures the central philosophy: private cognition proposes,
 deterministic embodiment acts, situated perception informs, and explicit speech

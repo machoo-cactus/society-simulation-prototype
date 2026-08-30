@@ -46,6 +46,7 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     with TestClient(app) as client:
         script = client.get("/ui/app.js")
         styles = client.get("/ui/styles.css")
+        ui_state = client.get("/ui/ui-state.js")
         telemetry_hz = app.state.simulation_manager.telemetry_hz
 
     assert script.status_code == 200
@@ -78,6 +79,8 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     assert "after_snapshot_revision" in script.text
     assert "function renderTranscript()" in script.text
     assert "runUiRuntimeSelfCheck" in script.text
+    assert "cognitionPhase" in script.text
+    assert "cognitionSettling" in ui_state.text
     assert styles.status_code == 200
     assert "text/css" in styles.headers["content-type"]
     assert "#world-canvas" in styles.text

@@ -131,6 +131,13 @@ class TelemetryBroker:
             {
                 "status": self.runner.status.value,
                 "speed": self.runner.speed,
+                "cognition_phase": self.runner.cognition_phase.value,
+                "cognition_pending_decision_ids": list(
+                    self.runner.cognition_pending_decision_ids
+                ),
+                "cognition_wait_elapsed_seconds": (
+                    self.runner.cognition_wait_elapsed_seconds
+                ),
             },
         )
 
@@ -336,6 +343,19 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
     return {
         "status": runner.status.value,
         "speed": runner.speed,
+        "cognition_phase": runner.cognition_phase.value,
+        "cognition_execution_mode": (
+            runner.configuration.cognition_execution_mode
+        ),
+        "cognition_pending_count": len(
+            runner.cognition_pending_decision_ids
+        ),
+        "cognition_pending_decision_ids": list(
+            runner.cognition_pending_decision_ids
+        ),
+        "cognition_wait_elapsed_seconds": (
+            runner.cognition_wait_elapsed_seconds
+        ),
         "tick": runner.clock.tick,
         "simulation_time": runner.clock.simulation_time,
         "world": {
@@ -455,6 +475,7 @@ def build_agent_snapshot(
             "state_revision": controller.state_revision,
             "current_decision_id": controller.current_decision_id,
             "last_outcome": controller.last_outcome,
+            "next_decision_time": controller.next_decision_time,
         }
     if registry.has_component(agent_id, PerceptionComponent):
         perception = registry.get_component(agent_id, PerceptionComponent)

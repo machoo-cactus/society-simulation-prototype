@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_retry_attempts: int = 3
     llm_retry_delay_seconds: float = 1.0
-    llm_tool_choice: str = "auto"
+    llm_tool_choice: str = "required"
     llm_max_output_tokens: int = 512
     llm_max_concurrency: int = 4
     llm_record_path: Path | None = None
@@ -58,6 +58,11 @@ def create_model_client(settings: Settings) -> ModelClient | None:
         raise ValueError(
             "STAGE0_LLM_BASE_URL and STAGE0_LLM_MODEL are required "
             "for openai-compatible"
+        )
+    if settings.llm_tool_choice == "none":
+        raise ValueError(
+            "STAGE0_LLM_TOOL_CHOICE=none is incompatible with tool-agent "
+            "cognition"
         )
     client: ModelClient = OpenAICompatibleClient(
         OpenAICompatibleConfiguration(

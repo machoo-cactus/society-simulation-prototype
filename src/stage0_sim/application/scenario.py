@@ -560,6 +560,7 @@ class CognitionSettingsDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     controller: str = "legacy"
+    execution_mode: Literal["global_barrier", "background"] = "global_barrier"
     model_profile: str = "default"
     decision_timeout_seconds: float = Field(default=30.0, gt=0)
     max_output_tokens: int = Field(default=512, gt=0)
@@ -575,6 +576,7 @@ class CognitionSettingsDefinition(BaseModel):
             "perform",
             "say",
             "wait",
+            "skip",
             "travel_to",
         ]
     )
@@ -590,6 +592,7 @@ class CognitionSettingsDefinition(BaseModel):
             "perform",
             "say",
             "wait",
+            "skip",
             "travel_to",
         }
         if unknown:
@@ -839,6 +842,7 @@ def create_runner(
                 max_input_tokens=scenario.cognition.max_input_tokens,
                 max_output_tokens=scenario.cognition.max_total_output_tokens,
                 memory_store=memory_store,
+                execution_mode=scenario.cognition.execution_mode,
             )
         )
         systems.add(CognitionScheduler())
@@ -1127,6 +1131,7 @@ def create_runner(
             dt=scenario.dt,
             speed=speed if speed is not None else scenario.speed,
             run_id=run_id if run_id is not None else scenario.run_id,
+            cognition_execution_mode=scenario.cognition.execution_mode,
         ),
         registry=registry,
         systems=systems,
@@ -1369,6 +1374,7 @@ class ControllerDefinition(BaseModel):
             "perform",
             "say",
             "wait",
+            "skip",
             "travel_to",
         ]
     )
@@ -1380,6 +1386,7 @@ class ControllerDefinition(BaseModel):
             "perform",
             "say",
             "wait",
+            "skip",
             "travel_to",
         }
         if unknown:

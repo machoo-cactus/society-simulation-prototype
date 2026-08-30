@@ -24,6 +24,9 @@ const state = {
   characters: [],
   runId: null,
   runStatus: "created",
+  cognitionPhase: "idle",
+  cognitionPendingCount: 0,
+  cognitionWaitElapsedSeconds: 0,
   bootstrap: null,
   viewMode: "AUTO",
   viewLevel: "BUILDING",
@@ -246,6 +249,15 @@ function normalizeSnapshot(raw) {
   );
   return {
     status: optionalString(raw.status) ?? state.runStatus,
+    cognitionPhase: optionalString(raw.cognition_phase) ?? "idle",
+    cognitionPendingCount: Math.max(
+      0,
+      finiteNumber(raw.cognition_pending_count, 0)
+    ),
+    cognitionWaitElapsedSeconds: Math.max(
+      0,
+      finiteNumber(raw.cognition_wait_elapsed_seconds, 0)
+    ),
     speed: finiteNumber(raw.speed, 1),
     tick: Math.max(0, finiteNumber(raw.tick, 0)),
     simulationTime: Math.max(0, finiteNumber(raw.simulation_time, 0)),
@@ -585,6 +597,10 @@ function handleEnvelope(message) {
         isObject(message.payload.snapshot) ? message.payload.snapshot : message.payload
       );
       state.runStatus = state.snapshot.status;
+      state.cognitionPhase = state.snapshot.cognitionPhase;
+      state.cognitionPendingCount = state.snapshot.cognitionPendingCount;
+      state.cognitionWaitElapsedSeconds =
+        state.snapshot.cognitionWaitElapsedSeconds;
       state.uiState = uiStateForRunStatus(
         state.runStatus,
         Boolean(state.loadedScenario)
@@ -613,6 +629,8 @@ function handleEnvelope(message) {
 
   if (message.type === "simulation_status") {
     state.runStatus = optionalString(message.payload.status) ?? state.runStatus;
+    state.cognitionPhase =
+      optionalString(message.payload.cognition_phase) ?? state.cognitionPhase;
     state.uiState = uiStateForRunStatus(
       state.runStatus,
       Boolean(state.loadedScenario)
@@ -749,6 +767,16 @@ async function refreshRunState() {
   if (!state.runId) return;
   const run = await api(`/simulation/runs/${encodeURIComponent(state.runId)}`);
   state.runStatus = run.status;
+  state.cognitionPhase = optionalString(run.cognition_phase) ?? "idle";
+  state.cognitionPendingCount = Array.isArray(
+    run.cognition_pending_decision_ids
+  )
+    ? run.cognition_pending_decision_ids.length
+    : 0;
+  state.cognitionWaitElapsedSeconds = Math.max(
+    0,
+    finiteNumber(run.cognition_wait_elapsed_seconds, 0)
+  );
   state.uiState = uiStateForRunStatus(
     run.status,
     Boolean(state.loadedScenario)
@@ -800,6 +828,8 @@ function render() {
   renderInspector();
   drawWorld();
   updateControls();
+  updateRunLabel();
+  setControlStatus(statusMessage(state.runStatus));
   document.querySelector(".world-panel")?.classList.toggle(
     "paused",
     state.runStatus === "paused"
@@ -1653,6 +1683,7 @@ function updateControls() {
   const availability = controlAvailability({
     uiState: state.uiState,
     runStatus: state.runStatus,
+    cognitionPhase: state.cognitionPhase,
     hasRun,
     hasScenario: Boolean(state.loadedScenario),
     historyComplete,
@@ -1673,6 +1704,14 @@ function updateControls() {
 }
 
 function statusMessage(status) {
+  if (state.cognitionPhase === "waiting") {
+    const count = state.cognitionPendingCount;
+    const elapsed = state.cognitionWaitElapsedSeconds.toFixed(1);
+    return `Simulation frozen for ${count} cognition request${count === 1 ? "" : "s"} (${elapsed}s elapsed).`;
+  }
+  if (state.cognitionPhase === "applying") {
+    return "Applying the settled cognition batch.";
+  }
   if (status === "paused") return "Simulation paused. Tick will remain stable until Resume or Single step.";
   if (status === "stopped") return "Run stopped. The loaded scenario and final results remain available.";
   if (status === "running") return "Simulation running.";
@@ -1681,7 +1720,7 @@ function statusMessage(status) {
 
 function updateRunLabel() {
   elements["run-label"].textContent = state.runId
-    ? `${state.runId} / ${state.runStatus}`
+    ? `${state.runId} / ${state.runStatus} / cognition ${state.cognitionPhase}`
     : "No active run";
 }
 
@@ -1708,6 +1747,9 @@ function clearProtocolWarning() {
 function resetRunState() {
   state.runId = null;
   state.runStatus = "created";
+  state.cognitionPhase = "idle";
+  state.cognitionPendingCount = 0;
+  state.cognitionWaitElapsedSeconds = 0;
   state.snapshot = null;
   state.bootstrap = null;
   state.selectedAgentId = null;

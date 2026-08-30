@@ -1,6 +1,6 @@
 # Real LLM Tool-Agent Architecture Plan
 
-**Status:** Initial vertical slice implemented  
+**Status:** Initial vertical slice and global cognition barrier implemented
 **Scope:** Real-run cognition for Stage 0  
 **Primary goal:** Let an LLM control a simulated person through typed tools without
 letting model output directly mutate simulation state.
@@ -11,7 +11,7 @@ runtime now provides this boundary separately from operator telemetry.
 
 **Implementation note (2026-08-27):** Phases A-D now have an initial integrated
 implementation: deterministic visual/auditory facts and knowledge, strict
-`go_to`/`perform`/`say`/`wait` tools, speech delivery, an OpenAI-compatible
+`go_to`/`perform`/`say`/`wait`/`skip` tools, speech delivery, an OpenAI-compatible
 client, bounded asynchronous completion handling, and record/replay adapters.
 The richer Phase E interaction features remain deferred.
 
@@ -20,6 +20,12 @@ character profiles, a separate general controller prompt, and a dedicated
 character-description message. `travel_to` is available for hierarchical city
 scenarios. The standalone fake server and real providers share the
 OpenAI-compatible `/v1/chat/completions` contract.
+
+**Barrier update (2026-08-30):** `global_barrier` is now the default cognition
+execution mode. Requests created by one tick run concurrently, the simulation
+clock freezes until the batch settles, and no result commits before the batch
+is complete. Explicit `background` mode preserves the earlier cross-tick
+polling behavior. OpenAI-compatible tool choice now defaults to `required`.
 
 ## 1. Executive proposal
 
@@ -32,6 +38,7 @@ catalog of currently available tools. It may select a tool such as:
 - `perform`
 - `say`
 - `wait`
+- `skip`
 
 The model is not asked to roleplay an unconstrained character or narrate what has
 already happened. It is asked to act as the character's executive controller:
@@ -358,8 +365,10 @@ class ModelClient(Protocol):
 ```
 
 The real client should be asynchronous even though current fake protocols are
-synchronous. Network latency must not stall the simulation runner. A synchronous
-scripted adapter can be wrapped without changing application code.
+synchronous. Network latency intentionally holds the simulation at the current
+tick in `global_barrier` mode, but must not block the server event loop,
+telemetry, Pause, or Stop. A synchronous scripted adapter can be wrapped without
+changing application code.
 
 `ModelRequest` should include:
 
@@ -944,12 +953,14 @@ Do not request decisions:
 1. `CognitionScheduler` detects eligibility during the ordered pass.
 2. It records a deterministic request with `decision_id`, tick, revision, and
    trigger.
-3. A worker consumes the request outside the simulation tick.
+3. Bounded workers consume all requests from the tick outside the ordered
+   system pass.
 4. Context and memories are projected from the captured request snapshot.
 5. `CharacterController` calls the model with allowed tools.
 6. The response is normalized into zero or one state-changing `ModelToolCall`.
-7. The result enters a completion queue; it does not mutate the world.
-8. At a later post-tick commit boundary, results are sorted by request tick,
+7. Each result is retained without mutating the world until every request in
+   the batch completes, fails, times out, or is cancelled.
+8. At the current tick boundary, settled results are sorted by request tick,
    agent ID, and decision ID.
 9. Policy and tool schemas are validated again against current state.
 10. A valid tool call becomes a domain intent and then an executable plan/speech
@@ -1074,15 +1085,9 @@ depending on a live model.
 
 ## 16. Scheduling and concurrency
 
-The current post-tick coordinator calls synchronous fake providers directly. Real
-network calls should use:
-
-- an `asyncio.Queue` for requests;
-- a bounded worker pool;
-- per-run and global concurrency limits;
-- per-request timeout;
-- a thread-safe or event-loop-owned completion queue;
-- deterministic completion application at post-tick boundaries.
+The implemented coordinator uses a bounded worker pool, per-run concurrency
+limits, per-request timeouts, and deterministic completion application at the
+tick boundary.
 
 Wall-clock completion order must not decide simulation order. If several results
 are ready, commit them by:
@@ -1091,10 +1096,12 @@ are ready, commit them by:
 (requested_tick, agent_id, decision_sequence)
 ```
 
-The simulation may continue while requests are pending. Each request contains a
-state revision; stale results are rejected. A scenario may optionally pause a
-specific character's System 2 activity while waiting, but must not pause the
-global micro-clock.
+In default `global_barrier` mode the global micro-clock does not continue while
+requests are pending. Every request in the batch reaches a terminal outcome
+before any result commits. Telemetry and lifecycle endpoints remain responsive,
+Pause finishes the current boundary, and Stop logically cancels pending
+decisions. Explicit `background` mode allows the simulation to continue and
+uses state revisions to reject stale results.
 
 ## 17. Events and persistence
 
@@ -1171,12 +1178,13 @@ Add an optional cognition section:
   },
   "cognition": {
     "controller": "tool-agent",
+    "execution_mode": "global_barrier",
     "model_profile": "default",
     "decision_timeout_seconds": 30,
     "max_output_tokens": 512,
     "max_read_tool_rounds": 0,
     "max_state_changing_tools": 1,
-    "tool_allowlist": ["go_to", "perform", "say", "wait"]
+    "tool_allowlist": ["go_to", "perform", "say", "wait", "skip"]
   }
 }
 ```
@@ -1208,7 +1216,7 @@ Characters may narrow the global policy:
     },
     "controller": {
       "enabled": true,
-      "tool_allowlist": ["go_to", "perform", "say", "wait"]
+      "tool_allowlist": ["go_to", "perform", "say", "wait", "skip"]
     },
     "senses": {
       "vision_range": 6,
@@ -1303,7 +1311,7 @@ Deliver:
 
 - provider-neutral model contracts;
 - tool registry and strict schemas;
-- `go_to`, `perform`, `say`, and `wait` handlers;
+- `go_to`, `travel_to`, `perform`, `say`, `wait`, and `skip` handlers;
 - character observation and profile models;
 - scripted tool-calling controller;
 - tool/event persistence.
@@ -1329,7 +1337,7 @@ Deliver:
 Gate:
 
 - A real model chooses and invokes one valid tool.
-- Provider timeout does not stall micro-ticks.
+- Provider timeout is a terminal batch result that releases the global barrier.
 - No credential or provider object enters events/datasets.
 
 ### Phase D: Asynchronous scheduling and replay
@@ -1499,7 +1507,7 @@ A first real-run milestone is complete when:
 4. The request describes the model as the character's controller.
 5. The model receives only registered tool definitions, self state, perceived
    facts, and timestamped knowledge.
-6. The model calls `go_to`, `perform`, `say`, or `wait`.
+6. The model calls `go_to`, `travel_to`, `perform`, `say`, `wait`, or `skip`.
 7. Strict validation converts the call into an intent without direct ECS mutation.
 8. The intent is committed at a deterministic boundary.
 9. Existing domain systems execute or reject it based on world state.
@@ -1511,7 +1519,8 @@ A first real-run milestone is complete when:
    hidden destination.
 13. Optional narration can rephrase facts but cannot alter tool authorization or
    canonical replay.
-14. Timeouts and malformed calls do not stop physical simulation.
+14. Timeouts and malformed calls settle explicitly and release the cognition
+    barrier without a tool commit.
 15. Provider/model/tokens/latency/tool outcome are observable.
 16. The same interaction can be replayed without the live provider.
 

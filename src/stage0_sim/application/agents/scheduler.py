@@ -33,6 +33,7 @@ class CognitionScheduler:
             if (
                 not controller.enabled
                 or controller.request_pending
+                or context.clock.simulation_time < controller.next_decision_time
                 or plan.current is not None
                 or plan.queue
                 or drive.state is not System1State.NORMAL
@@ -72,7 +73,11 @@ class CognitionScheduler:
                 simulation_tick=context.clock.tick,
                 simulation_time=context.clock.simulation_time,
                 agent_id=agent_id,
-                payload={"decision_id": decision_id, "trigger": "idle"},
+                payload={
+                    "decision_id": decision_id,
+                    "trigger": "idle",
+                    "execution_mode": coordinator.execution_mode,
+                },
                 correlation_id=decision_id,
             )
             request = CharacterDecisionRequest(
@@ -113,6 +118,7 @@ class CognitionScheduler:
                     "profile_template_version": request.profile_template_version,
                     "profile_content_hash": request.profile_content_hash,
                     "allowed_tools": list(request.allowed_tools),
+                    "execution_mode": coordinator.execution_mode,
                     "fact_ids": [
                         fact.fact_id for fact in request.observation.facts
                     ],

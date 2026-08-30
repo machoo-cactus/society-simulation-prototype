@@ -95,7 +95,7 @@ class OpenAICompatibleConfiguration:
     timeout_seconds: float = 30.0
     retry_attempts: int = 3
     retry_delay_seconds: float = 1.0
-    tool_choice: str = "auto"
+    tool_choice: str = "required"
 
     def __post_init__(self) -> None:
         if not self.base_url or not self.model:

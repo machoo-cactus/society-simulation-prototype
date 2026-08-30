@@ -1,5 +1,6 @@
 import asyncio
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
@@ -26,6 +27,7 @@ from stage0_sim.domain.intents import (
     ActivityIntent,
     CharacterIntent,
     MoveIntent,
+    SkipIntent,
     SpeechIntent,
     TravelIntent,
     WaitIntent,
@@ -58,11 +60,16 @@ class AgentWorkCoordinator:
         max_input_tokens: int | None = None,
         max_output_tokens: int | None = None,
         memory_store: EpisodicMemoryStore | None = None,
+        execution_mode: str = "global_barrier",
     ) -> None:
         if max_concurrency <= 0:
             raise ValueError("max_concurrency must be greater than zero")
         if request_timeout_seconds <= 0:
             raise ValueError("request_timeout_seconds must be greater than zero")
+        if execution_mode not in {"global_barrier", "background"}:
+            raise ValueError(
+                "execution_mode must be global_barrier or background"
+            )
         self.controller = controller
         self.tool_registry = tool_registry
         self.request_timeout_seconds = request_timeout_seconds
@@ -70,11 +77,16 @@ class AgentWorkCoordinator:
         self.max_input_tokens = max_input_tokens
         self.max_output_tokens = max_output_tokens
         self.memory_store = memory_store
+        self.execution_mode = execution_mode
         self.request_count = 0
         self.input_tokens = 0
         self.output_tokens = 0
         self._executor = ThreadPoolExecutor(
-            max_workers=max_concurrency,
+            max_workers=(
+                1
+                if bool(getattr(self.controller, "synchronous", False))
+                else max_concurrency
+            ),
             thread_name_prefix="stage0-controller",
         )
         self._pending: dict[Future[CharacterDecision], _PendingDecision] = {}
@@ -102,21 +114,64 @@ class AgentWorkCoordinator:
         self._queued.append(request)
 
     def _start(self, request: CharacterDecisionRequest) -> None:
-        if bool(getattr(self.controller, "synchronous", False)):
-            future: Future[CharacterDecision] = Future()
-            try:
-                future.set_result(asyncio.run(self._decide(request)))
-            except ModelClientError as error:
-                future.set_exception(error)
-        else:
-            future = self._executor.submit(asyncio.run, self._decide(request))
+        future = self._executor.submit(asyncio.run, self._decide(request))
         self._pending[future] = _PendingDecision(request, time.monotonic())
 
     def drain(self, context: SystemContext) -> None:
-        queued = tuple(self._queued)
-        self._queued.clear()
-        for request in queued:
-            self._start(request)
+        completed = self._collect_completed(start_queued=True)
+        for item in completed:
+            self._apply(context, item)
+
+    async def drain_and_wait(
+        self,
+        context: SystemContext,
+        *,
+        on_applying: Callable[[], None] | None = None,
+    ) -> None:
+        completed = self._collect_completed(start_queued=True)
+        while self._pending:
+            if completed:
+                await asyncio.sleep(0)
+            else:
+                await asyncio.sleep(0.01)
+            completed.extend(self._collect_completed(start_queued=False))
+        if on_applying is not None and completed:
+            on_applying()
+        for item in completed:
+            self._apply(context, item)
+
+    @property
+    def pending_count(self) -> int:
+        return len(self._queued) + len(self._pending)
+
+    @property
+    def pending_decision_ids(self) -> tuple[str, ...]:
+        requests = [
+            *self._queued,
+            *(pending.request for pending in self._pending.values()),
+        ]
+        return tuple(
+            request.decision_id
+            for request in sorted(
+                requests,
+                key=lambda item: (
+                    item.requested_tick,
+                    item.agent_id,
+                    item.decision_id,
+                ),
+            )
+        )
+
+    def _collect_completed(
+        self,
+        *,
+        start_queued: bool,
+    ) -> list[_CompletedDecision]:
+        if start_queued:
+            queued = tuple(self._queued)
+            self._queued.clear()
+            for request in queued:
+                self._start(request)
         completed: list[_CompletedDecision] = []
         for future, pending in tuple(self._pending.items()):
             request = pending.request
@@ -153,8 +208,7 @@ class AgentWorkCoordinator:
                 item.request.decision_id,
             )
         )
-        for item in completed:
-            self._apply(context, item)
+        return completed
 
     def cancel_all(self, context: SystemContext, reason: str) -> None:
         for request in self._queued:
@@ -262,6 +316,13 @@ class AgentWorkCoordinator:
                 None,
                 "invalid_arguments",
                 decision.error or "model did not return a tool",
+                details={
+                    "expected_tool_call_count": 1,
+                    "actual_tool_call_count": len(turn.tool_calls),
+                    "finish_reason": turn.finish_reason,
+                    "has_text": bool(turn.text),
+                    "offered_tools": list(request.allowed_tools),
+                },
             )
             return
         call = decision.tool_call
@@ -353,6 +414,8 @@ class AgentWorkCoordinator:
                     duration=intent.duration_seconds,
                 )
             )
+        elif isinstance(intent, SkipIntent):
+            pass
         elif isinstance(intent, SpeechIntent):
             if context.registry.has_component(
                 request.agent_id, PendingSpeechComponent
@@ -392,6 +455,11 @@ class AgentWorkCoordinator:
         state.current_decision_id = None
         state.state_revision += 1
         state.last_outcome = f"{tool_name} committed"
+        if isinstance(intent, SkipIntent):
+            state.next_decision_time = (
+                context.clock.simulation_time
+                + intent.reconsider_after_seconds
+            )
         context.events.emit(
             "tool.committed",
             simulation_tick=context.clock.tick,
@@ -405,6 +473,22 @@ class AgentWorkCoordinator:
             },
             correlation_id=request.decision_id,
         )
+        if isinstance(intent, SkipIntent):
+            context.events.emit(
+                "cognition.skipped",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=request.agent_id,
+                payload={
+                    "decision_id": request.decision_id,
+                    "tool_call_id": intent.tool_call_id,
+                    "reconsider_after_seconds": (
+                        intent.reconsider_after_seconds
+                    ),
+                    "next_decision_time": state.next_decision_time,
+                },
+                correlation_id=request.decision_id,
+            )
 
     def _reject(
         self,
@@ -413,6 +497,8 @@ class AgentWorkCoordinator:
         tool_call_id: str | None,
         reason: str,
         message: str,
+        *,
+        details: dict[str, JsonValue] | None = None,
     ) -> None:
         self._clear_pending(context, request)
         context.events.emit(
@@ -425,6 +511,7 @@ class AgentWorkCoordinator:
                 "tool_call_id": tool_call_id,
                 "reason": reason,
                 "message": message,
+                **(details or {}),
             },
             correlation_id=request.decision_id,
         )

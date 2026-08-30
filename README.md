@@ -267,7 +267,16 @@ endpoint before resuming live updates.
 
 Tool-agent scenarios require an explicitly configured OpenAI-compatible or
 replay provider. Provider work runs outside the ordered physical system pass,
-and completed tools are applied at deterministic post-tick boundaries.
+and completed tools are applied at deterministic post-system boundaries. The
+default `cognition.execution_mode` is `global_barrier`: all requests created by
+one tick run concurrently, simulation time remains frozen until the whole batch
+settles, and results then commit in stable order. Set the mode to `background`
+only when intentionally reproducing the earlier latency-independent behavior.
+
+Controllers must return exactly one tool call. OpenAI-compatible requests
+therefore default to `tool_choice=required`. `skip` means that no useful
+decision is needed and defers cognition without creating a plan; `wait` creates
+an intentional in-world idle action.
 
 ### Start the standalone fake model API
 
@@ -313,7 +322,7 @@ Settings use `STAGE0_` environment variables and may be placed in `.env`:
 | `STAGE0_LLM_TIMEOUT_SECONDS` | `30` | Provider HTTP timeout |
 | `STAGE0_LLM_RETRY_ATTEMPTS` | `3` | Attempts for transient HTTP/transport failures |
 | `STAGE0_LLM_RETRY_DELAY_SECONDS` | `1` | Initial retry backoff in seconds |
-| `STAGE0_LLM_TOOL_CHOICE` | `auto` | OpenAI-compatible tool-choice mode |
+| `STAGE0_LLM_TOOL_CHOICE` | `required` | OpenAI-compatible tool-choice mode; `none` is invalid for tool-agent cognition |
 | `STAGE0_LLM_MAX_OUTPUT_TOKENS` | `512` | Deployment ceiling per response |
 | `STAGE0_LLM_MAX_CONCURRENCY` | `4` | Deployment ceiling for concurrent requests |
 | `STAGE0_LLM_RECORD_PATH` | unset | Sanitized model request/response JSONL |

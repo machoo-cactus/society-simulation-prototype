@@ -824,7 +824,7 @@ def test_social_action_fails_if_target_loses_dialogue_capability_at_enqueue() ->
     assert dialogue.call_count == 0
 
 
-def test_tick_subscriber_stop_cancels_queued_macro_work_before_finalization(
+def test_tick_subscriber_stop_sees_settled_macro_work_before_finalization(
     tmp_path: Path,
 ) -> None:
     planner = FakePlanner()
@@ -857,7 +857,7 @@ def test_tick_subscriber_stop_cancels_queued_macro_work_before_finalization(
         DialogueWork(
             agent_id="speaker",
             target_id="listener",
-            prompt="Do not generate after stop.",
+            prompt="Generate before the completed tick is published.",
             top_k=1,
             requested_event_id=requested.event_id,
         )
@@ -887,28 +887,26 @@ def test_tick_subscriber_stop_cancels_queued_macro_work_before_finalization(
 
     assert runner.status is RunnerStatus.STOPPED
     assert runner.clock.tick == 1
-    assert planner.call_count == 0
-    assert dialogue.call_count == 0
+    assert planner.call_count == 1
+    assert dialogue.call_count == 1
     assert not runner.registry.get_component(
         "speaker", PlannerComponent
     ).request_pending
     assert not conversation.request_pending
     assert finalized_snapshot == {
-        "planner_calls": 0,
-        "dialogue_calls": 0,
+        "planner_calls": 1,
+        "dialogue_calls": 1,
         "planner_pending": False,
         "dialogue_pending": False,
         "event_count": len(runner.events.events),
     }
-    cancellations = [
-        event
-        for event in runner.events.events
-        if event.event_type in {"planner.cancelled", "dialogue.cancelled"}
-    ]
-    assert [event.payload["reason"] for event in cancellations] == [
-        "simulation_stopped",
-        "simulation_stopped",
-    ]
+    event_types = [event.event_type for event in runner.events.events]
+    assert event_types.index("planner.completed") < event_types.index(
+        "simulation.tick"
+    )
+    assert event_types.index("dialogue.generated") < event_types.index(
+        "simulation.tick"
+    )
     assert runner.events.events[-1].event_type == "simulation.stopped"
     store.close()
 

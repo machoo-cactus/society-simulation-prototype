@@ -34,6 +34,7 @@ export function uiStateForRunStatus(status, hasScenario) {
 export function controlAvailability({
   uiState,
   runStatus,
+  cognitionPhase = "idle",
   hasRun,
   hasScenario,
   historyComplete,
@@ -42,6 +43,7 @@ export function controlAvailability({
   const running = runStatus === "running";
   const paused = runStatus === "paused";
   const stopped = runStatus === "stopped";
+  const cognitionSettling = ["waiting", "applying"].includes(cognitionPhase);
   const scenarioReady =
     hasScenario
     && [UI_STATES.SCENARIO_READY, UI_STATES.STOPPED].includes(uiState);
@@ -50,11 +52,11 @@ export function controlAvailability({
     start: scenarioReady && (!hasRun || stopped) && !busy,
     pause: hasRun && running && !busy,
     resume: hasRun && paused && !busy,
-    step: hasRun && paused && !busy,
+    step: hasRun && paused && !busy && !cognitionSettling,
     stop: hasRun && !stopped && !busy,
     speed: hasRun && !stopped && !busy,
     loadScenario: (!hasRun || stopped) && !busy,
-    mutate: hasRun && !stopped && !busy,
+    mutate: hasRun && !stopped && !busy && !cognitionSettling,
     loadHistory: hasRun && !historyComplete,
   };
 }

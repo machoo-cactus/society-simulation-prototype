@@ -178,6 +178,8 @@ def _arguments_for(tool: ChatTool, call_number: int) -> dict[str, object]:
     arguments: dict[str, object] = {}
     if tool.function.name == "wait":
         arguments["duration_seconds"] = min(600, call_number)
+    elif tool.function.name == "skip":
+        arguments["reconsider_after_seconds"] = 30
     elif tool.function.name == "say":
         arguments["target_id"] = _first_string_example(
             properties.get("target_id"), "agent-001"

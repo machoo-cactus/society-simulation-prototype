@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -15,6 +16,7 @@ from stage0_sim.adapters.llm import (
     ReplayModelClient,
     ScriptedModelClient,
 )
+from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.application.agents.contracts import (
     CharacterDecisionRequest,
     CharacterObservation,
@@ -25,10 +27,19 @@ from stage0_sim.application.agents.contracts import (
     ObservedTarget,
     ToolDefinition,
 )
+from stage0_sim.application.agents.coordinator import AgentWorkCoordinator
 from stage0_sim.application.agents.tools import ToolRegistry, ToolValidationError
+from stage0_sim.application.manager import (
+    SimulationConflictError,
+    SimulationManager,
+)
 from stage0_sim.application.memory import EpisodicMemoryStore
+from stage0_sim.application.runner import CognitionPhase, RunnerStatus
 from stage0_sim.application.scenario import ScenarioDefinition, create_runner
+from stage0_sim.application.telemetry import build_runtime_snapshot
+from stage0_sim.config import Settings, create_model_client
 from stage0_sim.domain.components import (
+    ControllerComponent,
     HomeostasisComponent,
     PendingSpeechComponent,
     PerceptionComponent,
@@ -323,6 +334,56 @@ def test_tool_registry_rejects_extra_fields_and_unknown_targets() -> None:
     assert target.value.reason == "target_not_observable"
 
 
+def test_skip_tool_accepts_defaults_and_rejects_invalid_delay() -> None:
+    observation = CharacterObservation(
+        agent_id="alex",
+        display_name="Alex",
+        goals=(),
+        simulation_time=0,
+        location_id=None,
+        activity="IDLE",
+        satiety=100,
+        energy=100,
+        stress=0,
+        targets=(),
+        facts=(),
+        recent_outcome=None,
+    )
+    request = CharacterDecisionRequest(
+        decision_id="decision-1",
+        run_id="run",
+        agent_id="alex",
+        requested_tick=1,
+        state_revision=0,
+        trigger="idle",
+        character_description="Alex",
+        profile_id="alex",
+        profile_template_version=1,
+        profile_content_hash="hash",
+        observation=observation,
+        memories=(),
+        allowed_tools=("skip",),
+    )
+
+    intent = ToolRegistry().propose(
+        request,
+        ModelToolCall("call-1", "skip", {}),
+    )
+    assert intent.kind.value == "skip"
+    assert intent.reconsider_after_seconds == 30
+
+    with pytest.raises(ToolValidationError) as invalid:
+        ToolRegistry().propose(
+            request,
+            ModelToolCall(
+                "call-2",
+                "skip",
+                {"reconsider_after_seconds": 1},
+            ),
+        )
+    assert invalid.value.reason == "invalid_arguments"
+
+
 def test_travel_tool_produces_typed_cross_building_intent() -> None:
     observation = CharacterObservation(
         agent_id="alex",
@@ -375,6 +436,38 @@ def test_travel_tool_produces_typed_cross_building_intent() -> None:
     assert intent.mode.value == "CAR"
 
 
+def test_skip_defers_cognition_without_creating_a_plan() -> None:
+    runner = create_runner(
+        _tool_scenario(),
+        model_client=ScriptedModelClient(
+            (
+                _turn("skip", {"reconsider_after_seconds": 30}),
+                _turn("skip", {"reconsider_after_seconds": 30}),
+            )
+        ),
+    )
+
+    runner.run_for(1)
+
+    plan = runner.registry.get_component("alex", PlanComponent)
+    controller = runner.registry.get_component("alex", ControllerComponent)
+    assert plan.current is None
+    assert plan.queue == []
+    assert controller.next_decision_time == 31
+    assert any(
+        event.event_type == "cognition.skipped"
+        for event in runner.events.events
+    )
+
+    runner.run_for(29)
+    coordinator = runner.registry.get_resource(AgentWorkCoordinator)
+    assert coordinator.request_count == 1
+
+    runner.run_for(1)
+    assert coordinator.request_count == 2
+    runner.stop()
+
+
 def test_recording_and_replay_round_trip(tmp_path: Path) -> None:
     request = ModelRequest(
         request_id="request-1",
@@ -405,9 +498,32 @@ class _DelayedModelClient(ModelClient):
         return _turn("wait", {"duration_seconds": 10})
 
 
+class _ConcurrentModelClient(ModelClient):
+    def __init__(self) -> None:
+        self.barrier = threading.Barrier(2)
+        self.completed_at: dict[str, float] = {}
+
+    async def complete(self, request: ModelRequest) -> ModelTurn:
+        self.barrier.wait(timeout=1)
+        self.completed_at[request.request_id] = time.monotonic()
+        return _turn("skip", {"reconsider_after_seconds": 30})
+
+
+def _two_character_tool_scenario() -> ScenarioDefinition:
+    payload = _tool_scenario().model_dump(mode="json")
+    second = json.loads(json.dumps(payload["entities"][0]))
+    second["id"] = "blair"
+    second["components"]["position"] = {"x": 2, "y": 0}
+    second["components"]["character_profile"]["display_name"] = "Blair"
+    payload["entities"].append(second)
+    return ScenarioDefinition.model_validate(payload)
+
+
 def test_system1_makes_late_provider_result_stale() -> None:
+    payload = _tool_scenario().model_dump(mode="json")
+    payload["cognition"]["execution_mode"] = "background"
     runner = create_runner(
-        _tool_scenario(),
+        ScenarioDefinition.model_validate(payload),
         model_client=_DelayedModelClient(),
     )
 
@@ -430,7 +546,7 @@ def test_system1_makes_late_provider_result_stale() -> None:
     runner.stop()
 
 
-def test_coordinator_timeout_does_not_stop_simulation_ticks() -> None:
+def test_global_barrier_waits_for_timeout_before_completing_tick() -> None:
     payload = _tool_scenario().model_dump(mode="json")
     payload["cognition"]["decision_timeout_seconds"] = 0.01
     runner = create_runner(
@@ -438,18 +554,213 @@ def test_coordinator_timeout_does_not_stop_simulation_ticks() -> None:
         model_client=_DelayedModelClient(),
     )
 
+    started_at = time.monotonic()
     runner.run_for(1)
-    time.sleep(0.02)
-    runner.run_for(1)
+    elapsed = time.monotonic() - started_at
 
     failures = [
         event
         for event in runner.events.events
         if event.event_type == "cognition.failed"
     ]
-    assert runner.clock.tick == 2
+    assert runner.clock.tick == 1
+    assert elapsed >= 0.01
     assert failures[-1].payload["reason"] == "provider_timeout"
     runner.stop()
+
+
+def test_global_barrier_freezes_until_decision_is_committed() -> None:
+    runner = create_runner(
+        _tool_scenario(),
+        model_client=_DelayedModelClient(),
+    )
+
+    started_at = time.monotonic()
+    runner.run_for(1)
+    elapsed = time.monotonic() - started_at
+
+    assert elapsed >= 0.03
+    event_types = [event.event_type for event in runner.events.events]
+    assert event_types.index("tool.committed") < event_types.index(
+        "simulation.tick"
+    )
+    runner.stop()
+
+
+def test_global_barrier_dispatches_concurrently_and_commits_stably() -> None:
+    client = _ConcurrentModelClient()
+    runner = create_runner(
+        _two_character_tool_scenario(),
+        model_client=client,
+    )
+    committed_at: list[tuple[str | None, float]] = []
+    runner.events.subscribe(
+        lambda event: committed_at.append(
+            (event.agent_id, time.monotonic())
+        )
+        if event.event_type == "tool.committed"
+        else None
+    )
+
+    runner.run_for(1)
+
+    assert [agent_id for agent_id, _ in committed_at] == ["alex", "blair"]
+    last_completion = max(client.completed_at.values())
+    assert all(timestamp >= last_completion for _, timestamp in committed_at)
+    runner.stop()
+
+
+def test_pause_during_barrier_finishes_current_boundary() -> None:
+    async def exercise() -> None:
+        runner = create_runner(
+            _tool_scenario(),
+            model_client=_DelayedModelClient(),
+        )
+        task = asyncio.create_task(runner.run_for_async(1))
+        await asyncio.sleep(0.005)
+
+        assert runner.cognition_phase is CognitionPhase.WAITING
+        snapshot = build_runtime_snapshot(runner)
+        assert snapshot["cognition_pending_count"] == 1
+        assert snapshot["cognition_wait_elapsed_seconds"] >= 0
+        runner.pause()
+        await task
+
+        assert runner.status is RunnerStatus.PAUSED
+        assert runner.cognition_phase is CognitionPhase.IDLE
+        assert any(
+            event.event_type == "tool.committed"
+            for event in runner.events.events
+        )
+        runner.stop()
+
+    asyncio.run(exercise())
+
+
+def test_stop_during_barrier_cancels_without_late_commit() -> None:
+    async def exercise() -> None:
+        runner = create_runner(
+            _tool_scenario(),
+            model_client=_DelayedModelClient(),
+        )
+        task = asyncio.create_task(runner.run_for_async(1))
+        await asyncio.sleep(0.005)
+
+        runner.stop()
+        await task
+
+        event_types = [event.event_type for event in runner.events.events]
+        assert runner.status is RunnerStatus.STOPPED
+        assert "cognition.cancelled" in event_types
+        assert "tool.committed" not in event_types
+        assert event_types[-1] == "simulation.stopped"
+
+    asyncio.run(exercise())
+
+
+def test_manager_rejects_vital_mutation_while_step_is_waiting(
+    tmp_path: Path,
+) -> None:
+    async def exercise() -> None:
+        manager = SimulationManager(
+            SQLiteDatasetStore(tmp_path / "barrier.sqlite3"),
+            model_client=_DelayedModelClient(),
+        )
+        scenario_id = manager.add_scenario(_tool_scenario())
+        run_id = await manager.start_run(scenario_id, realtime=False)
+        manager.pause(run_id)
+        step = asyncio.create_task(manager.step(run_id))
+        await asyncio.sleep(0.005)
+
+        with pytest.raises(SimulationConflictError, match="settling"):
+            manager.mutate_vitals(
+                run_id,
+                "alex",
+                {"satiety": 50},
+            )
+
+        await step
+        await manager.close()
+
+    asyncio.run(exercise())
+
+
+def test_zero_tool_calls_include_cardinality_diagnostics() -> None:
+    empty_turn = ModelTurn(
+        text="I will do nothing.",
+        tool_calls=(),
+        finish_reason="stop",
+        provider="scripted",
+        model="scripted-v1",
+        latency_ms=0,
+    )
+    runner = create_runner(
+        _tool_scenario(),
+        model_client=ScriptedModelClient((empty_turn,)),
+    )
+
+    runner.run_for(1)
+
+    rejected = next(
+        event
+        for event in runner.events.events
+        if event.event_type == "tool.rejected"
+    )
+    assert rejected.payload["expected_tool_call_count"] == 1
+    assert rejected.payload["actual_tool_call_count"] == 0
+    assert rejected.payload["finish_reason"] == "stop"
+    assert rejected.payload["has_text"] is True
+    assert "skip" in rejected.payload["offered_tools"]
+    runner.stop()
+
+
+def test_multiple_tool_calls_are_rejected_as_one_invalid_decision() -> None:
+    turn = ModelTurn(
+        text=None,
+        tool_calls=(
+            ModelToolCall("call-1", "wait", {"duration_seconds": 1}),
+            ModelToolCall(
+                "call-2",
+                "skip",
+                {"reconsider_after_seconds": 30},
+            ),
+        ),
+        finish_reason="tool_calls",
+        provider="scripted",
+        model="scripted-v1",
+        latency_ms=0,
+    )
+    runner = create_runner(
+        _tool_scenario(),
+        model_client=ScriptedModelClient((turn,)),
+    )
+
+    runner.run_for(1)
+
+    rejected = [
+        event
+        for event in runner.events.events
+        if event.event_type == "tool.rejected"
+    ]
+    assert len(rejected) == 1
+    assert rejected[0].payload["actual_tool_call_count"] == 2
+    assert not any(
+        event.event_type == "tool.committed"
+        for event in runner.events.events
+    )
+    runner.stop()
+
+
+def test_none_tool_choice_is_rejected_for_tool_agent_client() -> None:
+    with pytest.raises(ValueError, match="incompatible"):
+        create_model_client(
+            Settings(
+                llm_provider="openai-compatible",
+                llm_base_url="http://127.0.0.1:8080/v1",
+                llm_model="local",
+                llm_tool_choice="none",
+            )
+        )
 
 
 def test_run_budget_exhaustion_is_explicit_and_stops_cognition() -> None:
@@ -579,5 +890,5 @@ def test_openai_client_retries_llamacpp_503_and_accepts_root_url(
     )
     assert sent.data is not None
     sent_payload = json.loads(sent.data.decode("utf-8"))
-    assert sent_payload["tool_choice"] == "auto"
+    assert sent_payload["tool_choice"] == "required"
     assert result.tool_calls[0].name == "wait"

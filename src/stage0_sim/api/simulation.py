@@ -105,6 +105,16 @@ async def get_run(run_id: str, request: Request) -> dict[str, object]:
     return {
         "run_id": run_id,
         "status": managed.runner.status.value,
+        "cognition_phase": managed.runner.cognition_phase.value,
+        "cognition_execution_mode": (
+            managed.runner.configuration.cognition_execution_mode
+        ),
+        "cognition_pending_decision_ids": list(
+            managed.runner.cognition_pending_decision_ids
+        ),
+        "cognition_wait_elapsed_seconds": (
+            managed.runner.cognition_wait_elapsed_seconds
+        ),
         "speed": managed.runner.speed,
         "tick": managed.runner.clock.tick,
         "simulation_time": managed.runner.clock.simulation_time,
@@ -321,7 +331,7 @@ async def resume_run(run_id: str, request: Request) -> dict[str, str]:
 async def step_run(run_id: str, request: Request) -> dict[str, object]:
     manager = get_manager(request)
     try:
-        manager.step(run_id)
+        await manager.step(run_id)
     except SimulationNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except (RuntimeError, SimulationConflictError) as error:

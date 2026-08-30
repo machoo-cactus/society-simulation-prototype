@@ -10,6 +10,7 @@ class IntentKind(StrEnum):
     ACTIVITY = "activity"
     SPEECH = "speech"
     WAIT = "wait"
+    SKIP = "skip"
     TRAVEL = "travel"
 
 
@@ -44,6 +45,11 @@ class SpeechIntent(CharacterIntent):
 @dataclass(frozen=True, slots=True)
 class WaitIntent(CharacterIntent):
     duration_seconds: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class SkipIntent(CharacterIntent):
+    reconsider_after_seconds: float = 30.0
 
 
 @dataclass(frozen=True, slots=True)

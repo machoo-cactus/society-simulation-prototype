@@ -16,13 +16,14 @@
   },
   "cognition": {
     "controller": "tool-agent",
+    "execution_mode": "global_barrier",
     "model_profile": "default",
     "decision_timeout_seconds": 30,
     "max_output_tokens": 512,
     "max_read_tool_rounds": 0,
     "max_state_changing_tools": 1,
     "max_concurrency": 4,
-    "tool_allowlist": ["go_to", "perform", "say", "wait"]
+    "tool_allowlist": ["go_to", "perform", "say", "wait", "skip"]
   },
   "world": {
     "width": 7,
@@ -78,7 +79,7 @@
         "character_profile": {"character_id": "alex-chen"},
         "controller": {
           "enabled": true,
-          "tool_allowlist": ["go_to", "perform", "say", "wait"]
+          "tool_allowlist": ["go_to", "perform", "say", "wait", "skip"]
         },
         "memory": {"top_k": 3}
       }
@@ -91,7 +92,7 @@
         "character_profile": {"character_id": "jordan-lee"},
         "controller": {
           "enabled": true,
-          "tool_allowlist": ["go_to", "perform", "say", "wait"]
+          "tool_allowlist": ["go_to", "perform", "say", "wait", "skip"]
         },
         "memory": {"top_k": 3}
       }

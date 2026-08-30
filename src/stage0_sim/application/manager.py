@@ -10,7 +10,11 @@ from stage0_sim.application.characters import (
     prepare_scenario,
 )
 from stage0_sim.application.collection import RunDataCollector
-from stage0_sim.application.runner import RunnerStatus, SimulationRunner
+from stage0_sim.application.runner import (
+    CognitionPhase,
+    RunnerStatus,
+    SimulationRunner,
+)
 from stage0_sim.application.scenario import ScenarioDefinition, create_runner
 from stage0_sim.application.telemetry import TelemetryBroker
 from stage0_sim.domain.components import HomeostasisComponent
@@ -152,11 +156,11 @@ class SimulationManager:
             )
         managed.broker.publish_status()
 
-    def step(self, run_id: str) -> None:
+    async def step(self, run_id: str) -> None:
         managed = self.get_run(run_id)
         if managed.runner.status is RunnerStatus.RUNNING:
             raise SimulationConflictError("pause the run before single-stepping")
-        managed.runner.single_step()
+        await managed.runner.single_step_async()
         managed.broker.publish_snapshot()
 
     def set_speed(self, run_id: str, speed: float) -> None:
@@ -171,6 +175,10 @@ class SimulationManager:
         values: dict[str, float],
     ) -> None:
         managed = self.get_run(run_id)
+        if managed.runner.cognition_phase is not CognitionPhase.IDLE:
+            raise SimulationConflictError(
+                "vitals cannot be mutated while cognition is settling"
+            )
         registry = managed.runner.registry
         if agent_id not in registry.entities():
             raise SimulationNotFoundError(f"unknown agent: {agent_id}")
@@ -199,12 +207,14 @@ class SimulationManager:
         managed = self.get_run(run_id)
         managed.runner.stop()
         managed.broker.publish_status()
+        await self._await_realtime_boundary(managed)
         await self._cancel_tasks(managed)
 
     async def close(self) -> None:
         for managed in tuple(self._runs.values()):
             if managed.runner.status is not RunnerStatus.STOPPED:
                 managed.runner.stop()
+            await self._await_realtime_boundary(managed)
             await self._cancel_tasks(managed)
         self.dataset_store.close()
 
@@ -216,6 +226,17 @@ class SimulationManager:
                 managed.broker.publish_snapshot()
         except asyncio.CancelledError:
             raise
+
+    @staticmethod
+    async def _await_realtime_boundary(managed: ManagedRun) -> None:
+        task = managed.realtime_task
+        if (
+            task is None
+            or task is asyncio.current_task()
+            or task.done()
+        ):
+            return
+        await task
 
     @staticmethod
     async def _cancel_tasks(managed: ManagedRun) -> None:

@@ -18,6 +18,7 @@ class RunConfiguration:
     dt: float = 1.0
     speed: float = 1.0
     run_id: str | None = None
+    cognition_execution_mode: str = "global_barrier"
 
     def __post_init__(self) -> None:
         if self.dt <= 0:
@@ -26,6 +27,14 @@ class RunConfiguration:
             raise ValueError("speed must be greater than zero")
         if self.run_id == "":
             raise ValueError("run_id must not be empty")
+        if self.cognition_execution_mode not in {
+            "global_barrier",
+            "background",
+        }:
+            raise ValueError(
+                "cognition_execution_mode must be global_barrier or "
+                "background"
+            )
 
 
 class RunnerStatus(StrEnum):
@@ -33,6 +42,12 @@ class RunnerStatus(StrEnum):
     RUNNING = "running"
     PAUSED = "paused"
     STOPPED = "stopped"
+
+
+class CognitionPhase(StrEnum):
+    IDLE = "idle"
+    WAITING = "waiting"
+    APPLYING = "applying"
 
 
 class SimulationRunner:
@@ -52,6 +67,8 @@ class SimulationRunner:
         self.rng = random.Random(configuration.seed)
         self.speed = configuration.speed
         self.status = RunnerStatus.CREATED
+        self.cognition_phase = CognitionPhase.IDLE
+        self._cognition_wait_started_at: float | None = None
         self._tick_completed_handlers: list[Callable[[DomainEvent], None]] = []
         self._advancing = False
         self._stop_requested = False
@@ -89,6 +106,13 @@ class SimulationRunner:
         self.status = RunnerStatus.STOPPED
         if self._advancing:
             self._stop_requested = True
+            from stage0_sim.application.agents import AgentWorkCoordinator
+
+            if self.registry.has_resource(AgentWorkCoordinator):
+                self.registry.get_resource(AgentWorkCoordinator).cancel_all(
+                    self.context,
+                    "simulation_stopped",
+                )
             return
         self._finalize_stop()
 
@@ -139,7 +163,7 @@ class SimulationRunner:
     def step(self) -> None:
         if self.status is not RunnerStatus.RUNNING:
             raise RuntimeError("step requires a running simulation")
-        self._advance_one_tick()
+        asyncio.run(self.advance_one_tick())
 
     def single_step(self) -> None:
         if self.status is RunnerStatus.STOPPED:
@@ -147,9 +171,20 @@ class SimulationRunner:
         if self.status is RunnerStatus.CREATED:
             self.start()
             self.pause()
-        self._advance_one_tick()
+        asyncio.run(self.single_step_async())
+
+    async def single_step_async(self) -> None:
+        if self.status is RunnerStatus.STOPPED:
+            raise RuntimeError("a stopped simulation cannot advance")
+        if self.status is RunnerStatus.CREATED:
+            self.start()
+            self.pause()
+        await self.advance_one_tick()
 
     def run_for(self, ticks: int) -> None:
+        asyncio.run(self.run_for_async(ticks))
+
+    async def run_for_async(self, ticks: int) -> None:
         if ticks < 0:
             raise ValueError("ticks must not be negative")
         if self.status is RunnerStatus.CREATED:
@@ -157,7 +192,7 @@ class SimulationRunner:
         if self.status is not RunnerStatus.RUNNING:
             raise RuntimeError("run_for requires a running simulation")
         for _ in range(ticks):
-            if self._advance_one_tick():
+            if await self.advance_one_tick():
                 break
 
     async def run_realtime(self, ticks: int | None = None) -> None:
@@ -176,10 +211,26 @@ class SimulationRunner:
             deadline += interval
             await asyncio.sleep(max(0.0, deadline - time.monotonic()))
             if self.status is RunnerStatus.RUNNING:
-                self._advance_one_tick()
+                await self.advance_one_tick()
                 completed += 1
 
-    def _advance_one_tick(self) -> bool:
+    @property
+    def cognition_wait_elapsed_seconds(self) -> float:
+        if self._cognition_wait_started_at is None:
+            return 0.0
+        return max(0.0, time.monotonic() - self._cognition_wait_started_at)
+
+    @property
+    def cognition_pending_decision_ids(self) -> tuple[str, ...]:
+        from stage0_sim.application.agents import AgentWorkCoordinator
+
+        if not self.registry.has_resource(AgentWorkCoordinator):
+            return ()
+        return self.registry.get_resource(
+            AgentWorkCoordinator
+        ).pending_decision_ids
+
+    async def advance_one_tick(self) -> bool:
         from stage0_sim.application.agents import AgentWorkCoordinator
         from stage0_sim.application.macro_work import MacroWorkCoordinator
 
@@ -189,7 +240,52 @@ class SimulationRunner:
             event_start = len(self.events.events)
             self.clock.advance()
             self.systems.update(self.context)
-            tick_event = self._emit("simulation.tick", {"dt": self.clock.dt})
+            coordinator = (
+                self.registry.get_resource(AgentWorkCoordinator)
+                if self.registry.has_resource(AgentWorkCoordinator)
+                else None
+            )
+            background = (
+                self.configuration.cognition_execution_mode == "background"
+            )
+            tick_event = (
+                self._emit("simulation.tick", {"dt": self.clock.dt})
+                if background
+                else None
+            )
+            has_barrier_work = (
+                not background
+                and (
+                    (
+                        self.registry.has_resource(MacroWorkCoordinator)
+                        and self.registry.get_resource(
+                            MacroWorkCoordinator
+                        ).pending_count
+                        > 0
+                    )
+                    or (
+                        coordinator is not None
+                        and coordinator.pending_count > 0
+                    )
+                )
+            )
+            if has_barrier_work:
+                self.cognition_phase = CognitionPhase.WAITING
+                self._cognition_wait_started_at = time.monotonic()
+                batch_decision_ids = (
+                    coordinator.pending_decision_ids
+                    if coordinator is not None
+                    else ()
+                )
+                self._emit(
+                    "cognition.barrier_started",
+                    {
+                        "pending_count": len(batch_decision_ids),
+                        "execution_mode": "global_barrier",
+                    },
+                )
+            else:
+                batch_decision_ids = ()
             if (
                 not self._stop_requested
                 and self.registry.has_resource(MacroWorkCoordinator)
@@ -210,11 +306,28 @@ class SimulationRunner:
                 )
             if (
                 not self._stop_requested
-                and self.registry.has_resource(AgentWorkCoordinator)
+                and coordinator is not None
             ):
-                self.registry.get_resource(AgentWorkCoordinator).drain(
-                    self.context
+                if background:
+                    coordinator.drain(self.context)
+                else:
+                    await coordinator.drain_and_wait(
+                        self.context,
+                        on_applying=self._mark_cognition_applying,
+                    )
+            self.cognition_phase = CognitionPhase.IDLE
+            self._cognition_wait_started_at = None
+            if has_barrier_work:
+                self._emit(
+                    "cognition.barrier_settled",
+                    {
+                        "decision_count": len(batch_decision_ids),
+                        "cancelled": self._stop_requested,
+                        "execution_mode": "global_barrier",
+                    },
                 )
+            if tick_event is None:
+                tick_event = self._emit("simulation.tick", {"dt": self.clock.dt})
             if self._stop_requested:
                 self._prepare_stop()
             for handler in tuple(self._tick_completed_handlers):
@@ -224,7 +337,12 @@ class SimulationRunner:
                 self._finalize_stop()
         finally:
             self._advancing = False
+            self.cognition_phase = CognitionPhase.IDLE
+            self._cognition_wait_started_at = None
         return stopped
+
+    def _mark_cognition_applying(self) -> None:
+        self.cognition_phase = CognitionPhase.APPLYING
 
     def _emit(
         self,

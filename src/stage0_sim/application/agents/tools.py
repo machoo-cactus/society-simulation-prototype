@@ -14,6 +14,7 @@ from stage0_sim.domain.intents import (
     CharacterIntent,
     IntentKind,
     MoveIntent,
+    SkipIntent,
     SpeechIntent,
     TravelIntent,
     WaitIntent,
@@ -54,6 +55,12 @@ class WaitArguments(BaseModel):
     reason: str | None = Field(default=None, max_length=300)
 
 
+class SkipArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reconsider_after_seconds: float = Field(default=30, ge=5, le=3600)
+    reason: str | None = Field(default=None, max_length=300)
+
+
 class TravelToArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target_id: str = Field(min_length=1)
@@ -66,6 +73,7 @@ ToolArguments = Annotated[
     | PerformArguments
     | SayArguments
     | WaitArguments
+    | SkipArguments
     | TravelToArguments,
     Field(discriminator=None),
 ]
@@ -78,6 +86,7 @@ class ToolRegistry:
             "perform": PerformArguments,
             "say": SayArguments,
             "wait": WaitArguments,
+            "skip": SkipArguments,
             "travel_to": TravelToArguments,
         }
 
@@ -163,6 +172,15 @@ class ToolRegistry:
                 args.reason,
                 args.duration_seconds,
             )
+        if isinstance(args, SkipArguments):
+            return SkipIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.SKIP,
+                args.reason,
+                args.reconsider_after_seconds,
+            )
         if isinstance(args, TravelToArguments):
             target = targets.get(args.target_id)
             if target is None or target.kind not in {"building", "outdoor"}:
@@ -192,5 +210,6 @@ _DESCRIPTIONS = {
     "perform": "Attempt a supported bounded activity or affordance.",
     "say": "Speak exact in-world words to a known character.",
     "wait": "Remain intentionally idle for a bounded duration.",
+    "skip": "Take no intentional action now and reconsider later.",
     "travel_to": "Travel to a known building using a selected transport mode.",
 }

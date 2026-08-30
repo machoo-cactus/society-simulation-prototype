@@ -87,6 +87,10 @@ class MacroWorkCoordinator:
     def enqueue_dialogue(self, work: DialogueWork) -> None:
         self._dialogue.append(work)
 
+    @property
+    def pending_count(self) -> int:
+        return len(self._memory) + len(self._planning) + len(self._dialogue)
+
     def drain(
         self,
         context: SystemContext,

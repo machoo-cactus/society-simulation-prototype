@@ -1,5 +1,4 @@
 {
-  "$comment": "DESIGN DRAFT: this scenario targets the planned hierarchical city schema and is not runnable by the current schema_version 1 loader.",
   "schema_version": 2,
   "name": "sparse-city-car-demo",
   "seed": 20260830,
@@ -62,6 +61,15 @@
             "neighborhood_node_id": "node-office-entrance"
           }
         ]
+      }
+    ],
+    "outdoor_places": [
+      {
+        "id": "place-central-square",
+        "name": "Central Square",
+        "district_id": "district-central",
+        "city_position": {"x": 3000, "y": 1450},
+        "network_node_id": "node-central-junction"
       }
     ],
     "local_maps": {

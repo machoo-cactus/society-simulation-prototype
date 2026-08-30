@@ -6,6 +6,7 @@ from stage0_sim.domain.components import (
     PerceptionComponent,
     PositionComponent,
     SensesComponent,
+    SpatialLocationComponent,
 )
 from stage0_sim.domain.events import DomainEvent, JsonValue
 from stage0_sim.domain.perception import (
@@ -15,6 +16,7 @@ from stage0_sim.domain.perception import (
     PerceptibleFact,
 )
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.systems.spatial_context import local_world_for_agent
 from stage0_sim.domain.world import Coordinate, WorldGrid, WorldMap
 
 
@@ -55,7 +57,12 @@ class PerceptionSystem:
             )
         )
         for observer_id in observers:
-            self._scan_visible(context, world, configuration, observer_id)
+            self._scan_visible(
+                context,
+                local_world_for_agent(context.registry, observer_id),
+                configuration,
+                observer_id,
+            )
         for event in pending_events:
             if event.event_type == "speech.started":
                 self._route_speech(context, world, configuration, event, observers)
@@ -90,6 +97,8 @@ class PerceptionSystem:
             subject_position = context.registry.get_component(
                 subject_id, PositionComponent
             ).coordinate
+            if not _same_local_place(context, observer_id, subject_id):
+                continue
             if not _can_see(
                 world.grid,
                 observer_position,
@@ -227,6 +236,9 @@ class PerceptionSystem:
             )
             if event.agent_id not in perception.visible_now:
                 continue
+            observer_world = local_world_for_agent(
+                context.registry, observer_id
+            )
             self._deliver(
                 context,
                 observer_id,
@@ -237,7 +249,7 @@ class PerceptionSystem:
                     DisclosureClass.LOCAL_VISUAL,
                     subject_id=event.agent_id,
                     location_id=_zone_id(
-                        world,
+                        observer_world,
                         context.registry.get_component(
                             event.agent_id, PositionComponent
                         ).coordinate,
@@ -273,6 +285,11 @@ class PerceptionSystem:
             )
             if event.agent_id not in perception.visible_now:
                 continue
+            observer_world = local_world_for_agent(
+                context.registry, observer_id
+            )
+            previous_zone = _zone_id(observer_world, previous)
+            current_zone = _zone_id(observer_world, current)
             fact_type = "entity_moved"
             location_id = current_zone
             if previous_zone != current_zone and previous_zone is not None:
@@ -326,12 +343,19 @@ class PerceptionSystem:
         for observer_id in observers:
             if observer_id == speaker_id:
                 continue
+            if not _same_local_place(context, speaker_id, observer_id):
+                continue
+            observer_world = local_world_for_agent(
+                context.registry, observer_id
+            )
             senses = context.registry.get_component(observer_id, SensesComponent)
             target = context.registry.get_component(
                 observer_id, PositionComponent
             ).coordinate
             maximum = int(base_range * senses.hearing_multiplier)
-            distance = _path_distance(world.grid, source, target, maximum)
+            distance = _path_distance(
+                observer_world.grid, source, target, maximum
+            )
             if distance is None:
                 continue
             recipients.append(observer_id)
@@ -554,6 +578,29 @@ def _path_distance(
 
 def _string_value(value: JsonValue) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _same_local_place(
+    context: SystemContext,
+    first_id: str,
+    second_id: str,
+) -> bool:
+    if not (
+        context.registry.has_component(first_id, SpatialLocationComponent)
+        and context.registry.has_component(second_id, SpatialLocationComponent)
+    ):
+        return True
+    first = context.registry.get_component(
+        first_id, SpatialLocationComponent
+    ).location
+    second = context.registry.get_component(
+        second_id, SpatialLocationComponent
+    ).location
+    return (
+        first.scale.value == "BUILDING"
+        and second.scale.value == "BUILDING"
+        and first.place_id == second.place_id
+    )
 
 
 def _coordinate_value(value: JsonValue) -> Coordinate | None:

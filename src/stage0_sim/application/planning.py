@@ -202,4 +202,6 @@ def action_payload(action: PlanAction) -> dict[str, JsonValue]:
         payload["target"] = action.target
     if action.duration is not None:
         payload["duration"] = action.duration
+    if action.mode is not None:
+        payload["mode"] = action.mode.value
     return payload

@@ -13,6 +13,8 @@ from stage0_sim.domain.components import (
     PlanComponent,
     PlannerComponent,
     PositionComponent,
+    SpatialLocationComponent,
+    TravelComponent,
 )
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.events import JsonValue
@@ -69,6 +71,36 @@ class AgentStateProjector:
             state["position"] = registry.get_component(
                 agent_id, PositionComponent
             ).coordinate.to_payload()
+        if registry.has_component(agent_id, SpatialLocationComponent):
+            location = registry.get_component(
+                agent_id, SpatialLocationComponent
+            ).location
+            state["spatial_location"] = {
+                "scale": location.scale.value,
+                "place_id": location.place_id,
+                "local_coordinate": (
+                    location.local_coordinate.to_payload()
+                    if location.local_coordinate is not None
+                    else None
+                ),
+                "network_node_id": location.network_node_id,
+                "edge_id": location.edge_id,
+                "edge_progress": location.edge_progress,
+            }
+        if registry.has_component(agent_id, TravelComponent):
+            travel = registry.get_component(agent_id, TravelComponent)
+            state["travel"] = {
+                "destination_id": travel.destination_id,
+                "requested_mode": (
+                    travel.requested_mode.value
+                    if travel.requested_mode is not None
+                    else None
+                ),
+                "status": travel.status.value,
+                "current_leg_index": travel.current_leg_index,
+                "leg_count": len(travel.route),
+                "vehicle_id": travel.vehicle_id,
+            }
         if registry.has_component(agent_id, HomeostasisComponent):
             state["homeostasis"] = registry.get_component(
                 agent_id, HomeostasisComponent
@@ -153,4 +185,6 @@ def _plan_action(action: PlanAction | None) -> JsonValue:
         content["target"] = action.target
     if action.duration is not None:
         content["duration"] = action.duration
+    if action.mode is not None:
+        content["mode"] = action.mode.value
     return content

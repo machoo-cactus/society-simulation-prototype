@@ -15,8 +15,10 @@ from stage0_sim.domain.intents import (
     IntentKind,
     MoveIntent,
     SpeechIntent,
+    TravelIntent,
     WaitIntent,
 )
+from stage0_sim.domain.world import TravelMode
 
 
 class ToolValidationError(ValueError):
@@ -52,8 +54,19 @@ class WaitArguments(BaseModel):
     reason: str | None = Field(default=None, max_length=300)
 
 
+class TravelToArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_id: str = Field(min_length=1)
+    mode: Literal["WALK", "CYCLE", "CAR", "METRO"]
+    reason: str | None = Field(default=None, max_length=300)
+
+
 ToolArguments = Annotated[
-    GoToArguments | PerformArguments | SayArguments | WaitArguments,
+    GoToArguments
+    | PerformArguments
+    | SayArguments
+    | WaitArguments
+    | TravelToArguments,
     Field(discriminator=None),
 ]
 
@@ -65,6 +78,7 @@ class ToolRegistry:
             "perform": PerformArguments,
             "say": SayArguments,
             "wait": WaitArguments,
+            "travel_to": TravelToArguments,
         }
 
     def definitions(self, allowed: tuple[str, ...]) -> tuple[ToolDefinition, ...]:
@@ -149,6 +163,23 @@ class ToolRegistry:
                 args.reason,
                 args.duration_seconds,
             )
+        if isinstance(args, TravelToArguments):
+            target = targets.get(args.target_id)
+            if target is None or target.kind not in {"building", "outdoor"}:
+                raise ToolValidationError(
+                    "destination_not_known", args.target_id
+                )
+            if args.mode not in request.observation.available_travel_modes:
+                raise ToolValidationError("mode_not_available", args.mode)
+            return TravelIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.TRAVEL,
+                args.reason,
+                args.target_id,
+                TravelMode(args.mode),
+            )
         raise ToolValidationError("invalid_arguments", call.name)
 
 
@@ -161,4 +192,5 @@ _DESCRIPTIONS = {
     "perform": "Attempt a supported bounded activity or affordance.",
     "say": "Speak exact in-world words to a known character.",
     "wait": "Remain intentionally idle for a bounded duration.",
+    "travel_to": "Travel to a known building using a selected transport mode.",
 }

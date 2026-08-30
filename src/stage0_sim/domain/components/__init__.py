@@ -39,6 +39,10 @@ from stage0_sim.domain.components.survival import (
     System1State,
     default_drive_thresholds,
 )
+from stage0_sim.domain.components.travel import (
+    SpatialLocationComponent,
+    TravelComponent,
+)
 
 __all__ = [
     "ActionType",
@@ -65,8 +69,10 @@ __all__ = [
     "PlannerComponent",
     "PositionComponent",
     "SensesComponent",
+    "SpatialLocationComponent",
     "System1Configuration",
     "System1State",
+    "TravelComponent",
     "default_activity_rates",
     "default_drive_thresholds",
 ]

@@ -14,11 +14,23 @@ from stage0_sim.domain.components import (
     PlannerComponent,
     PositionComponent,
     System1State,
+    TravelComponent,
 )
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
-from stage0_sim.domain.world import Coordinate, WorldMap, find_path
+from stage0_sim.domain.systems.spatial_context import (
+    local_world_for_agent,
+    shares_local_map,
+)
+from stage0_sim.domain.systems.travel import TravelSystem
+from stage0_sim.domain.world import (
+    CityWorld,
+    Coordinate,
+    TravelStatus,
+    WorldMap,
+    find_path,
+)
 
 
 def is_dialogue_capable(registry: Registry, entity_id: str) -> bool:
@@ -74,7 +86,6 @@ class PlanExecutionSystem:
     def update(self, context: SystemContext) -> None:
         if not context.registry.has_resource(WorldMap):
             return
-        world = context.registry.get_resource(WorldMap)
         for agent_id in context.registry.query_entities(
             PlanComponent,
             DriveComponent,
@@ -83,10 +94,27 @@ class PlanExecutionSystem:
             ActivityComponent,
         ):
             drive = context.registry.get_component(agent_id, DriveComponent)
+            world = local_world_for_agent(context.registry, agent_id)
             if drive.state is not System1State.NORMAL:
                 continue
             plan = context.registry.get_component(agent_id, PlanComponent)
             if plan.current is not None:
+                if plan.current.action is ActionType.TRAVEL_TO:
+                    travel = context.registry.get_component(
+                        agent_id, TravelComponent
+                    )
+                    if travel.status in {
+                        TravelStatus.ROUTE_PLANNED,
+                        TravelStatus.TRAVELLING,
+                    }:
+                        continue
+                    if travel.status in {
+                        TravelStatus.ARRIVED,
+                        TravelStatus.CANCELLED,
+                        TravelStatus.BLOCKED,
+                    }:
+                        self._reset_current(plan)
+                        travel.status = TravelStatus.IDLE
                 if plan.waiting_for_affordance:
                     self._check_affordance(context, agent_id, plan)
                 elif (
@@ -143,6 +171,26 @@ class PlanExecutionSystem:
             movement.destination = destination
             movement.path = ()
             movement.retry_after_tick = 0
+            return
+
+        if action.action is ActionType.TRAVEL_TO:
+            if (
+                not context.registry.has_resource(CityWorld)
+                or action.target is None
+                or action.mode is None
+                or not context.registry.has_component(
+                    agent_id, TravelComponent
+                )
+            ):
+                self._fail(context, agent_id, plan, "travel_precondition_failed")
+                return
+            if not TravelSystem().request(
+                context,
+                agent_id,
+                action.target,
+                action.mode,
+            ):
+                self._fail(context, agent_id, plan, "route_not_found")
             return
 
         if action.action in {
@@ -282,6 +330,7 @@ class PlanExecutionSystem:
             other_position.coordinate
             for other_id, other_position in context.registry.query(PositionComponent)
             if other_id != agent_id
+            and shares_local_map(context.registry, agent_id, other_id)
         )
         candidates: list[tuple[int, int, int, Coordinate]] = []
         for tile in zone.tiles:
@@ -381,6 +430,8 @@ class PlanExecutionSystem:
             payload["target"] = action.target
         if action.duration is not None:
             payload["duration"] = action.duration
+        if action.mode is not None:
+            payload["mode"] = action.mode.value
         payload.update(extra or {})
         context.events.emit(
             event_type,

@@ -13,12 +13,18 @@ from stage0_sim.domain.components import (
     PlanComponent,
     PlannerComponent,
     PositionComponent,
+    SpatialLocationComponent,
     System1Configuration,
     System1State,
+    TravelComponent,
 )
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.affordances import cancel_affordance
+from stage0_sim.domain.systems.spatial_context import (
+    local_world_for_agent,
+    shares_local_map,
+)
 from stage0_sim.domain.world import AffordanceStation, Coordinate, WorldMap, find_path
 
 
@@ -81,6 +87,13 @@ class System1ArbitrationSystem:
                     self._resolve(context, agent_id, drive)
                     continue
 
+            if context.registry.has_component(agent_id, TravelComponent):
+                travel = context.registry.get_component(
+                    agent_id, TravelComponent
+                )
+                if travel.status.value in {"ROUTE_PLANNED", "TRAVELLING"}:
+                    travel.interruption_requested = True
+                    continue
             self._ensure_correction_target(context, agent_id, drive, configuration)
 
     def _activate(
@@ -129,6 +142,20 @@ class System1ArbitrationSystem:
     ) -> None:
         if drive.active_drive is None:
             return
+        if context.registry.has_component(
+            agent_id, SpatialLocationComponent
+        ):
+            location = context.registry.get_component(
+                agent_id, SpatialLocationComponent
+            ).location
+            if location.scale.value != "BUILDING":
+                self._block(
+                    context,
+                    agent_id,
+                    drive,
+                    "outside_local_correction_context",
+                )
+                return
         if not context.registry.has_resource(WorldMap):
             self._block(context, agent_id, drive, "world_not_configured")
             return
@@ -139,7 +166,7 @@ class System1ArbitrationSystem:
             self._block(context, agent_id, drive, "movement_not_configured")
             return
 
-        world = context.registry.get_resource(WorldMap)
+        world = local_world_for_agent(context.registry, agent_id)
         position = context.registry.get_component(agent_id, PositionComponent)
         selected = self._nearest_station(
             context,
@@ -213,6 +240,7 @@ class System1ArbitrationSystem:
             position.coordinate
             for other_id, position in context.registry.query(PositionComponent)
             if other_id != agent_id
+            and shares_local_map(context.registry, agent_id, other_id)
         )
         candidates: list[tuple[int, str, AffordanceStation]] = []
         for station in world.stations:

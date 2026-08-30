@@ -21,6 +21,7 @@ from stage0_sim.application.telemetry import (
     build_world_snapshot,
 )
 from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.world import CityWorld
 
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 
@@ -118,6 +119,170 @@ async def get_snapshot(run_id: str, request: Request) -> dict[str, object]:
     }
 
 
+@router.get("/runs/{run_id}/world/city")
+async def get_city_world(run_id: str, request: Request) -> dict[str, object]:
+    managed = _managed_run(get_manager(request), run_id)
+    if not managed.runner.registry.has_resource(CityWorld):
+        raise HTTPException(status_code=404, detail="run has no city world")
+    bootstrap = build_ui_bootstrap(managed.runner)
+    return {"run_id": run_id, "city": bootstrap["city"]}
+
+
+@router.get("/runs/{run_id}/world/buildings/{building_id}")
+async def get_building_world(
+    run_id: str,
+    building_id: str,
+    request: Request,
+) -> dict[str, object]:
+    managed = _managed_run(get_manager(request), run_id)
+    registry = managed.runner.registry
+    if not registry.has_resource(CityWorld):
+        raise HTTPException(status_code=404, detail="run has no city world")
+    city = registry.get_resource(CityWorld)
+    try:
+        building = city.building(building_id)
+        local_map = city.local_map_for_building(building_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return {
+        "run_id": run_id,
+        "building": {
+            "id": building.id,
+            "name": building.name,
+            "district_id": building.district_id,
+            "city_position": building.city_position.to_payload(),
+            "entrances": [
+                {
+                    "id": entrance.id,
+                    "local_coordinate": entrance.local_coordinate.to_payload(),
+                    "network_node_id": entrance.network_node_id,
+                }
+                for entrance in building.entrances
+            ],
+            "local_map": {
+                "width": local_map.grid.width,
+                "height": local_map.grid.height,
+                "blocked": [
+                    coordinate.to_payload()
+                    for coordinate in sorted(local_map.grid.blocked)
+                ],
+                "zones": [
+                    {
+                        "id": zone.id,
+                        "name": zone.name,
+                        "type": zone.zone_type,
+                        "tiles": [
+                            coordinate.to_payload()
+                            for coordinate in sorted(zone.tiles)
+                        ],
+                    }
+                    for zone in local_map.zones
+                ],
+                "stations": [
+                    {
+                        "id": station.id,
+                        "name": station.name,
+                        "position": station.position.to_payload(),
+                        "actions": list(station.supported_actions),
+                        "available": station.available,
+                    }
+                    for station in local_map.stations
+                ],
+            },
+        },
+    }
+
+
+@router.get("/runs/{run_id}/world/neighborhoods/{place_id}")
+async def get_neighborhood_world(
+    run_id: str,
+    place_id: str,
+    request: Request,
+) -> dict[str, object]:
+    managed = _managed_run(get_manager(request), run_id)
+    registry = managed.runner.registry
+    if not registry.has_resource(CityWorld):
+        raise HTTPException(status_code=404, detail="run has no city world")
+    city = registry.get_resource(CityWorld)
+    building_ids = {
+        building.id
+        for building in city.buildings
+        if building.id == place_id or building.district_id == place_id
+    }
+    if not building_ids:
+        try:
+            building = city.building(place_id)
+        except KeyError as error:
+            try:
+                outdoor = city.outdoor_place(place_id)
+            except KeyError:
+                raise HTTPException(status_code=404, detail=str(error)) from error
+            node_ids = {outdoor.network_node_id}
+        else:
+            building_ids.add(building.id)
+            node_ids = set()
+    else:
+        node_ids = set()
+    node_ids.update(
+        node.id for node in city.nodes if node.place_id in building_ids
+    )
+    edges = [
+        edge
+        for edge in city.edges
+        if edge.from_node_id in node_ids or edge.to_node_id in node_ids
+    ]
+    node_ids.update(
+        node_id
+        for edge in edges
+        for node_id in (edge.from_node_id, edge.to_node_id)
+    )
+    return {
+        "run_id": run_id,
+        "place_id": place_id,
+        "buildings": [
+            {
+                "id": building.id,
+                "name": building.name,
+                "position": building.city_position.to_payload(),
+            }
+            for building in city.buildings
+            if building.id in building_ids
+        ],
+        "outdoor_places": [
+            {
+                "id": place.id,
+                "name": place.name,
+                "position": place.city_position.to_payload(),
+                "network_node_id": place.network_node_id,
+            }
+            for place in city.outdoor_places
+            if place.id == place_id
+        ],
+        "nodes": [
+            {
+                "id": node.id,
+                "kind": node.kind,
+                "position": node.position.to_payload(),
+                "place_id": node.place_id,
+            }
+            for node in city.nodes
+            if node.id in node_ids
+        ],
+        "edges": [
+            {
+                "id": edge.id,
+                "from_node_id": edge.from_node_id,
+                "to_node_id": edge.to_node_id,
+                "allowed_modes": [
+                    mode.value for mode in sorted(edge.allowed_modes)
+                ],
+                "geometry": [point.to_payload() for point in edge.geometry],
+            }
+            for edge in edges
+        ],
+    }
+
+
 @router.post("/runs/{run_id}/pause")
 async def pause_run(run_id: str, request: Request) -> dict[str, str]:
     manager = get_manager(request)
@@ -195,6 +360,24 @@ async def get_agent(
     return {
         "run_id": run_id,
         "agent": build_agent_snapshot(managed.runner, agent_id),
+    }
+
+
+@router.get("/runs/{run_id}/agents/{agent_id}/spatial-context")
+async def get_agent_spatial_context(
+    run_id: str,
+    agent_id: str,
+    request: Request,
+) -> dict[str, object]:
+    managed = _managed_run(get_manager(request), run_id)
+    if agent_id not in managed.runner.registry.entities():
+        raise HTTPException(status_code=404, detail=f"unknown agent: {agent_id}")
+    agent = build_agent_snapshot(managed.runner, agent_id)
+    return {
+        "run_id": run_id,
+        "agent_id": agent_id,
+        "spatial_location": agent.get("spatial_location"),
+        "travel": agent.get("travel"),
     }
 
 

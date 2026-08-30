@@ -1,10 +1,59 @@
 # Large-Scale World, Hierarchical Movement, and Transport Plan
 
-**Status:** Proposed  
+**Status:** Initial sparse-city milestone implemented
 **Date:** 2026-08-30  
 **Scope:** Sparse city representation, movement between buildings, city travel,
 multi-level operator UI, controller travel tools, and a minimal car-trip demo  
-**Draft scenario:** `scenarios/drafts/sparse-city-car-demo.json`
+**Runnable scenario:** `scenarios/sparse-city-car-demo.json`
+
+## 0. Updated implementation baseline
+
+This plan now builds on the implemented UI and telemetry architecture:
+
+- telemetry schema `stage0.telemetry.v2`;
+- separate immutable bootstrap, replaceable runtime snapshot, and durable
+  domain-event cursors;
+- automatic snapshot plus event-history recovery after disconnects;
+- native ES modules for API, protocol, UI state, and composition;
+- explicit UI lifecycle states and control selectors;
+- character names, vision/hearing indicators, speech bubbles, transcripts, and
+  operator overlay controls.
+
+Large-world data follows the same separation:
+
+```text
+bootstrap
+  city bounds, districts, buildings, entrances, nodes, edges, vehicles,
+  character profiles
+
+runtime snapshot
+  hierarchical character location, active travel, edge progress,
+  mutable vehicle position
+
+durable events
+  travel, building, vehicle, perception, speech, and failures
+```
+
+Static city geometry is cached from WebSocket bootstrap or scale-specific REST
+endpoints. It is not repeated in the 10 Hz runtime snapshot.
+
+The implemented first milestone includes:
+
+- legacy-grid compatibility through `SpatialLocationComponent`;
+- schema-version-2 city worlds with districts, buildings, local maps,
+  entrances, outdoor places, sparse nodes/edges, and vehicles;
+- deterministic mixed access routes for WALK, CYCLE, and CAR;
+- explicit hierarchical location and travel state;
+- `TRAVEL_TO` plan actions and `travel_to` controller tool contracts;
+- safe-node System 1 interruption;
+- city/building REST projections;
+- AUTO/MANUAL building, neighborhood, and city operator views;
+- pan/zoom city rendering with vehicle and character progress;
+- the runnable sparse car demonstration.
+
+Direct metro edges use the same deterministic travel progression and emit
+boarding/alighting events. Scheduled headways, validated line definitions, and
+transfer-specific waiting remain a later phase.
 
 ## 1. Goal
 
@@ -29,7 +78,7 @@ arrives.
 
 ## 2. Current-state diagnosis
 
-The current implementation assumes one spatial scale:
+The legacy local implementation assumes one spatial scale:
 
 - `WorldMap` contains one rectangular `WorldGrid`;
 - every `PositionComponent` is one `(x, y)` tile;
@@ -37,8 +86,13 @@ The current implementation assumes one spatial scale:
 - A* searches the entire grid with unit-cost edges;
 - `MOVE_TO` resolves only a zone or station within that grid;
 - perception measures visual range and hearing paths in grid cells;
-- telemetry sends the full grid, all zone tiles, all stations, and every path;
-- the browser fits that full grid into one canvas.
+- local movement and perception use the active `WorldMap`;
+- local building rendering fits a detailed grid into one canvas.
+
+The updated telemetry layer no longer sends full static data in every snapshot,
+and the browser already supports recoverable event delivery and multiple
+operator overlays. City support must extend those contracts rather than create
+a second transport channel.
 
 This is appropriate inside a building but should not be stretched into a
 city-wide tile map. A mostly empty city grid would:
@@ -423,6 +477,12 @@ Same-tick semantics should ensure:
   controller observation;
 - System 1 can interrupt travel before progress is applied.
 
+Implemented ordering places travel at order `175`: after homeostasis and System
+1 arbitration (`170`), alongside post-arbitration speech, and before affordance
+execution (`180`) and local movement (`200`). A newly critical drive therefore
+marks travel for interruption before that tick's travel progress; characters
+already on an edge continue deterministically to its next safe node.
+
 ## 9. System 1 during city travel
 
 Survival remains non-bypassable, but corrective targets are no longer always on
@@ -578,7 +638,7 @@ character observation.
 Never reveal another character's selected destination merely because their icon
 is moving along a city route.
 
-## 12. UI: three spatial levels
+## 12. UI: three spatial levels integrated with telemetry v2
 
 ## 12.1 Focus model
 
@@ -591,6 +651,9 @@ viewMode: AUTO | MANUAL
 focusedPlaceId
 camera center/zoom
 ```
+
+These fields extend the existing reducer/selector state. They must not be
+encoded into the simulation-control lifecycle state.
 
 Default to `AUTO`. The view level follows the focused character:
 
@@ -666,9 +729,11 @@ GET /runs/{run_id}/world/buildings/{building_id}
 GET /runs/{run_id}/agents/{agent_id}/spatial-context
 ```
 
-The WebSocket can publish focused-agent deltas and invalidate cached static map
-layers. Static building/network geometry should be fetched once and cached in
-the browser.
+The WebSocket bootstrap carries the initial city layer and the latest runtime
+snapshot carries focused character/vehicle progress. The scale-specific REST
+endpoints remain available for local-map detail and future cache invalidation.
+Recovery continues to use the existing domain-event offset; changing view level
+must not reset telemetry cursors or dialogue/perception overlays.
 
 ## 13. Scenario schema
 
@@ -811,7 +876,7 @@ the deterministic domain path before exposing it through `travel_to`.
 
 ## 16. Implementation phases
 
-## Phase A: Hierarchical location and legacy compatibility
+## Phase A: Hierarchical location and legacy compatibility — implemented
 
 Deliver:
 
@@ -828,7 +893,7 @@ Gate:
 - every character has a valid hierarchical location;
 - no city-sized dense grid is introduced.
 
-## Phase B: Sparse city schema and focused UI levels
+## Phase B: Sparse city schema and focused UI levels — implemented initial scope
 
 Deliver:
 
@@ -847,7 +912,7 @@ Gate:
 - telemetry size is proportional to the requested view, not total interior
   tiles in the city.
 
-## Phase C: Walking between buildings
+## Phase C: Walking between buildings — implemented direct routes
 
 Deliver:
 
@@ -863,7 +928,7 @@ Gate:
   exit, exterior, entry, and local legs;
 - System 1 can interrupt the trip without teleportation.
 
-## Phase D: Cycling and car travel
+## Phase D: Cycling and car travel — implemented initial scope
 
 Deliver:
 
@@ -879,7 +944,7 @@ Gate:
 - unavailable vehicle and parking conditions fail explicitly;
 - the barebones demo shows the focused agent driving across the city.
 
-## Phase E: Metro
+## Phase E: Metro — partial
 
 Deliver:
 
@@ -888,13 +953,17 @@ Deliver:
 - `travel_to(mode=METRO)`;
 - service status in knowledge and observations.
 
+Direct metro edge routing and boarding/alighting events are implemented.
+Headways, station access state, explicit line/transfer validation, and
+service-status knowledge remain deferred.
+
 Gate:
 
 - a character completes a deterministic metro trip;
 - closed/disconnected stations fail explicitly;
 - a survival interrupt waits until the next station before rerouting.
 
-## Phase F: Scale-aware perception and optimization
+## Phase F: Scale-aware perception and optimization — partial
 
 Deliver:
 
@@ -904,6 +973,11 @@ Deliver:
 - spatial indexes for nearby queries;
 - cached route/static-map projections;
 - performance budgets for larger sparse scenarios.
+
+Current implementation keeps building-grid perception local by hierarchical
+place ID and keeps city travel operator-visible without exposing destinations
+to other character controllers. Exterior entry/exit perceptible facts and
+spatial indexes remain future work.
 
 Gate:
 

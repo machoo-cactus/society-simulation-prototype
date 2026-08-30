@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from stage0_sim.domain.components.physiology import ActivityType
+from stage0_sim.domain.world import TravelMode
 
 
 class ActionType(StrEnum):
@@ -13,6 +14,7 @@ class ActionType(StrEnum):
     SLEEP = "SLEEP"
     RELAX = "RELAX"
     IDLE = "IDLE"
+    TRAVEL_TO = "TRAVEL_TO"
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +22,7 @@ class PlanAction:
     action: ActionType
     target: str | None = None
     duration: float | None = None
+    mode: TravelMode | None = None
 
     def __post_init__(self) -> None:
         if self.duration is not None and self.duration <= 0:

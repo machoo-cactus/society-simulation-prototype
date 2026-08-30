@@ -4,7 +4,11 @@ from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.application.dataset import AgentStateProjector, DatasetRecord
 from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import SimulationRunner
-from stage0_sim.domain.components import ActivityComponent, PositionComponent
+from stage0_sim.domain.components import (
+    ActivityComponent,
+    PositionComponent,
+    SpatialLocationComponent,
+)
 from stage0_sim.domain.events import DomainEvent, JsonValue
 
 
@@ -137,6 +141,10 @@ class RunDataCollector:
             record_type = "tool"
         elif event.event_type.startswith("cognition."):
             record_type = "cognition"
+        elif event.event_type.startswith(
+            ("travel.", "building.", "vehicle.", "metro.")
+        ):
+            record_type = "travel"
         if record_type is not None:
             payload = {
                 "event_type": event.event_type,
@@ -195,12 +203,37 @@ class RunDataCollector:
                 position = self.runner.registry.get_component(
                     agent_id, PositionComponent
                 )
+                trajectory: dict[str, JsonValue] = {}
+                if self.runner.registry.has_component(
+                    agent_id, SpatialLocationComponent
+                ):
+                    location = self.runner.registry.get_component(
+                        agent_id, SpatialLocationComponent
+                    ).location
+                    trajectory["spatial_location"] = {
+                        "scale": location.scale.value,
+                        "place_id": location.place_id,
+                        "local_coordinate": (
+                            location.local_coordinate.to_payload()
+                            if location.local_coordinate is not None
+                            else None
+                        ),
+                        "network_node_id": location.network_node_id,
+                        "edge_id": location.edge_id,
+                        "edge_progress": location.edge_progress,
+                    }
+                    if location.local_coordinate is not None:
+                        trajectory["position"] = (
+                            location.local_coordinate.to_payload()
+                        )
+                else:
+                    trajectory["position"] = position.coordinate.to_payload()
                 self._append(
                     "trajectory",
                     event.simulation_tick,
                     event.simulation_time,
                     agent_id,
-                    {"position": position.coordinate.to_payload()},
+                    trajectory,
                     event.event_id,
                 )
 

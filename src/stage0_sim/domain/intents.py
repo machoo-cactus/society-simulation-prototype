@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from stage0_sim.domain.components import ActionType
+from stage0_sim.domain.world import TravelMode
 
 
 class IntentKind(StrEnum):
@@ -9,6 +10,7 @@ class IntentKind(StrEnum):
     ACTIVITY = "activity"
     SPEECH = "speech"
     WAIT = "wait"
+    TRAVEL = "travel"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,3 +44,9 @@ class SpeechIntent(CharacterIntent):
 @dataclass(frozen=True, slots=True)
 class WaitIntent(CharacterIntent):
     duration_seconds: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class TravelIntent(CharacterIntent):
+    target_id: str = ""
+    mode: TravelMode = TravelMode.WALK

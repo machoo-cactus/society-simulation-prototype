@@ -40,7 +40,13 @@ class CharacterProfileComponent:
 @dataclass(slots=True)
 class ControllerComponent:
     enabled: bool = False
-    tool_allowlist: tuple[str, ...] = ("go_to", "perform", "say", "wait")
+    tool_allowlist: tuple[str, ...] = (
+        "go_to",
+        "perform",
+        "say",
+        "wait",
+        "travel_to",
+    )
     state_revision: int = 0
     decision_sequence: int = 0
     request_pending: bool = False

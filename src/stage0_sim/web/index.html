@@ -26,8 +26,21 @@
           <div>
             <h2>World</h2>
             <p id="clock-label">tick 0 / 0.0s</p>
+            <p id="world-breadcrumb" class="muted">No location</p>
           </div>
-          <div id="protocol-warning" class="warning" hidden></div>
+          <div class="world-view-controls">
+            <select id="view-mode" aria-label="View mode">
+              <option value="AUTO">Auto</option>
+              <option value="MANUAL">Manual</option>
+            </select>
+            <select id="view-level" aria-label="Spatial view level">
+              <option value="BUILDING">Building</option>
+              <option value="NEIGHBORHOOD">Neighborhood</option>
+              <option value="CITY">City</option>
+            </select>
+            <button id="reset-camera">Reset view</button>
+            <div id="protocol-warning" class="warning" hidden></div>
+          </div>
         </div>
         <div class="canvas-wrap">
           <canvas id="world-canvas" aria-label="Simulation world"></canvas>
@@ -39,6 +52,7 @@
           <span><i class="legend__agent"></i>Agent</span>
           <span><i class="legend__path"></i>Path</span>
           <span><i class="legend__blocked"></i>Blocked</span>
+          <span>Drag to pan · wheel to zoom</span>
         </div>
       </section>
 
@@ -162,6 +176,7 @@
               <option value="dialogue">Speech and dialogue</option>
               <option value="cognition">Cognition and tools</option>
               <option value="perception">Perception</option>
+              <option value="travel">Travel</option>
               <option value="errors">Failures</option>
               <option value="ui">UI and controls</option>
             </select>

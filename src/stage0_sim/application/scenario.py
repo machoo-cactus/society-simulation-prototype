@@ -2,7 +2,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -60,7 +60,9 @@ from stage0_sim.domain.components import (
     PlannerComponent,
     PositionComponent,
     SensesComponent,
+    SpatialLocationComponent,
     System1Configuration,
+    TravelComponent,
     default_activity_rates,
     default_drive_thresholds,
 )
@@ -76,12 +78,28 @@ from stage0_sim.domain.systems.navigation import MovementSystem, PathfindingSyst
 from stage0_sim.domain.systems.plans import PlanExecutionSystem, TimedPlanActionSystem
 from stage0_sim.domain.systems.speech import SpeechSystem
 from stage0_sim.domain.systems.system1 import System1ArbitrationSystem
+from stage0_sim.domain.systems.travel import TravelSystem
 from stage0_sim.domain.world import (
     AffordanceAction,
     AffordanceStation,
+    Building,
+    BuildingEntrance,
+    CityBounds,
+    CityWorld,
     Coordinate,
+    District,
     HomeostasisEffect,
+    MapPoint,
+    OutdoorPlace,
+    SpatialScale,
+    TransportEdge,
+    TransportNode,
+    TravelMode,
+    Vehicle,
+    VehicleRegistry,
+    VehicleState,
     WorldGrid,
+    WorldLocation,
     WorldMap,
     Zone,
     default_affordance_action,
@@ -200,6 +218,231 @@ class WorldDefinition(BaseModel):
     blocked: list[CoordinateDefinition] = Field(default_factory=list)
     zones: list[ZoneDefinition] = Field(default_factory=list)
     stations: list[StationDefinition] = Field(default_factory=list)
+
+
+class MapPointDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    x: float
+    y: float
+
+    def to_domain(self) -> MapPoint:
+        return MapPoint(self.x, self.y)
+
+
+class CityBoundsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min_x: float
+    min_y: float
+    max_x: float
+    max_y: float
+
+    @model_validator(mode="after")
+    def bounds_are_ordered(self) -> "CityBoundsDefinition":
+        if self.max_x <= self.min_x or self.max_y <= self.min_y:
+            raise ValueError("city bounds maximums must exceed minimums")
+        return self
+
+
+class CityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    bounds_meters: CityBoundsDefinition
+
+
+class DistrictDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    center: MapPointDefinition
+
+
+class BuildingEntranceDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    local_coordinate: CoordinateDefinition
+    neighborhood_node_id: str = Field(min_length=1)
+
+
+class BuildingDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    district_id: str = Field(min_length=1)
+    city_position: MapPointDefinition
+    local_map_id: str = Field(min_length=1)
+    entrances: list[BuildingEntranceDefinition] = Field(min_length=1)
+
+
+class OutdoorPlaceDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    district_id: str = Field(min_length=1)
+    city_position: MapPointDefinition
+    network_node_id: str = Field(min_length=1)
+
+
+class TransportNodeDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    position: MapPointDefinition
+    place_id: str | None = None
+
+
+class TransportEdgeDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    from_node_id: str = Field(min_length=1)
+    to_node_id: str = Field(min_length=1)
+    allowed_modes: list[TravelMode] = Field(min_length=1)
+    distance_meters: float = Field(gt=0)
+    geometry: list[MapPointDefinition] = Field(min_length=2)
+    speed_limit_mps: float | None = Field(default=None, gt=0)
+    bidirectional: bool = False
+
+
+class VehicleLocationDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scale: SpatialScale
+    place_id: str = Field(min_length=1)
+    network_node_id: str = Field(min_length=1)
+
+
+class VehicleDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    type: TravelMode
+    name: str = Field(min_length=1)
+    capacity: int = Field(gt=0)
+    location: VehicleLocationDefinition
+
+
+class TransportDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nodes: list[TransportNodeDefinition] = Field(default_factory=list)
+    edges: list[TransportEdgeDefinition] = Field(default_factory=list)
+    metro_lines: list[dict[str, Any]] = Field(default_factory=list)
+    vehicles: list[VehicleDefinition] = Field(default_factory=list)
+    walking_speed_mps: float = Field(default=1.4, gt=0)
+    cycling_speed_mps: float = Field(default=4.5, gt=0)
+    car_speed_mps: float = Field(default=13.9, gt=0)
+    metro_speed_mps: float = Field(default=16.0, gt=0)
+
+
+class CityWorldDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["city"]
+    city: CityDefinition
+    districts: list[DistrictDefinition]
+    buildings: list[BuildingDefinition]
+    outdoor_places: list[OutdoorPlaceDefinition] = Field(default_factory=list)
+    local_maps: dict[str, WorldDefinition]
+    transport: TransportDefinition
+
+    @model_validator(mode="after")
+    def references_are_valid(self) -> "CityWorldDefinition":
+        district_ids = {item.id for item in self.districts}
+        map_ids = set(self.local_maps)
+        node_ids = {item.id for item in self.transport.nodes}
+        all_ids = [
+            self.city.id,
+            *(item.id for item in self.districts),
+            *(item.id for item in self.buildings),
+            *(item.id for item in self.outdoor_places),
+            *self.local_maps,
+            *(item.id for item in self.transport.nodes),
+            *(item.id for item in self.transport.edges),
+            *(item.id for item in self.transport.vehicles),
+            *(
+                entrance.id
+                for building in self.buildings
+                for entrance in building.entrances
+            ),
+            *(
+                zone.id
+                for local_map in self.local_maps.values()
+                for zone in local_map.zones
+            ),
+            *(
+                station.id
+                for local_map in self.local_maps.values()
+                for station in local_map.stations
+            ),
+        ]
+        if len(all_ids) != len(set(all_ids)):
+            raise ValueError("city world IDs must be globally unique")
+        for building in self.buildings:
+            if building.district_id not in district_ids:
+                raise ValueError(
+                    f"building {building.id} references unknown district"
+                )
+        for place in self.outdoor_places:
+            if place.district_id not in district_ids:
+                raise ValueError(
+                f"outdoor place {place.id} references unknown district"
+                )
+            if place.network_node_id not in node_ids:
+                raise ValueError(
+                f"outdoor place {place.id} references unknown node"
+                )
+            if building.local_map_id not in map_ids:
+                raise ValueError(
+                    f"building {building.id} references unknown local map"
+                )
+            local_map = self.local_maps[building.local_map_id]
+            for entrance in building.entrances:
+                coordinate = entrance.local_coordinate.to_domain()
+                if not (
+                    0 <= coordinate.x < local_map.width
+                    and 0 <= coordinate.y < local_map.height
+                ):
+                    raise ValueError(
+                        f"entrance {entrance.id} is outside local map"
+                    )
+                if entrance.neighborhood_node_id not in node_ids:
+                    raise ValueError(
+                        f"entrance {entrance.id} references unknown node"
+                    )
+        for edge in self.transport.edges:
+            if edge.from_node_id not in node_ids or edge.to_node_id not in node_ids:
+                raise ValueError(f"edge {edge.id} references unknown node")
+            start = edge.geometry[0]
+            end = edge.geometry[-1]
+            node_map = {item.id: item for item in self.transport.nodes}
+            from_node = node_map[edge.from_node_id].position
+            to_node = node_map[edge.to_node_id].position
+            if (start.x, start.y) != (from_node.x, from_node.y) or (
+                end.x,
+                end.y,
+            ) != (to_node.x, to_node.y):
+                raise ValueError(
+                    f"edge {edge.id} geometry endpoints must match nodes"
+                )
+        for vehicle in self.transport.vehicles:
+            if vehicle.location.network_node_id not in node_ids:
+                raise ValueError(
+                    f"vehicle {vehicle.id} references unknown node"
+                )
+            if vehicle.type not in {TravelMode.CAR, TravelMode.CYCLE}:
+                raise ValueError(
+                    f"vehicle {vehicle.id} must be CAR or CYCLE"
+                )
+        return self
 
 
 class ActivityRatesDefinition(BaseModel):
@@ -327,7 +570,13 @@ class CognitionSettingsDefinition(BaseModel):
     max_input_tokens: int | None = Field(default=None, gt=0)
     max_total_output_tokens: int | None = Field(default=None, gt=0)
     tool_allowlist: list[str] = Field(
-        default_factory=lambda: ["go_to", "perform", "say", "wait"]
+        default_factory=lambda: [
+            "go_to",
+            "perform",
+            "say",
+            "wait",
+            "travel_to",
+        ]
     )
 
     @model_validator(mode="after")
@@ -336,7 +585,13 @@ class CognitionSettingsDefinition(BaseModel):
             raise ValueError("cognition controller must be legacy or tool-agent")
         if self.max_read_tool_rounds != 0:
             raise ValueError("read-only tool rounds are not implemented")
-        unknown = set(self.tool_allowlist) - {"go_to", "perform", "say", "wait"}
+        unknown = set(self.tool_allowlist) - {
+            "go_to",
+            "perform",
+            "say",
+            "wait",
+            "travel_to",
+        }
         if unknown:
             raise ValueError(f"unknown cognition tools: {sorted(unknown)}")
         return self
@@ -382,7 +637,7 @@ class ScenarioDefinition(BaseModel):
     dt: float = Field(default=1.0, gt=0)
     speed: float = Field(default=1.0, gt=0)
     run_id: str | None = Field(default=None, min_length=1)
-    world: WorldDefinition | None = None
+    world: WorldDefinition | CityWorldDefinition | None = None
     homeostasis: HomeostasisSettingsDefinition = Field(
         default_factory=HomeostasisSettingsDefinition
     )
@@ -424,6 +679,13 @@ class ScenarioDefinition(BaseModel):
                     f"{profile.template_id}"
                 )
         for entity in self.entities:
+            if isinstance(self.world, CityWorldDefinition) and (
+                "position" in entity.components
+                and "spatial_location" not in entity.components
+            ):
+                raise ValueError(
+                    f"city entity {entity.id} requires spatial_location"
+                )
             raw_profile = entity.components.get("character_profile")
             if not raw_profile:
                 continue
@@ -495,7 +757,31 @@ def create_runner(
     systems.add(MemoryRecordingSystem())
     systems.add(MacroDialogueSystem())
     systems.add(MacroPlanningSystem())
-    world = _build_world(scenario.world) if scenario.world is not None else None
+    city_world = (
+        _build_city_world(scenario.world)
+        if isinstance(scenario.world, CityWorldDefinition)
+        else None
+    )
+    world = (
+        _initial_city_local_map(scenario, city_world)
+        if city_world is not None
+        else _build_world(scenario.world)
+        if isinstance(scenario.world, WorldDefinition)
+        else None
+    )
+    if city_world is not None:
+        registry.set_resource(city_world)
+        registry.set_resource(
+            VehicleRegistry(
+                {
+                    vehicle.id: VehicleState(
+                        network_node_id=vehicle.network_node_id
+                    )
+                    for vehicle in city_world.vehicles
+                }
+            )
+        )
+        systems.add(TravelSystem())
     if world is not None:
         registry.set_resource(world)
         systems.add(PathfindingSystem())
@@ -552,10 +838,34 @@ def create_runner(
         )
         systems.add(CognitionScheduler())
 
-    occupied: set[Coordinate] = set()
+    occupied: set[tuple[str, Coordinate]] = set()
     for entity_definition in scenario.entities:
         entity_id = registry.create_entity(entity_definition.id)
         raw_components = dict(entity_definition.components)
+        spatial_values = raw_components.pop("spatial_location", None)
+        if spatial_values is not None:
+            if city_world is None:
+                raise ValueError(
+                    "spatial_location requires a city world definition"
+                )
+            spatial_definition = _validate_component(
+                SpatialLocationDefinition, spatial_values, entity_id
+            )
+            spatial_location = spatial_definition.to_domain()
+            _validate_spatial_location(city_world, spatial_location)
+            registry.add_component(
+                entity_id,
+                SpatialLocationComponent(spatial_location),
+            )
+            registry.add_component(entity_id, TravelComponent())
+            if spatial_location.local_coordinate is not None:
+                raw_components.setdefault(
+                    "position",
+                    {
+                        "x": spatial_location.local_coordinate.x,
+                        "y": spatial_location.local_coordinate.y,
+                    },
+                )
         if "position" in raw_components:
             if world is None:
                 raise ValueError("entity positions require a world definition")
@@ -567,9 +877,15 @@ def create_runner(
                 raise ValueError(
                     f"entity {entity_id} position must be on a walkable grid tile"
                 )
-            if coordinate in occupied:
+            occupied_place = (
+                str(spatial_values.get("place_id"))
+                if isinstance(spatial_values, dict)
+                else "implicit-building"
+            )
+            occupied_key = (occupied_place, coordinate)
+            if occupied_key in occupied:
                 raise ValueError(f"multiple entities occupy initial tile {coordinate}")
-            occupied.add(coordinate)
+            occupied.add(occupied_key)
             registry.add_component(entity_id, PositionComponent(coordinate))
 
         if "movement" in raw_components:
@@ -767,7 +1083,10 @@ def create_runner(
 
         if (
             "homeostasis" in entity_definition.components
-            and "position" in entity_definition.components
+            and (
+                "position" in entity_definition.components
+                or "spatial_location" in entity_definition.components
+            )
             and not registry.has_component(entity_id, MovementComponent)
         ):
             registry.add_component(entity_id, MovementComponent())
@@ -776,6 +1095,25 @@ def create_runner(
             registry.add_component(
                 entity_id,
                 ScenarioComponents(values=raw_components),
+            )
+        if (
+            city_world is None
+            and registry.has_component(entity_id, PositionComponent)
+            and not registry.has_component(
+                entity_id, SpatialLocationComponent
+            )
+        ):
+            registry.add_component(
+                entity_id,
+                SpatialLocationComponent(
+                    WorldLocation(
+                        scale=SpatialScale.BUILDING,
+                        place_id="implicit-building",
+                        local_coordinate=registry.get_component(
+                            entity_id, PositionComponent
+                        ).coordinate,
+                    )
+                ),
             )
     return SimulationRunner(
         RunConfiguration(
@@ -805,6 +1143,31 @@ class HomeostasisComponentDefinition(BaseModel):
     satiety: float = Field(default=100.0, ge=0, le=100)
     energy: float = Field(default=100.0, ge=0, le=100)
     stress: float = Field(default=0.0, ge=0, le=100)
+
+
+class SpatialLocationDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scale: SpatialScale
+    place_id: str = Field(min_length=1)
+    local_coordinate: CoordinateDefinition | None = None
+    network_node_id: str | None = None
+    edge_id: str | None = None
+    edge_progress: float | None = Field(default=None, ge=0, le=1)
+
+    def to_domain(self) -> WorldLocation:
+        return WorldLocation(
+            scale=self.scale,
+            place_id=self.place_id,
+            local_coordinate=(
+                self.local_coordinate.to_domain()
+                if self.local_coordinate is not None
+                else None
+            ),
+            network_node_id=self.network_node_id,
+            edge_id=self.edge_id,
+            edge_progress=self.edge_progress,
+        )
 
 
 class CharacterIdentityDefinition(BaseModel):
@@ -995,12 +1358,24 @@ class ControllerDefinition(BaseModel):
 
     enabled: bool = True
     tool_allowlist: list[str] = Field(
-        default_factory=lambda: ["go_to", "perform", "say", "wait"]
+        default_factory=lambda: [
+            "go_to",
+            "perform",
+            "say",
+            "wait",
+            "travel_to",
+        ]
     )
 
     @model_validator(mode="after")
     def tools_are_supported(self) -> "ControllerDefinition":
-        unknown = set(self.tool_allowlist) - {"go_to", "perform", "say", "wait"}
+        unknown = set(self.tool_allowlist) - {
+            "go_to",
+            "perform",
+            "say",
+            "wait",
+            "travel_to",
+        }
         if unknown:
             raise ValueError(f"unknown controller tools: {sorted(unknown)}")
         return self
@@ -1026,12 +1401,23 @@ class PlanActionDefinition(BaseModel):
     action: ActionType
     target: str | None = None
     duration: float | None = Field(default=None, gt=0)
+    mode: TravelMode | None = None
+
+    @model_validator(mode="after")
+    def travel_fields_are_consistent(self) -> "PlanActionDefinition":
+        if self.action is ActionType.TRAVEL_TO:
+            if self.target is None or self.mode is None:
+                raise ValueError("TRAVEL_TO requires target and mode")
+        elif self.mode is not None:
+            raise ValueError("mode is only valid for TRAVEL_TO")
+        return self
 
     def to_domain(self) -> PlanAction:
         return PlanAction(
             action=self.action,
             target=self.target,
             duration=self.duration,
+            mode=self.mode,
         )
 
 
@@ -1205,3 +1591,124 @@ def _build_world(definition: WorldDefinition) -> WorldMap:
         for station in definition.stations
     )
     return WorldMap(grid=grid, zones=zones, stations=stations)
+
+
+def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
+    bounds = definition.city.bounds_meters
+    return CityWorld(
+        id=definition.city.id,
+        name=definition.city.name,
+        bounds=CityBounds(
+            bounds.min_x,
+            bounds.min_y,
+            bounds.max_x,
+            bounds.max_y,
+        ),
+        districts=tuple(
+            District(item.id, item.name, item.center.to_domain())
+            for item in definition.districts
+        ),
+        buildings=tuple(
+            Building(
+                id=item.id,
+                name=item.name,
+                district_id=item.district_id,
+                city_position=item.city_position.to_domain(),
+                local_map_id=item.local_map_id,
+                entrances=tuple(
+                    BuildingEntrance(
+                        id=entrance.id,
+                        local_coordinate=entrance.local_coordinate.to_domain(),
+                        network_node_id=entrance.neighborhood_node_id,
+                    )
+                    for entrance in item.entrances
+                ),
+            )
+            for item in definition.buildings
+        ),
+        outdoor_places=tuple(
+            OutdoorPlace(
+                id=item.id,
+                name=item.name,
+                district_id=item.district_id,
+                city_position=item.city_position.to_domain(),
+                network_node_id=item.network_node_id,
+            )
+            for item in definition.outdoor_places
+        ),
+        local_maps={
+            map_id: _build_world(local_map)
+            for map_id, local_map in definition.local_maps.items()
+        },
+        nodes=tuple(
+            TransportNode(
+                id=item.id,
+                kind=item.kind,
+                position=item.position.to_domain(),
+                place_id=item.place_id,
+            )
+            for item in definition.transport.nodes
+        ),
+        edges=tuple(
+            TransportEdge(
+                id=item.id,
+                from_node_id=item.from_node_id,
+                to_node_id=item.to_node_id,
+                allowed_modes=frozenset(item.allowed_modes),
+                distance_meters=item.distance_meters,
+                geometry=tuple(point.to_domain() for point in item.geometry),
+                speed_limit_mps=item.speed_limit_mps,
+                bidirectional=item.bidirectional,
+            )
+            for item in definition.transport.edges
+        ),
+        vehicles=tuple(
+            Vehicle(
+                id=item.id,
+                vehicle_type=item.type,
+                name=item.name,
+                capacity=item.capacity,
+                network_node_id=item.location.network_node_id,
+            )
+            for item in definition.transport.vehicles
+        ),
+        walking_speed_mps=definition.transport.walking_speed_mps,
+        cycling_speed_mps=definition.transport.cycling_speed_mps,
+        car_speed_mps=definition.transport.car_speed_mps,
+        metro_speed_mps=definition.transport.metro_speed_mps,
+    )
+
+
+def _initial_city_local_map(
+    scenario: ScenarioDefinition,
+    city: CityWorld,
+) -> WorldMap:
+    for entity in scenario.entities:
+        raw = entity.components.get("spatial_location")
+        if not raw or raw.get("scale") != SpatialScale.BUILDING.value:
+            continue
+        place_id = raw.get("place_id")
+        if isinstance(place_id, str):
+            return city.local_map_for_building(place_id)
+    return city.local_maps[sorted(city.local_maps)[0]]
+
+
+def _validate_spatial_location(
+    city: CityWorld,
+    location: WorldLocation,
+) -> None:
+    if location.scale is SpatialScale.BUILDING:
+        local_map = city.local_map_for_building(location.place_id)
+        if (
+            location.local_coordinate is None
+            or not local_map.grid.is_walkable(location.local_coordinate)
+        ):
+            raise ValueError(
+                f"invalid local coordinate for building {location.place_id}"
+            )
+    elif location.network_node_id is not None:
+        city.node(location.network_node_id)
+    elif location.edge_id is not None:
+        city.edge(location.edge_id)
+    else:
+        raise ValueError("city location requires a node or edge")

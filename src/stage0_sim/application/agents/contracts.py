@@ -63,7 +63,7 @@ class ModelClientError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class ObservedTarget:
     id: str
-    kind: Literal["zone", "station", "character"]
+    kind: Literal["zone", "station", "character", "building", "outdoor"]
     name: str
     supported_actions: tuple[str, ...] = ()
     available: bool = True
@@ -93,6 +93,8 @@ class CharacterObservation:
     targets: tuple[ObservedTarget, ...]
     facts: tuple[ObservationFact, ...]
     recent_outcome: str | None
+    spatial_location: dict[str, JsonValue] | None = None
+    available_travel_modes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

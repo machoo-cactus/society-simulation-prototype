@@ -13,9 +13,12 @@ from stage0_sim.domain.components import (
     HomeostasisComponent,
     PerceptionComponent,
     PositionComponent,
+    SpatialLocationComponent,
 )
+from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
-from stage0_sim.domain.world import WorldMap
+from stage0_sim.domain.systems.spatial_context import local_world_for_agent
+from stage0_sim.domain.world import CityWorld, TravelMode
 
 
 def build_character_observation(
@@ -28,7 +31,7 @@ def build_character_observation(
     activity = registry.get_component(agent_id, ActivityComponent)
     homeostasis = registry.get_component(agent_id, HomeostasisComponent)
     perception = registry.get_component(agent_id, PerceptionComponent)
-    world = registry.get_resource(WorldMap)
+    world = local_world_for_agent(registry, agent_id)
     renderer = DeterministicPerceptionRenderer()
     known_characters = set(perception.visible_now) | set(perception.knowledge)
     targets = [
@@ -45,6 +48,53 @@ def build_character_observation(
         )
         for station in sorted(world.stations, key=lambda item: item.id)
     )
+    available_travel_modes: tuple[str, ...] = ()
+    spatial_payload: dict[str, JsonValue] | None = None
+    if registry.has_resource(CityWorld):
+        city = registry.get_resource(CityWorld)
+        targets.extend(
+            ObservedTarget(
+                id=building.id,
+                kind="building",
+                name=building.name,
+            )
+            for building in sorted(city.buildings, key=lambda item: item.id)
+        )
+        targets.extend(
+            ObservedTarget(
+                id=place.id,
+                kind="outdoor",
+                name=place.name,
+            )
+            for place in sorted(
+                city.outdoor_places, key=lambda item: item.id
+            )
+        )
+        available = {TravelMode.WALK}
+        available.update(vehicle.vehicle_type for vehicle in city.vehicles)
+        if any(
+            TravelMode.METRO in edge.allowed_modes for edge in city.edges
+        ):
+            available.add(TravelMode.METRO)
+        available_travel_modes = tuple(
+            mode.value for mode in TravelMode if mode in available
+        )
+    if registry.has_component(agent_id, SpatialLocationComponent):
+        location = registry.get_component(
+            agent_id, SpatialLocationComponent
+        ).location
+        spatial_payload = {
+            "scale": location.scale.value,
+            "place_id": location.place_id,
+            "local_coordinate": (
+                location.local_coordinate.to_payload()
+                if location.local_coordinate is not None
+                else None
+            ),
+            "network_node_id": location.network_node_id,
+            "edge_id": location.edge_id,
+            "edge_progress": location.edge_progress,
+        }
     for target_id in sorted(known_characters):
         target_profile = (
             registry.get_component(target_id, CharacterProfileComponent)
@@ -91,4 +141,6 @@ def build_character_observation(
         targets=tuple(targets),
         facts=facts,
         recent_outcome=controller.last_outcome,
+        spatial_location=spatial_payload,
+        available_travel_modes=available_travel_modes,
     )

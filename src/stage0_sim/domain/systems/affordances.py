@@ -13,7 +13,8 @@ from stage0_sim.domain.components import (
     System1State,
 )
 from stage0_sim.domain.systems import SystemContext
-from stage0_sim.domain.world import AffordanceStation, WorldMap
+from stage0_sim.domain.systems.spatial_context import local_world_for_agent
+from stage0_sim.domain.world import AffordanceStation
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +99,7 @@ class AffordanceExecutionSystem:
         *,
         source: str,
     ) -> tuple[bool, str | None]:
-        world = context.registry.get_resource(WorldMap)
+        world = local_world_for_agent(context.registry, agent_id)
         try:
             station = world.station(station_id)
         except KeyError:
@@ -163,7 +164,7 @@ class AffordanceExecutionSystem:
         execution = context.registry.get_component(
             agent_id, AffordanceExecutionComponent
         )
-        world = context.registry.get_resource(WorldMap)
+        world = local_world_for_agent(context.registry, agent_id)
         station = world.station(execution.station_id)
         failure = self._precondition_failure(
             context, agent_id, station, execution.definition.action

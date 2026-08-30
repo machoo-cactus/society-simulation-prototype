@@ -63,6 +63,7 @@ stage0-sim run scenarios/navigation.json --ticks 20
 stage0-sim run scenarios/homeostasis.json --ticks 60
 stage0-sim run scenarios/system1-preemption.json --ticks 20
 stage0-sim run scenarios/fake-llm-planning.json --ticks 30
+stage0-sim run scenarios/sparse-city-car-demo.json --ticks 700
 ```
 
 | Scenario | What it demonstrates |
@@ -73,6 +74,7 @@ stage0-sim run scenarios/fake-llm-planning.json --ticks 30
 | `system1-preemption.json` | Plan cancellation, survival navigation, affordance recovery, and resumption |
 | `fake-llm-planning.json` | Post-tick planning, memory retrieval, and validated routines without an external model |
 | `real-llm-tool-agent.json` | Observer-specific sensing and externally configured typed-tool character control |
+| `sparse-city-car-demo.json` | Hierarchical location, sparse city routing, explicit car travel, and city UI |
 
 By default, canonical events are written to standard output and a SQLite dataset
 is created under `data/runs/`. Canonical events omit run IDs and wall-clock
@@ -121,6 +123,8 @@ From the UI you can:
 - expand, copy, and inspect complete long-form event payloads;
 - view character names, current vision, hearing pulses, speech bubbles, and a
   delivered-speech transcript;
+- follow characters between building and city views with AUTO/MANUAL scale,
+  pan, zoom, vehicle progress, and travel events;
 - download the run's versioned JSONL dataset.
 
 The empty top-level `frontend/` scaffold from the original proposed architecture
@@ -167,6 +171,9 @@ Common experiment variables include:
 - initial positions, vitals, activities, plans, goals, and memories;
 - affordance duration, capacity, and deterministic effects;
 - memory relevance, recency, and importance weights.
+- schema-version-2 city bounds, districts, buildings, entrances, local maps,
+  outdoor places, sparse transport edges, vehicles, and scripted `TRAVEL_TO`
+  actions.
 
 The full examples in `scenarios/` are the most reliable schema reference.
 Invalid fields and values are rejected when a scenario is loaded.

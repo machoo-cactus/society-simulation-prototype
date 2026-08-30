@@ -23,6 +23,13 @@ const state = {
   runId: null,
   runStatus: "created",
   bootstrap: null,
+  viewMode: "AUTO",
+  viewLevel: "BUILDING",
+  camera: {x: 0, y: 0, zoom: 1},
+  cameraDragging: null,
+  vehicleStates: {},
+  buildingMaps: {},
+  buildingMapRequests: new Set(),
   snapshot: null,
   selectedAgentId: null,
   lastSequence: 0,
@@ -59,7 +66,8 @@ const state = {
 const elements = Object.fromEntries(
   [
     "world-canvas", "empty-world", "connection-dot", "connection-label",
-    "sequence-label", "clock-label", "protocol-warning", "agent-select",
+    "sequence-label", "clock-label", "world-breadcrumb", "view-mode",
+    "view-level", "reset-camera", "protocol-warning", "agent-select",
     "agent-location", "satiety-value", "satiety-gauge", "energy-value",
     "energy-gauge", "stress-value", "stress-gauge", "activity-value",
     "system1-value", "drive-value", "destination-value", "memory-value",
@@ -98,6 +106,10 @@ function normalizeAgent(raw, fallbackId = "unknown-agent", staticAgent = null) {
       ? staticAgent.character_profile
       : {};
   const perception = isObject(agent.perception) ? agent.perception : {};
+  const spatialLocation = isObject(agent.spatial_location)
+    ? agent.spatial_location
+    : {};
+  const travel = isObject(agent.travel) ? agent.travel : {};
   return {
     id: optionalString(agent.id) ?? fallbackId,
     displayName: optionalString(profile.display_name) ?? optionalString(agent.id) ?? fallbackId,
@@ -137,6 +149,24 @@ function normalizeAgent(raw, fallbackId = "unknown-agent", staticAgent = null) {
         ? perception.visible_now.filter((value) => typeof value === "string")
         : [],
       knownCharacterCount: finiteNumber(perception.known_character_count, 0),
+    },
+    spatialLocation: {
+      scale: optionalString(spatialLocation.scale) ?? "BUILDING",
+      placeId: optionalString(spatialLocation.place_id),
+      localCoordinate: normalizeCoordinate(spatialLocation.local_coordinate),
+      networkNodeId: optionalString(spatialLocation.network_node_id),
+      edgeId: optionalString(spatialLocation.edge_id),
+      edgeProgress: Number.isFinite(Number(spatialLocation.edge_progress))
+        ? Number(spatialLocation.edge_progress)
+        : null,
+    },
+    travel: {
+      destinationId: optionalString(travel.destination_id),
+      mode: optionalString(travel.requested_mode),
+      status: optionalString(travel.status) ?? "IDLE",
+      vehicleId: optionalString(travel.vehicle_id),
+      currentLegIndex: finiteNumber(travel.current_leg_index, 0),
+      legCount: finiteNumber(travel.leg_count, 0),
     },
   };
 }
@@ -198,6 +228,13 @@ function normalizeSnapshot(raw) {
           : station.available,
       })),
     };
+  }
+  if (Array.isArray(worldRaw?.vehicle_states)) {
+    state.vehicleStates = Object.fromEntries(
+      worldRaw.vehicle_states
+        .filter(isObject)
+        .map((vehicle) => [vehicle.id, vehicle])
+    );
   }
   const staticAgents = new Map(
     (state.bootstrap?.agents ?? [])
@@ -707,10 +744,15 @@ async function mutateVitals(event) {
 
 function render() {
   const snapshot = state.snapshot;
+  updateAutomaticView();
+  void ensureFocusedBuildingMap();
   elements["clock-label"].textContent = snapshot
     ? `tick ${snapshot.tick} / ${snapshot.simulationTime.toFixed(1)}s`
     : "tick 0 / 0.0s";
   elements["empty-world"].hidden = Boolean(snapshot?.world);
+  elements["view-level"].value = state.viewLevel;
+  elements["view-level"].disabled = state.viewMode === "AUTO";
+  elements["world-breadcrumb"].textContent = worldBreadcrumb();
   syncAgentSelection();
   renderInspector();
   drawWorld();
@@ -843,7 +885,52 @@ function drawWorld() {
   }
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, rect.width, rect.height);
-  const world = state.snapshot?.world;
+  const world = activeBuildingWorld();
+  const city = state.bootstrap?.city;
+  if (state.viewLevel !== "BUILDING" && city) {
+    drawCityWorld(rect, city);
+    return;
+  }
+
+  function activeBuildingWorld() {
+    const buildingId = selectedAgent()?.spatialLocation.placeId;
+    return state.buildingMaps[buildingId] ?? state.snapshot?.world;
+  }
+
+  async function ensureFocusedBuildingMap() {
+    if (!state.runId) return;
+    const agent = selectedAgent();
+    if (!agent || agent.spatialLocation.scale !== "BUILDING") return;
+    const buildingId = agent.spatialLocation.placeId;
+    if (
+      !buildingId
+      || state.buildingMaps[buildingId]
+      || state.buildingMapRequests.has(buildingId)
+      || !state.bootstrap?.city
+    ) {
+      return;
+    }
+    state.buildingMapRequests.add(buildingId);
+    try {
+      const response = await api(
+        `/simulation/runs/${encodeURIComponent(state.runId)}/world/buildings/${
+          encodeURIComponent(buildingId)
+        }`
+      );
+      state.buildingMaps[buildingId] = normalizeStaticWorld(
+        response.building.local_map
+      );
+      drawWorld();
+    } catch (error) {
+      addLocalEvent(
+        "ui.building_map_failed",
+        {building_id: buildingId, message: error.message},
+        "error"
+      );
+    } finally {
+      state.buildingMapRequests.delete(buildingId);
+    }
+  }
   if (!world) return;
 
   const padding = 30;
@@ -860,6 +947,166 @@ function drawWorld() {
     context.fillStyle = zoneColor(zone.type);
     for (const coordinate of zone.tiles) {
       context.fillRect(originX + coordinate.x * tile, originY + coordinate.y * tile, tile, tile);
+    }
+
+    function updateAutomaticView() {
+      if (state.viewMode !== "AUTO") return;
+      const scale = selectedAgent()?.spatialLocation.scale;
+      state.viewLevel = scale === "BUILDING" ? "BUILDING" : "CITY";
+    }
+
+    function worldBreadcrumb() {
+      const agent = selectedAgent();
+      if (!agent) return "No location";
+      const location = agent.spatialLocation;
+      const city = state.bootstrap?.city;
+      const building = city?.buildings?.find(
+        (item) => item.id === location.placeId
+      );
+      const district = city?.districts?.find(
+        (item) => item.id === building?.district_id
+      );
+      return [
+        city?.name,
+        district?.name,
+        building?.name ?? location.placeId,
+        location.edgeId,
+      ].filter(Boolean).join(" / ") || "Local world";
+    }
+
+    function drawCityWorld(rect, city) {
+      const bounds = city.bounds;
+      if (!isObject(bounds)) return;
+      const baseScale = Math.min(
+        (rect.width - 60) / Math.max(1, bounds.max_x - bounds.min_x),
+        (rect.height - 60) / Math.max(1, bounds.max_y - bounds.min_y)
+      );
+      const scale = baseScale * state.camera.zoom;
+      const project = (point) => ({
+        x: rect.width / 2
+          + (point.x - (bounds.min_x + bounds.max_x) / 2 + state.camera.x) * scale,
+        y: rect.height / 2
+          + (point.y - (bounds.min_y + bounds.max_y) / 2 + state.camera.y) * scale,
+      });
+      context.fillStyle = "#08131d";
+      context.fillRect(0, 0, rect.width, rect.height);
+      for (const edge of city.edges ?? []) {
+        const geometry = edge.geometry ?? [];
+        if (geometry.length < 2) continue;
+        context.beginPath();
+        geometry.forEach((point, index) => {
+          const projected = project(point);
+          index
+            ? context.lineTo(projected.x, projected.y)
+            : context.moveTo(projected.x, projected.y);
+        });
+        context.strokeStyle = edge.allowed_modes?.includes("CAR")
+          ? "#52697d"
+          : edge.allowed_modes?.includes("METRO")
+            ? "#b779d0"
+            : "#65866f";
+        context.lineWidth = edge.allowed_modes?.includes("CAR") ? 4 : 2;
+        context.stroke();
+      }
+      for (const building of city.buildings ?? []) {
+        const point = project(building.position);
+        context.fillStyle = "#d9c46c";
+        context.fillRect(point.x - 8, point.y - 8, 16, 16);
+        context.fillStyle = "#d8e8f4";
+        context.font = "11px system-ui";
+        context.textAlign = "center";
+        context.textBaseline = "top";
+        context.fillText(building.name, point.x, point.y + 10);
+      }
+      for (const place of city.outdoor_places ?? []) {
+        const point = project(place.position);
+        context.beginPath();
+        context.arc(point.x, point.y, 6, 0, Math.PI * 2);
+        context.fillStyle = "#54d78b";
+        context.fill();
+        context.fillStyle = "#d8e8f4";
+        context.font = "11px system-ui";
+        context.textAlign = "center";
+        context.textBaseline = "top";
+        context.fillText(place.name, point.x, point.y + 8);
+      }
+      for (const vehicle of city.vehicles ?? []) {
+        const vehicleState = state.vehicleStates[vehicle.id] ?? vehicle;
+        const point = cityTransportPoint(vehicleState, city);
+        if (!point) continue;
+        const projected = project(point);
+        context.fillStyle = vehicle.type === "CAR" ? "#f4be5b" : "#8bc2d9";
+        context.fillRect(projected.x - 6, projected.y - 4, 12, 8);
+        context.fillStyle = "#d8e8f4";
+        context.font = "10px system-ui";
+        context.textAlign = "center";
+        context.textBaseline = "bottom";
+        context.fillText(vehicle.name, projected.x, projected.y - 6);
+      }
+      for (const agent of state.snapshot?.agents ?? []) {
+        const point = cityAgentPoint(agent, city);
+        if (!point) continue;
+        const projected = project(point);
+        context.beginPath();
+        context.arc(projected.x, projected.y, 7, 0, Math.PI * 2);
+        context.fillStyle = agent.id === state.selectedAgentId ? "#67d7da" : "#8fa8bc";
+        context.fill();
+        if (state.overlayOptions.names) {
+          context.fillStyle = "#e7edf5";
+          context.font = "700 11px system-ui";
+          context.textAlign = "center";
+          context.textBaseline = "bottom";
+          context.fillText(agent.displayName, projected.x, projected.y - 9);
+        }
+        drawAgentOverlays(agent, projected.x, projected.y, 28);
+      }
+    }
+
+    function cityAgentPoint(agent, city) {
+      const location = agent.spatialLocation;
+      if (location.edgeId) {
+        const edge = city.edges?.find((item) => item.id === location.edgeId);
+        if (!edge?.geometry?.length) return null;
+        return interpolateGeometry(edge.geometry, location.edgeProgress ?? 0);
+      }
+
+      function cityTransportPoint(location, city) {
+        if (location.edge_id) {
+          const edge = city.edges?.find((item) => item.id === location.edge_id);
+          if (!edge?.geometry?.length) return null;
+          return interpolateGeometry(edge.geometry, location.edge_progress ?? 0);
+        }
+        if (location.network_node_id) {
+          return city.nodes?.find(
+            (item) => item.id === location.network_node_id
+          )?.position ?? null;
+        }
+        return null;
+      }
+      if (location.networkNodeId) {
+        return city.nodes?.find(
+          (item) => item.id === location.networkNodeId
+        )?.position ?? null;
+      }
+      if (location.placeId) {
+        return city.buildings?.find(
+          (item) => item.id === location.placeId
+        )?.position ?? city.outdoor_places?.find(
+          (item) => item.id === location.placeId
+        )?.position ?? null;
+      }
+      return null;
+    }
+
+    function interpolateGeometry(geometry, progress) {
+      if (geometry.length === 1) return geometry[0];
+      const segmentProgress = Math.max(0, Math.min(1, progress)) * (geometry.length - 1);
+      const index = Math.min(geometry.length - 2, Math.floor(segmentProgress));
+      const local = segmentProgress - index;
+      return {
+        x: geometry[index].x + (geometry[index + 1].x - geometry[index].x) * local,
+        y: geometry[index].y + (geometry[index + 1].y - geometry[index].y) * local,
+      };
     }
     if (zone.tiles.length) {
       const center = zone.tiles.reduce(
@@ -1276,6 +1523,7 @@ function eventMatchesFilter(event) {
   if (filter === "dialogue") matches = /^(dialogue|speech)\./.test(event.type);
   if (filter === "cognition") matches = /^(cognition|tool)\./.test(event.type);
   if (filter === "perception") matches = event.type.startsWith("perception.");
+  if (filter === "travel") matches = /^(travel|building|vehicle|metro)\./.test(event.type);
   if (filter === "errors") matches = /(failed|blocked|cancelled|error|rejected)/.test(event.type);
   if (filter === "ui") matches = event.type.startsWith("ui.") || event.type.startsWith("simulation.");
   if (!matches) return false;
@@ -1427,6 +1675,9 @@ function resetRunState() {
   state.sensorEffects = {};
   state.speechBubbles = {};
   state.recentPerceptions = {};
+  state.vehicleStates = {};
+  state.buildingMaps = {};
+  state.buildingMapRequests = new Set();
   elements["sequence-label"].textContent = "seq --";
   renderEventLog();
   renderTranscript();
@@ -1445,6 +1696,18 @@ elements["speed-select"].addEventListener("change", () =>
 elements["agent-select"].addEventListener("change", (event) => {
   state.selectedAgentId = event.target.value || null;
   renderInspector();
+  drawWorld();
+});
+elements["view-mode"].addEventListener("change", (event) => {
+  state.viewMode = event.target.value;
+  render();
+});
+elements["view-level"].addEventListener("change", (event) => {
+  state.viewLevel = event.target.value;
+  drawWorld();
+});
+elements["reset-camera"].addEventListener("click", () => {
+  state.camera = {x: 0, y: 0, zoom: 1};
   drawWorld();
 });
 elements["event-filter"].addEventListener("change", (event) => {
@@ -1512,6 +1775,7 @@ elements["scenario-file"].addEventListener("change", async (event) => {
   }
 });
 canvas.addEventListener("click", (event) => {
+  if (state.viewLevel !== "BUILDING") return;
   const tile = finiteNumber(canvas.dataset.tile, 0);
   if (!tile) return;
   const rect = canvas.getBoundingClientRect();
@@ -1525,6 +1789,40 @@ canvas.addEventListener("click", (event) => {
     elements["agent-select"].value = agent.id;
     renderInspector();
     drawWorld();
+  }
+});
+canvas.addEventListener("wheel", (event) => {
+  if (state.viewLevel === "BUILDING") return;
+  event.preventDefault();
+  state.camera.zoom = Math.max(
+    0.5,
+    Math.min(8, state.camera.zoom * (event.deltaY > 0 ? 0.9 : 1.1))
+  );
+  drawWorld();
+}, {passive: false});
+canvas.addEventListener("pointerdown", (event) => {
+  if (state.viewLevel === "BUILDING") return;
+  state.cameraDragging = {x: event.clientX, y: event.clientY};
+  canvas.setPointerCapture(event.pointerId);
+});
+canvas.addEventListener("pointermove", (event) => {
+  if (!state.cameraDragging || state.viewLevel === "BUILDING") return;
+  const city = state.bootstrap?.city;
+  if (!city?.bounds) return;
+  const rect = canvas.getBoundingClientRect();
+  const baseScale = Math.min(
+    (rect.width - 60) / Math.max(1, city.bounds.max_x - city.bounds.min_x),
+    (rect.height - 60) / Math.max(1, city.bounds.max_y - city.bounds.min_y)
+  ) * state.camera.zoom;
+  state.camera.x += (event.clientX - state.cameraDragging.x) / baseScale;
+  state.camera.y += (event.clientY - state.cameraDragging.y) / baseScale;
+  state.cameraDragging = {x: event.clientX, y: event.clientY};
+  drawWorld();
+});
+canvas.addEventListener("pointerup", (event) => {
+  state.cameraDragging = null;
+  if (canvas.hasPointerCapture(event.pointerId)) {
+    canvas.releasePointerCapture(event.pointerId);
   }
 });
 window.addEventListener("resize", drawWorld);

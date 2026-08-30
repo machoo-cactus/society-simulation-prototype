@@ -22,6 +22,7 @@ from stage0_sim.application.agents.contracts import (
     ModelRequest,
     ModelToolCall,
     ModelTurn,
+    ObservedTarget,
     ToolDefinition,
 )
 from stage0_sim.application.agents.tools import ToolRegistry, ToolValidationError
@@ -320,6 +321,58 @@ def test_tool_registry_rejects_extra_fields_and_unknown_targets() -> None:
             ModelToolCall("call-2", "go_to", {"target_id": "hidden"}),
         )
     assert target.value.reason == "target_not_observable"
+
+
+def test_travel_tool_produces_typed_cross_building_intent() -> None:
+    observation = CharacterObservation(
+        agent_id="alex",
+        display_name="Alex",
+        goals=(),
+        simulation_time=0,
+        location_id=None,
+        activity="IDLE",
+        satiety=100,
+        energy=100,
+        stress=0,
+        targets=(
+            ObservedTarget(
+                id="building-office",
+                kind="building",
+                name="Office",
+            ),
+        ),
+        facts=(),
+        recent_outcome=None,
+        available_travel_modes=("WALK", "CAR"),
+    )
+    request = CharacterDecisionRequest(
+        decision_id="decision-1",
+        run_id="run",
+        agent_id="alex",
+        requested_tick=1,
+        state_revision=0,
+        trigger="idle",
+        character_description="Alex",
+        profile_id="alex",
+        profile_template_version=1,
+        profile_content_hash="hash",
+        observation=observation,
+        memories=(),
+        allowed_tools=("travel_to",),
+    )
+
+    intent = ToolRegistry().propose(
+        request,
+        ModelToolCall(
+            "call-1",
+            "travel_to",
+            {"target_id": "building-office", "mode": "CAR"},
+        ),
+    )
+
+    assert intent.kind.value == "travel"
+    assert intent.target_id == "building-office"
+    assert intent.mode.value == "CAR"
 
 
 def test_recording_and_replay_round_trip(tmp_path: Path) -> None:

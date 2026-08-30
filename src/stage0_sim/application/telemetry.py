@@ -16,9 +16,11 @@ from stage0_sim.domain.components import (
     PlanComponent,
     PlannerComponent,
     PositionComponent,
+    SpatialLocationComponent,
+    TravelComponent,
 )
 from stage0_sim.domain.events import DomainEvent, JsonValue
-from stage0_sim.domain.world import WorldMap
+from stage0_sim.domain.world import CityWorld, VehicleRegistry, WorldMap
 
 TELEMETRY_SCHEMA_VERSION = "stage0.telemetry.v2"
 
@@ -191,8 +193,92 @@ def build_ui_bootstrap(runner: SimulationRunner) -> dict[str, JsonValue]:
                 for station in sorted(world.stations, key=lambda item: item.id)
             ],
         }
+    city_payload: dict[str, JsonValue] | None = None
+    if registry.has_resource(CityWorld):
+        city = registry.get_resource(CityWorld)
+        city_payload = {
+            "id": city.id,
+            "name": city.name,
+            "bounds": {
+                "min_x": city.bounds.min_x,
+                "min_y": city.bounds.min_y,
+                "max_x": city.bounds.max_x,
+                "max_y": city.bounds.max_y,
+            },
+            "districts": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "center": item.center.to_payload(),
+                }
+                for item in city.districts
+            ],
+            "buildings": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "district_id": item.district_id,
+                    "position": item.city_position.to_payload(),
+                    "local_map_id": item.local_map_id,
+                    "entrances": [
+                        {
+                            "id": entrance.id,
+                            "network_node_id": entrance.network_node_id,
+                            "local_coordinate": entrance.local_coordinate.to_payload(),
+                        }
+                        for entrance in item.entrances
+                    ],
+                    "outdoor_places": [
+                        {
+                            "id": item.id,
+                            "name": item.name,
+                            "district_id": item.district_id,
+                            "position": item.city_position.to_payload(),
+                            "network_node_id": item.network_node_id,
+                        }
+                        for item in city.outdoor_places
+                    ],
+                }
+                for item in city.buildings
+            ],
+            "nodes": [
+                {
+                    "id": item.id,
+                    "kind": item.kind,
+                    "position": item.position.to_payload(),
+                    "place_id": item.place_id,
+                }
+                for item in city.nodes
+            ],
+            "edges": [
+                {
+                    "id": item.id,
+                    "from_node_id": item.from_node_id,
+                    "to_node_id": item.to_node_id,
+                    "allowed_modes": [
+                        mode.value for mode in sorted(item.allowed_modes)
+                    ],
+                    "geometry": [
+                        point.to_payload() for point in item.geometry
+                    ],
+                    "bidirectional": item.bidirectional,
+                }
+                for item in city.edges
+            ],
+            "vehicles": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "type": item.vehicle_type.value,
+                    "capacity": item.capacity,
+                    "network_node_id": item.network_node_id,
+                }
+                for item in city.vehicles
+            ],
+        }
     return {
         "world": world_payload,
+        "city": city_payload,
         "agents": [
             _build_agent_static_snapshot(runner, entity_id)
             for entity_id in registry.entities()
@@ -233,12 +319,29 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
                 key=lambda item: item.id,
             )
         ]
+    vehicle_states: list[JsonValue] = []
+    if registry.has_resource(VehicleRegistry):
+        vehicle_states = [
+            {
+                "id": vehicle_id,
+                "network_node_id": state.network_node_id,
+                "edge_id": state.edge_id,
+                "edge_progress": state.edge_progress,
+                "driver_id": state.driver_id,
+            }
+            for vehicle_id, state in sorted(
+                registry.get_resource(VehicleRegistry).states.items()
+            )
+        ]
     return {
         "status": runner.status.value,
         "speed": runner.speed,
         "tick": runner.clock.tick,
         "simulation_time": runner.clock.simulation_time,
-        "world": {"station_states": station_states},
+        "world": {
+            "station_states": station_states,
+            "vehicle_states": vehicle_states,
+        },
         "agents": [
             build_agent_snapshot(runner, entity_id, include_profile=False)
             for entity_id in registry.entities()
@@ -272,6 +375,37 @@ def build_agent_snapshot(
         payload["position"] = registry.get_component(
             agent_id, PositionComponent
         ).coordinate.to_payload()
+    if registry.has_component(agent_id, SpatialLocationComponent):
+        location = registry.get_component(
+            agent_id, SpatialLocationComponent
+        ).location
+        payload["spatial_location"] = {
+            "scale": location.scale.value,
+            "place_id": location.place_id,
+            "local_coordinate": (
+                location.local_coordinate.to_payload()
+                if location.local_coordinate is not None
+                else None
+            ),
+            "network_node_id": location.network_node_id,
+            "edge_id": location.edge_id,
+            "edge_progress": location.edge_progress,
+        }
+    if registry.has_component(agent_id, TravelComponent):
+        travel = registry.get_component(agent_id, TravelComponent)
+        payload["travel"] = {
+            "destination_id": travel.destination_id,
+            "requested_mode": (
+                travel.requested_mode.value
+                if travel.requested_mode is not None
+                else None
+            ),
+            "status": travel.status.value,
+            "current_leg_index": travel.current_leg_index,
+            "leg_count": len(travel.route),
+            "vehicle_id": travel.vehicle_id,
+            "interruption_requested": travel.interruption_requested,
+        }
     if registry.has_component(agent_id, HomeostasisComponent):
         payload["homeostasis"] = registry.get_component(
             agent_id, HomeostasisComponent
@@ -375,6 +509,8 @@ def _plan_action_payload(action: PlanAction | None) -> JsonValue:
         payload["target"] = action.target
     if action.duration is not None:
         payload["duration"] = action.duration
+    if action.mode is not None:
+        payload["mode"] = action.mode.value
     return payload
 
 
@@ -391,6 +527,8 @@ def _message_type_for_event(event_type: str) -> str:
         return "cognition_event"
     if event_type.startswith(("speech.", "perception.")):
         return "perception_event"
+    if event_type.startswith(("travel.", "building.", "vehicle.", "metro.")):
+        return "travel_event"
     if event_type.startswith(("agent.", "path.", "activity.", "affordance.")):
         return "agent_delta"
     return "event"

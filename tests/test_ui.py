@@ -62,6 +62,9 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     assert "lastDomainEventOffset" in script.text
     assert "drawSpeechBubble" in script.text
     assert "auditoryUntil" in script.text
+    assert "function drawCityWorld" in script.text
+    assert "function ensureFocusedBuildingMap" in script.text
+    assert "after_snapshot_revision" in script.text
     assert styles.status_code == 200
     assert "text/css" in styles.headers["content-type"]
     assert "#world-canvas" in styles.text

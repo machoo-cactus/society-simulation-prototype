@@ -27,6 +27,7 @@ from stage0_sim.domain.intents import (
     CharacterIntent,
     MoveIntent,
     SpeechIntent,
+    TravelIntent,
     WaitIntent,
 )
 from stage0_sim.domain.systems import SystemContext
@@ -373,6 +374,14 @@ class AgentWorkCoordinator:
                     text=intent.text,
                     channel=intent.channel,
                 ),
+            )
+        elif isinstance(intent, TravelIntent):
+            plan.queue.append(
+                PlanAction(
+                    action=ActionType.TRAVEL_TO,
+                    target=intent.target_id,
+                    mode=intent.mode,
+                )
             )
         else:
             raise TypeError(f"unsupported intent: {type(intent).__name__}")

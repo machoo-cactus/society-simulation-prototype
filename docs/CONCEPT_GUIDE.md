@@ -604,6 +604,17 @@ Planned implementation:
 
 The world is a rectangular discrete grid. A character occupies one tile.
 
+Schema-version-2 city scenarios add an explicit hierarchy above local grids:
+
+```text
+city -> district -> building -> local map -> zone -> tile/station
+```
+
+Exterior movement uses sparse typed transport nodes and edges rather than a
+city-sized dense grid. `SpatialLocationComponent` remains authoritative across
+building, neighborhood, and city scales; `TravelComponent` records route legs,
+mode, progress, vehicle, and interruption state.
+
 Movement uses deterministic A* with:
 
 - Manhattan-style grid costs;
@@ -971,6 +982,7 @@ Do not make a provider swap require changes to domain systems.
 | Fixed-step deterministic runner | Implemented | Pause, resume, step, speed, realtime pacing |
 | ECS registry and ordered systems | Implemented | Stable entity and system ordering |
 | Grid, zones, stations, A* | Implemented | Occupancy-aware movement and retries |
+| Sparse city hierarchy and transport | Implemented, initial | Buildings, local maps, WALK/CYCLE/CAR, direct METRO edges |
 | Homeostatic integration | Implemented | Satiety, energy, stress |
 | System 1 preemption/recovery | Implemented | Three drives, hysteresis, blocked state |
 | Deterministic affordances | Implemented | Duration, effects, capacity, failures |
@@ -996,6 +1008,7 @@ src/stage0_sim/
     components/       Typed ECS state
     systems/          Ordered deterministic behavior
     world/            Grid, zones, stations, pathfinding
+                      plus sparse city/transport graph contracts
     events.py         Domain event envelope and bus
     ecs.py            Entity/component/resource registry
 

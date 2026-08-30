@@ -1,0 +1,570 @@
+from dataclasses import dataclass
+
+from stage0_sim.domain.components import (
+    DriveComponent,
+    PlanComponent,
+    PositionComponent,
+    SpatialLocationComponent,
+    System1State,
+    TravelComponent,
+)
+from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.world import (
+    CityWorld,
+    SpatialScale,
+    TravelMode,
+    TravelStatus,
+    VehicleRegistry,
+    WorldLocation,
+    find_transport_route,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TravelSystem:
+    name: str = "travel"
+    order: int = 175
+
+    def update(self, context: SystemContext) -> None:
+        if not context.registry.has_resource(CityWorld):
+            return
+        city = context.registry.get_resource(CityWorld)
+        for agent_id in context.registry.query_entities(
+            TravelComponent,
+            SpatialLocationComponent,
+            DriveComponent,
+        ):
+            travel = context.registry.get_component(agent_id, TravelComponent)
+            drive = context.registry.get_component(agent_id, DriveComponent)
+            if (
+                drive.state is not System1State.NORMAL
+                and travel.status is TravelStatus.TRAVELLING
+            ):
+                travel.interruption_requested = True
+            if travel.status is TravelStatus.ROUTE_PLANNED:
+                self._start(context, agent_id, travel)
+            if travel.status is TravelStatus.TRAVELLING:
+                self._advance(context, city, agent_id, travel)
+
+    def request(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        destination_id: str,
+        mode: TravelMode,
+    ) -> bool:
+        city = context.registry.get_resource(CityWorld)
+        location = context.registry.get_component(
+            agent_id, SpatialLocationComponent
+        )
+        travel = context.registry.get_component(agent_id, TravelComponent)
+        try:
+            destination = city.building(destination_id)
+        except KeyError:
+            destination = None
+        outdoor = None
+        if destination is None:
+            try:
+                outdoor = city.outdoor_place(destination_id)
+            except KeyError:
+                self._failure(
+                    context,
+                    agent_id,
+                    destination_id,
+                    mode,
+                    "unknown_destination",
+                )
+                return False
+        if travel.status in {TravelStatus.ROUTE_PLANNED, TravelStatus.TRAVELLING}:
+            self._failure(
+                context,
+                agent_id,
+                destination_id,
+                mode,
+                "travel_in_progress",
+            )
+            return False
+        origin_node = self._origin_node(city, location.location)
+        destination_node = (
+            destination.entrances[0].network_node_id
+            if destination is not None
+            else outdoor.network_node_id
+            if outdoor is not None
+            else ""
+        )
+        if origin_node is None:
+            self._failure(
+                context,
+                agent_id,
+                destination_id,
+                mode,
+                "route_not_found",
+            )
+            return False
+        vehicle_id = None
+        if mode in {TravelMode.CAR, TravelMode.CYCLE}:
+            vehicle_states = context.registry.get_resource(VehicleRegistry).states
+            vehicle = next(
+                (
+                    item
+                    for item in sorted(city.vehicles, key=lambda item: item.id)
+                    if item.vehicle_type is mode
+                    and vehicle_states[item.id].driver_id is None
+                    and vehicle_states[item.id].network_node_id in {
+                        origin_node,
+                        *(
+                            edge.to_node_id
+                            for edge in city.edges
+                            if edge.from_node_id == origin_node
+                            and TravelMode.WALK in edge.allowed_modes
+                        ),
+                    }
+                ),
+                None,
+            )
+            if vehicle is None:
+                self._failure(
+                    context,
+                    agent_id,
+                    destination_id,
+                    mode,
+                    "vehicle_not_available",
+                )
+                return False
+            vehicle_id = vehicle.id
+        route = find_transport_route(
+            city, origin_node, destination_node, mode
+        )
+        if route is None:
+            self._failure(
+                context,
+                agent_id,
+                destination_id,
+                mode,
+                "route_not_found",
+            )
+            return False
+        requested = context.events.emit(
+            "travel.requested",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "origin_place_id": location.location.place_id,
+                "destination_id": destination_id,
+                "mode": mode.value,
+            },
+        )
+        travel.destination_id = destination_id
+        travel.requested_mode = mode
+        travel.route = route
+        travel.current_leg_index = 0
+        travel.leg_elapsed_seconds = 0.0
+        travel.status = TravelStatus.ROUTE_PLANNED
+        travel.vehicle_id = vehicle_id
+        travel.correlation_id = requested.event_id
+        context.events.emit(
+            "travel.route_planned",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "destination_id": destination_id,
+                "mode": mode.value,
+                "expected_seconds": round(
+                    sum(leg.duration_seconds for leg in route), 12
+                ),
+                "legs": [
+                    {
+                        "edge_id": leg.edge_id,
+                        "from_node_id": leg.from_node_id,
+                        "to_node_id": leg.to_node_id,
+                        "mode": leg.mode.value,
+                        "duration_seconds": leg.duration_seconds,
+                    }
+                    for leg in route
+                ],
+                "vehicle_id": vehicle_id,
+            },
+            causation_id=requested.event_id,
+            correlation_id=requested.event_id,
+        )
+        return True
+
+    @staticmethod
+    def _start(
+        context: SystemContext,
+        agent_id: str,
+        travel: TravelComponent,
+    ) -> None:
+        travel.status = TravelStatus.TRAVELLING
+        location = context.registry.get_component(
+            agent_id, SpatialLocationComponent
+        ).location
+        if location.scale is SpatialScale.BUILDING:
+            context.events.emit(
+                "building.exited",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=agent_id,
+                payload={"building_id": location.place_id},
+                correlation_id=travel.correlation_id,
+            )
+        context.events.emit(
+            "travel.started",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "destination_id": travel.destination_id,
+                "mode": (
+                    travel.requested_mode.value
+                    if travel.requested_mode is not None
+                    else None
+                ),
+                "vehicle_id": travel.vehicle_id,
+            },
+            correlation_id=travel.correlation_id,
+        )
+        if travel.route:
+            TravelSystem._emit_leg(
+                context, "travel.leg_started", agent_id, travel
+            )
+
+    @staticmethod
+    def _advance(
+        context: SystemContext,
+        city: CityWorld,
+        agent_id: str,
+        travel: TravelComponent,
+    ) -> None:
+        if not travel.route:
+            TravelSystem._arrive(context, city, agent_id, travel)
+            return
+        leg = travel.route[travel.current_leg_index]
+        remaining = leg.duration_seconds - travel.leg_elapsed_seconds
+        travel.leg_elapsed_seconds = (
+            leg.duration_seconds
+            if remaining <= context.clock.dt
+            else round(travel.leg_elapsed_seconds + context.clock.dt, 12)
+        )
+        progress = min(1.0, travel.leg_elapsed_seconds / leg.duration_seconds)
+        location = context.registry.get_component(
+            agent_id, SpatialLocationComponent
+        )
+        location.location = WorldLocation(
+            scale=SpatialScale.CITY,
+            place_id=city.id,
+            network_node_id=(
+                leg.to_node_id if progress >= 1.0 else None
+            ),
+            edge_id=leg.edge_id if progress < 1.0 else None,
+            edge_progress=round(progress, 12) if progress < 1.0 else None,
+        )
+        if (
+            travel.vehicle_id is not None
+            and leg.mode in {TravelMode.CAR, TravelMode.CYCLE}
+        ):
+            vehicle = context.registry.get_resource(VehicleRegistry).states[
+                travel.vehicle_id
+            ]
+            vehicle.network_node_id = (
+                leg.to_node_id if progress >= 1.0 else None
+            )
+            vehicle.edge_id = leg.edge_id if progress < 1.0 else None
+            vehicle.edge_progress = (
+                round(progress, 12) if progress < 1.0 else None
+            )
+            vehicle.driver_id = agent_id
+            context.events.emit(
+                "vehicle.moved",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=agent_id,
+                payload={
+                    "vehicle_id": travel.vehicle_id,
+                    "edge_id": vehicle.edge_id,
+                    "edge_progress": vehicle.edge_progress,
+                    "network_node_id": vehicle.network_node_id,
+                },
+                correlation_id=travel.correlation_id,
+            )
+        context.events.emit(
+            "travel.progressed",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "destination_id": travel.destination_id,
+                "edge_id": leg.edge_id,
+                "mode": leg.mode.value,
+                "progress": round(progress, 12),
+                "vehicle_id": travel.vehicle_id,
+            },
+            correlation_id=travel.correlation_id,
+        )
+        if progress < 1.0:
+            return
+        TravelSystem._emit_leg(
+            context, "travel.leg_completed", agent_id, travel
+        )
+        if travel.interruption_requested:
+            TravelSystem._cancel_at_node(context, agent_id, travel, leg.to_node_id)
+            return
+        travel.current_leg_index += 1
+        travel.leg_elapsed_seconds = 0.0
+        if travel.current_leg_index >= len(travel.route):
+            TravelSystem._arrive(context, city, agent_id, travel)
+            return
+        TravelSystem._emit_leg(
+            context, "travel.leg_started", agent_id, travel
+        )
+
+    @staticmethod
+    def _arrive(
+        context: SystemContext,
+        city: CityWorld,
+        agent_id: str,
+        travel: TravelComponent,
+    ) -> None:
+        destination_id = travel.destination_id
+        if destination_id is None:
+            return
+        try:
+            destination = city.building(destination_id)
+        except KeyError:
+            destination = None
+        if destination is not None:
+            entrance = destination.entrances[0]
+            context.registry.set_resource(
+                city.local_map_for_building(destination_id)
+            )
+            context.registry.get_component(
+                agent_id, SpatialLocationComponent
+            ).location = WorldLocation(
+                scale=SpatialScale.BUILDING,
+                place_id=destination.id,
+                local_coordinate=entrance.local_coordinate,
+                network_node_id=entrance.network_node_id,
+            )
+            if context.registry.has_component(agent_id, PositionComponent):
+                context.registry.get_component(
+                    agent_id, PositionComponent
+                ).coordinate = entrance.local_coordinate
+            context.events.emit(
+                "building.entered",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=agent_id,
+                payload={
+                    "building_id": destination.id,
+                    "entrance_id": entrance.id,
+                },
+                correlation_id=travel.correlation_id,
+            )
+        else:
+            outdoor = city.outdoor_place(destination_id)
+            context.registry.get_component(
+                agent_id, SpatialLocationComponent
+            ).location = WorldLocation(
+                scale=SpatialScale.NEIGHBORHOOD,
+                place_id=outdoor.id,
+                network_node_id=outdoor.network_node_id,
+            )
+        travel.status = TravelStatus.ARRIVED
+        if travel.vehicle_id is not None:
+            vehicle = context.registry.get_resource(VehicleRegistry).states[
+                travel.vehicle_id
+            ]
+            vehicle.driver_id = None
+            context.events.emit(
+                "vehicle.exited",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=agent_id,
+                payload={"vehicle_id": travel.vehicle_id},
+                correlation_id=travel.correlation_id,
+            )
+        context.events.emit(
+            "travel.arrived",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "destination_id": destination_id,
+                "mode": (
+                    travel.requested_mode.value
+                    if travel.requested_mode is not None
+                    else None
+                ),
+                "vehicle_id": travel.vehicle_id,
+            },
+            correlation_id=travel.correlation_id,
+        )
+        TravelSystem._complete_plan(context, agent_id)
+
+    @staticmethod
+    def _cancel_at_node(
+        context: SystemContext,
+        agent_id: str,
+        travel: TravelComponent,
+        node_id: str,
+    ) -> None:
+        travel.status = TravelStatus.CANCELLED
+        context.events.emit(
+            "travel.interrupted",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "destination_id": travel.destination_id,
+                "safe_node_id": node_id,
+                "reason": "system1_preemption",
+            },
+            correlation_id=travel.correlation_id,
+        )
+        TravelSystem._complete_plan(context, agent_id)
+
+    @staticmethod
+    def _complete_plan(context: SystemContext, agent_id: str) -> None:
+        if not context.registry.has_component(agent_id, PlanComponent):
+            return
+        plan = context.registry.get_component(agent_id, PlanComponent)
+        if plan.current is not None:
+            context.events.emit(
+                "plan.action_completed",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=agent_id,
+                payload={
+                    "action": plan.current.action.value,
+                    "target": plan.current.target,
+                    "mode": (
+                        plan.current.mode.value
+                        if plan.current.mode is not None
+                        else None
+                    ),
+                },
+            )
+        plan.current = None
+        plan.current_started = False
+
+    @staticmethod
+    def _origin_node(
+        city: CityWorld, location: WorldLocation
+    ) -> str | None:
+        if location.network_node_id is not None:
+            return location.network_node_id
+        if location.scale is SpatialScale.BUILDING:
+            building = city.building(location.place_id)
+            return building.entrances[0].network_node_id
+        return None
+
+    @staticmethod
+    def _emit_leg(
+        context: SystemContext,
+        event_type: str,
+        agent_id: str,
+        travel: TravelComponent,
+    ) -> None:
+        leg = travel.route[travel.current_leg_index]
+        previous_mode = (
+            travel.route[travel.current_leg_index - 1].mode
+            if travel.current_leg_index > 0
+            else None
+        )
+        if event_type == "travel.leg_started" and previous_mode is not leg.mode:
+            context.events.emit(
+                "travel.mode_changed",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=agent_id,
+                payload={
+                    "previous": (
+                        previous_mode.value
+                        if previous_mode is not None
+                        else None
+                    ),
+                    "current": leg.mode.value,
+                    "vehicle_id": travel.vehicle_id,
+                },
+                correlation_id=travel.correlation_id,
+            )
+            if (
+                travel.vehicle_id is not None
+                and leg.mode in {TravelMode.CAR, TravelMode.CYCLE}
+            ):
+                context.events.emit(
+                    "vehicle.boarded",
+                    simulation_tick=context.clock.tick,
+                    simulation_time=context.clock.simulation_time,
+                    agent_id=agent_id,
+                    payload={
+                        "vehicle_id": travel.vehicle_id,
+                        "role": "DRIVER",
+                        "mode": leg.mode.value,
+                    },
+                    correlation_id=travel.correlation_id,
+                )
+            if leg.mode is TravelMode.METRO:
+                context.events.emit(
+                    "metro.boarded",
+                    simulation_tick=context.clock.tick,
+                    simulation_time=context.clock.simulation_time,
+                    agent_id=agent_id,
+                    payload={
+                        "from_node_id": leg.from_node_id,
+                        "to_node_id": leg.to_node_id,
+                        "edge_id": leg.edge_id,
+                    },
+                    correlation_id=travel.correlation_id,
+                )
+        context.events.emit(
+            event_type,
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "leg_index": travel.current_leg_index,
+                "edge_id": leg.edge_id,
+                "from_node_id": leg.from_node_id,
+                "to_node_id": leg.to_node_id,
+                "mode": leg.mode.value,
+                "duration_seconds": leg.duration_seconds,
+            },
+            correlation_id=travel.correlation_id,
+        )
+        if event_type == "travel.leg_completed" and leg.mode is TravelMode.METRO:
+            context.events.emit(
+                "metro.alighted",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=agent_id,
+                payload={
+                    "node_id": leg.to_node_id,
+                    "edge_id": leg.edge_id,
+                },
+                correlation_id=travel.correlation_id,
+            )
+
+    @staticmethod
+    def _failure(
+        context: SystemContext,
+        agent_id: str,
+        destination_id: str,
+        mode: TravelMode,
+        reason: str,
+    ) -> None:
+        payload: dict[str, JsonValue] = {
+            "destination_id": destination_id,
+            "mode": mode.value,
+            "reason": reason,
+        }
+        context.events.emit(
+            "travel.route_failed",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload=payload,
+        )

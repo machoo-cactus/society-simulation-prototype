@@ -1,9 +1,18 @@
 from dataclasses import dataclass
 
-from stage0_sim.domain.components import MovementComponent, PositionComponent
+from stage0_sim.domain.components import (
+    MovementComponent,
+    PositionComponent,
+    SpatialLocationComponent,
+    TravelComponent,
+)
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
-from stage0_sim.domain.world import Coordinate, WorldMap, find_path
+from stage0_sim.domain.systems.spatial_context import (
+    local_world_for_agent,
+    shares_local_map,
+)
+from stage0_sim.domain.world import Coordinate, find_path
 
 
 def _positions(context: SystemContext) -> dict[str, Coordinate]:
@@ -45,13 +54,25 @@ class PathfindingSystem:
             raise ValueError("retry_interval_ticks must be greater than zero")
 
     def update(self, context: SystemContext) -> None:
-        world = context.registry.get_resource(WorldMap)
         positions = _positions(context)
-        occupied = frozenset(positions.values())
 
         for agent_id in context.registry.query_entities(
             PositionComponent, MovementComponent
         ):
+            if (
+                context.registry.has_component(agent_id, TravelComponent)
+                and context.registry.get_component(
+                    agent_id, TravelComponent
+                ).status.value
+                in {"ROUTE_PLANNED", "TRAVELLING"}
+            ):
+                continue
+            world = local_world_for_agent(context.registry, agent_id)
+            occupied = frozenset(
+                coordinate
+                for other_id, coordinate in positions.items()
+                if shares_local_map(context.registry, agent_id, other_id)
+            )
             position = context.registry.get_component(agent_id, PositionComponent)
             movement = context.registry.get_component(agent_id, MovementComponent)
             destination = movement.destination
@@ -175,13 +196,25 @@ class MovementSystem:
     order: int = 200
 
     def update(self, context: SystemContext) -> None:
-        world = context.registry.get_resource(WorldMap)
         positions = _positions(context)
-        occupied = {coordinate: agent_id for agent_id, coordinate in positions.items()}
 
         for agent_id in context.registry.query_entities(
             PositionComponent, MovementComponent
         ):
+            if (
+                context.registry.has_component(agent_id, TravelComponent)
+                and context.registry.get_component(
+                    agent_id, TravelComponent
+                ).status.value
+                in {"ROUTE_PLANNED", "TRAVELLING"}
+            ):
+                continue
+            world = local_world_for_agent(context.registry, agent_id)
+            occupied = {
+                coordinate: other_id
+                for other_id, coordinate in positions.items()
+                if shares_local_map(context.registry, agent_id, other_id)
+            }
             position = context.registry.get_component(agent_id, PositionComponent)
             movement = context.registry.get_component(agent_id, MovementComponent)
             if not movement.path:
@@ -222,6 +255,20 @@ class MovementSystem:
             occupied.pop(previous)
             occupied[next_coordinate] = agent_id
             position.coordinate = next_coordinate
+            positions[agent_id] = next_coordinate
+            if context.registry.has_component(
+                agent_id, SpatialLocationComponent
+            ):
+                spatial = context.registry.get_component(
+                    agent_id, SpatialLocationComponent
+                )
+                if spatial.location.scale.value == "BUILDING":
+                    from dataclasses import replace
+
+                    spatial.location = replace(
+                        spatial.location,
+                        local_coordinate=next_coordinate,
+                    )
             movement.path = movement.path[1:]
             _emit_for_agent(
                 context,

@@ -1,8 +1,8 @@
 # Character Profile Guide
 
-Character profiles are reusable scenario data that describe who a simulated
-character is. They are separate from current physiology, perception, memory, and
-plans.
+Character profiles are reusable JSON resources that describe who a simulated
+character is. They are stored separately from scenarios and from current
+physiology, perception, memory, and plans.
 
 Each controller request has three prompt layers:
 
@@ -10,63 +10,59 @@ Each controller request has three prompt layers:
 2. the selected character's deterministic profile description;
 3. dynamic self-state, observations, memories, targets, and tools.
 
-## Reusable profiles
+## Reusable characters
 
-Define a catalog at the scenario root:
+Store one character per file in `characters\`:
 
 ```json
 {
-  "character_profiles": {
-    "alex-chen": {
-      "template_id": "human-v1",
-      "identity": {
-        "display_name": "Alex Chen",
-        "age": 34,
-        "gender": "Man",
-        "pronouns": "he/him",
-        "occupation": "Software research engineer"
-      },
-      "appearance": {
-        "summary": "Medium height with a slim build",
-        "hair": "Short black hair",
-        "clothing": "Dark sweater and practical trousers"
-      },
-      "personality": {
-        "summary": "Quiet, methodical, and considerate",
-        "traits": ["methodical", "reserved"],
-        "speech_style": "Brief and precise",
-        "strengths": ["careful analysis"],
-        "flaws": ["hesitates when information is incomplete"]
-      },
-      "motivations": {
-        "values": ["accuracy", "helping colleagues"],
-        "goals": ["complete the report"]
-      }
-    }
+  "schema_version": 1,
+  "id": "alex-chen",
+  "template_id": "human-v1",
+  "identity": {
+    "display_name": "Alex Chen",
+    "age": 34,
+    "gender": "Man",
+    "pronouns": "he/him",
+    "occupation": "Software research engineer"
+  },
+  "appearance": {
+    "summary": "Medium height with a slim build",
+    "hair": "Short black hair",
+    "clothing": "Dark sweater and practical trousers"
+  },
+  "personality": {
+    "summary": "Quiet, methodical, and considerate",
+    "traits": ["methodical", "reserved"],
+    "speech_style": "Brief and precise"
+  },
+  "motivations": {
+    "values": ["accuracy", "helping colleagues"],
+    "goals": ["complete the report"]
   }
 }
 ```
 
-Assign a profile to an entity slot:
+The filename must match the character ID, for example
+`characters\alex-chen.json`. Assign it to a scenario entity slot:
 
 ```json
 {
   "id": "agent-001",
   "components": {
-    "character_profile": {"profile_ref": "alex-chen"}
+    "character_profile": {"character_id": "alex-chen"}
   }
 }
 ```
 
-The browser shows one profile selector for every entity when the loaded scenario
-has a profile catalog. The selected assignments are validated before Start and
-are used to create the run. Profiles may be reused in multiple slots.
+The browser simulation page loads the character catalog from the API and shows
+a selector for each character slot. Assignments are validated before Start.
+Characters may be reused in multiple slots.
 
-The browser Character Studio can create, duplicate, delete, rename, and edit
-profiles before a run starts. It exposes every `human-v1` field, plus ordered
-relationship records and custom sections as JSON arrays. Saving a renamed
-profile updates entity references, and changing a slot assignment preserves
-any entity-specific profile overrides.
+The separate `/ui/characters.html` page creates, duplicates, deletes, renames,
+and edits character files. It exposes every `human-v1` field, plus ordered
+relationship records and custom sections as JSON arrays. Saves use content
+hashes so a stale browser tab cannot silently overwrite a newer edit.
 
 ## Standard sections
 
@@ -115,7 +111,7 @@ misspellings while keeping experiments easy to author:
 Sections and fields retain their JSON order. Set `prompt_visible` or
 `ui_visible` to `false` to exclude an experimental value from that surface.
 
-## Templates and overrides
+## Templates and compatibility
 
 `character_profile_templates` can change section order:
 
@@ -139,22 +135,12 @@ Sections and fields retain their JSON order. Set `prompt_visible` or
 }
 ```
 
-An entity may override part of a referenced profile:
+Scenario-level `character_profiles`, `profile_ref`, inline profiles, and the
+previous flat fields remain accepted for compatibility. They are deprecated
+and are never emitted by the character editor or migration command. Use
+`stage0-sim characters extract <scenario> --write` to create character files
+and a migrated scenario.
 
-```json
-{
-  "character_profile": {
-    "profile_ref": "alex-chen",
-    "personality": {
-      "speech_style": "Warm but concise"
-    }
-  }
-}
-```
-
-Object sections merge recursively. Lists replace the base list. The resolved
-profile receives a deterministic content hash recorded with cognition events.
-
-The previous flat fields (`display_name`, `role`, `traits`, `values`, `goals`,
-and relationship maps) remain accepted for compatibility and are normalized
-into `human-v1`.
+Characters are resolved and frozen when a scenario is staged. Editing a source
+file does not alter an already staged scenario or active run. The complete
+resolved character snapshot and content hash are stored in the run dataset.

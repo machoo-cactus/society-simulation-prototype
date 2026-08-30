@@ -4,6 +4,11 @@ from uuid import uuid4
 
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.application.agents.contracts import ModelClient
+from stage0_sim.application.characters import (
+    CharacterLibrary,
+    PreparedScenario,
+    prepare_scenario,
+)
 from stage0_sim.application.collection import RunDataCollector
 from stage0_sim.application.runner import RunnerStatus, SimulationRunner
 from stage0_sim.application.scenario import ScenarioDefinition, create_runner
@@ -32,6 +37,7 @@ class SimulationManager:
     def __init__(
         self,
         dataset_store: SQLiteDatasetStore,
+        character_library: CharacterLibrary | None = None,
         telemetry_hz: float = 10.0,
         model_client: ModelClient | None = None,
         model_max_output_tokens: int | None = None,
@@ -41,20 +47,35 @@ class SimulationManager:
             raise ValueError("telemetry_hz must be greater than zero")
         self.telemetry_hz = telemetry_hz
         self.dataset_store = dataset_store
+        self.character_library = character_library
         self.model_client = model_client
         self.model_max_output_tokens = model_max_output_tokens
         self.model_max_concurrency = model_max_concurrency
-        self._scenarios: dict[str, ScenarioDefinition] = {}
+        self._scenarios: dict[str, PreparedScenario] = {}
         self._runs: dict[str, ManagedRun] = {}
         self._next_scenario_id = 1
 
     def add_scenario(self, scenario: ScenarioDefinition) -> str:
+        if self.character_library is None:
+            if any(
+                isinstance(
+                    entity.components.get("character_profile", {}).get(
+                        "character_id"
+                    ),
+                    str,
+                )
+                for entity in scenario.entities
+            ):
+                raise ValueError("character library is not configured")
+            prepared = PreparedScenario(scenario=scenario, characters={})
+        else:
+            prepared = prepare_scenario(scenario, self.character_library)
         scenario_id = f"scenario-{self._next_scenario_id:06d}"
         self._next_scenario_id += 1
-        self._scenarios[scenario_id] = scenario
+        self._scenarios[scenario_id] = prepared
         return scenario_id
 
-    def get_scenario(self, scenario_id: str) -> ScenarioDefinition:
+    def get_scenario(self, scenario_id: str) -> PreparedScenario:
         try:
             return self._scenarios[scenario_id]
         except KeyError as error:
@@ -69,10 +90,15 @@ class SimulationManager:
         realtime: bool,
         speed: float | None = None,
     ) -> str:
-        scenario = self.get_scenario(scenario_id)
+        prepared = self.get_scenario(scenario_id)
+        scenario = prepared.scenario
         run_id = f"run-{uuid4()}"
         runner = create_runner(
             scenario,
+            resolved_characters={
+                character_id: character.profile()
+                for character_id, character in prepared.characters.items()
+            },
             run_id=run_id,
             speed=speed,
             model_client=self.model_client,
@@ -82,7 +108,7 @@ class SimulationManager:
         collector = RunDataCollector(
             store=self.dataset_store,
             runner=runner,
-            scenario=scenario.model_dump(mode="json"),
+            scenario=prepared.dataset_payload(),
         )
         broker = TelemetryBroker(runner)
         managed = ManagedRun(

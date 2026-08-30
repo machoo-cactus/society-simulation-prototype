@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "id": "alex-chen",
+  "template_id": "human-v1",
+  "identity": {
+    "display_name": "Alex Chen",
+    "age": 34,
+    "gender": "Man",
+    "pronouns": "he/him",
+    "occupation": "Software research engineer"
+  },
+  "appearance": {
+    "summary": "Medium height with a slim build",
+    "height": "",
+    "build": "",
+    "hair": "Short black hair",
+    "eyes": "Dark brown behind rectangular glasses",
+    "clothing": "Dark sweater, practical trousers, worn trainers",
+    "distinguishing_features": []
+  },
+  "personality": {
+    "summary": "Quiet, methodical, and considerate",
+    "traits": [
+      "methodical",
+      "reserved",
+      "considerate"
+    ],
+    "temperament": "",
+    "social_style": "",
+    "speech_style": "Brief and precise; avoids exaggeration",
+    "strengths": [
+      "careful analysis",
+      "sustained concentration"
+    ],
+    "flaws": [
+      "hesitates when information is incomplete"
+    ]
+  },
+  "background": {
+    "birthplace": "",
+    "residence": "",
+    "education": "",
+    "history": ""
+  },
+  "motivations": {
+    "values": [
+      "accuracy",
+      "finishing commitments",
+      "helping colleagues"
+    ],
+    "goals": [
+      "complete the report",
+      "check whether Jordan needs help"
+    ],
+    "fears": [],
+    "needs": [],
+    "current_priorities": []
+  },
+  "capabilities": {
+    "skills": [
+      "software research",
+      "technical writing"
+    ],
+    "knowledge_areas": [],
+    "limitations": []
+  },
+  "preferences": {
+    "likes": [],
+    "dislikes": [],
+    "habits": [],
+    "routines": []
+  },
+  "relationships": [
+    {
+      "target_id": "jordan-lee",
+      "relationship": "trusted colleague",
+      "sentiment": "positive",
+      "notes": ""
+    }
+  ],
+  "custom_sections": []
+}

@@ -689,11 +689,15 @@ class ScenarioDefinition(BaseModel):
             raw_profile = entity.components.get("character_profile")
             if not raw_profile:
                 continue
+            character_id = raw_profile.get("character_id")
             reference = raw_profile.get("profile_ref")
-            if isinstance(reference, str) and reference not in self.character_profiles:
+            if character_id is not None and not isinstance(character_id, str):
                 raise ValueError(
-                    f"entity {entity.id} references unknown character profile "
-                    f"{reference}"
+                    f"entity {entity.id} character_id must be a string"
+                )
+            if character_id is not None and reference is not None:
+                raise ValueError(
+                    f"entity {entity.id} cannot use both character_id and profile_ref"
                 )
         return self
 
@@ -724,6 +728,7 @@ def load_scenario(path: Path) -> ScenarioDefinition:
 def create_runner(
     scenario: ScenarioDefinition,
     *,
+    resolved_characters: Mapping[str, "CharacterProfileDefinition"] | None = None,
     speed: float | None = None,
     run_id: str | None = None,
     planner: Planner | None = None,
@@ -976,6 +981,7 @@ def create_runner(
             entity_id,
             profile_values,
             str(metadata_values.get("display_name", entity_id)),
+            resolved_characters or {},
         )
         template = scenario.character_profile_templates[
             profile_definition.template_id
@@ -1474,6 +1480,7 @@ def _resolve_character_profile(
     entity_id: str,
     raw_profile: dict[str, Any] | None,
     fallback_display_name: str,
+    resolved_characters: Mapping[str, CharacterProfileDefinition],
 ) -> tuple[CharacterProfileDefinition, str]:
     if raw_profile is None:
         return (
@@ -1484,6 +1491,15 @@ def _resolve_character_profile(
             ),
             f"inline:{entity_id}",
         )
+    character_id = raw_profile.get("character_id")
+    if isinstance(character_id, str):
+        base = resolved_characters.get(character_id)
+        if base is None:
+            raise ValueError(
+                f"entity {entity_id} references unresolved character "
+                f"{character_id}"
+            )
+        return base, character_id
     reference = raw_profile.get("profile_ref")
     if isinstance(reference, str):
         base = scenario.character_profiles.get(reference)

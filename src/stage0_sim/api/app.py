@@ -8,7 +8,9 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from stage0_sim import __version__
+from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
+from stage0_sim.api.characters import router as characters_router
 from stage0_sim.api.simulation import router as simulation_router
 from stage0_sim.application.manager import SimulationManager
 from stage0_sim.config import create_model_client, get_settings
@@ -20,13 +22,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     store = SQLiteDatasetStore(
         settings.data_directory / settings.dataset_database
     )
+    character_library = FileSystemCharacterLibrary(
+        settings.character_directory
+    )
     manager = SimulationManager(
         dataset_store=store,
+        character_library=character_library,
         model_client=create_model_client(settings),
         model_max_output_tokens=settings.llm_max_output_tokens,
         model_max_concurrency=settings.llm_max_concurrency,
     )
     app.state.simulation_manager = manager
+    app.state.character_library = character_library
     try:
         yield
     finally:
@@ -48,6 +55,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(simulation_router)
+app.include_router(characters_router)
 web_directory = Path(__file__).parents[1] / "web"
 app.mount("/ui", StaticFiles(directory=web_directory, html=True), name="ui")
 

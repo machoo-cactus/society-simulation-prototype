@@ -203,27 +203,6 @@
       ]
     }
   },
-  "character_profiles": {
-    "alex-driver": {
-      "identity": {
-        "display_name": "Alex Chen",
-        "age": 34,
-        "pronouns": "he/him",
-        "occupation": "Software research engineer"
-      },
-      "personality": {
-        "summary": "Calm and attentive",
-        "traits": ["methodical"],
-        "speech_style": "Brief and precise"
-      },
-      "motivations": {
-        "goals": ["drive to the office"]
-      },
-      "capabilities": {
-        "skills": ["licensed car driver"]
-      }
-    }
-  },
   "entities": [
     {
       "id": "agent-001",
@@ -239,7 +218,7 @@
           "stress": 20
         },
         "character_profile": {
-          "profile_ref": "alex-driver"
+          "character_id": "alex-driver"
         },
         "plan": {
           "queue": [

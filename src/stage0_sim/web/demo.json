@@ -4,54 +4,6 @@
   "seed": 20260824,
   "dt": 1,
   "speed": 1,
-  "character_profiles": {
-    "alex-chen": {
-      "identity": {
-        "display_name": "Alex Chen",
-        "age": 34,
-        "gender": "Man",
-        "pronouns": "he/him",
-        "occupation": "Software research engineer"
-      },
-      "appearance": {
-        "summary": "Medium height, slim build, short black hair, rectangular glasses",
-        "clothing": "Dark sweater, practical trousers, worn trainers"
-      },
-      "personality": {
-        "summary": "Methodical, reserved, and considerate",
-        "speech_style": "Brief and precise",
-        "strengths": ["careful analysis"],
-        "flaws": ["hesitates when information is incomplete"]
-      },
-      "motivations": {
-        "values": ["accuracy", "helping colleagues"],
-        "goals": ["complete the report"]
-      }
-    },
-    "jordan-lee": {
-      "identity": {
-        "display_name": "Jordan Lee",
-        "age": 29,
-        "gender": "Woman",
-        "pronouns": "she/her",
-        "occupation": "Operations analyst"
-      },
-      "appearance": {
-        "summary": "Average height, athletic build, shoulder-length brown hair",
-        "clothing": "Blue overshirt, plain T-shirt, dark jeans"
-      },
-      "personality": {
-        "summary": "Curious, warm, and direct",
-        "speech_style": "Friendly and asks concrete follow-up questions",
-        "strengths": ["communicates early"],
-        "flaws": ["impatient with prolonged indecision"]
-      },
-      "motivations": {
-        "values": ["clarity", "teamwork"],
-        "goals": ["coordinate with a colleague"]
-      }
-    }
-  },
   "world": {
     "width": 8,
     "height": 5,
@@ -78,7 +30,7 @@
         "activity": {"type": "WORKING"},
         "plan": {"current": {"action": "WORK", "duration": 3600}},
         "memory": {"top_k": 3},
-        "character_profile": {"profile_ref": "alex-chen"}
+        "character_profile": {"character_id": "alex-chen"}
       }
     }
   ]

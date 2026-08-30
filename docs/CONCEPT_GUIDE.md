@@ -137,8 +137,9 @@ A character may have:
 Character profiles are now reusable, structured scenario records. The built-in
 `human-v1` template covers identity, appearance, personality, background,
 motivations, capabilities, preferences, relationships, and ordered custom
-experimental sections. Browser operators may assign any scenario profile to
-each character entity slot before starting a run.
+experimental sections. Reusable profiles live in independent character JSON
+files; browser operators may assign library characters to each scenario entity
+slot before starting a run.
 
 The code currently uses ECS entity IDs such as `agent-001`. The conceptual term
 for a simulated person is **character**, not "LLM agent." This distinction avoids

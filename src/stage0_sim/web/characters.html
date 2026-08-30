@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Characters · Stage 0 Simulation</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Stage 0 configuration</p>
+        <h1>Character Library</h1>
+      </div>
+      <nav class="page-nav" aria-label="Application">
+        <a href="/ui/">Simulation</a>
+        <a href="/ui/characters.html" aria-current="page">Characters</a>
+      </nav>
+    </header>
+
+    <main class="character-page">
+      <section id="character-studio-panel" class="panel character-studio">
+        <div class="panel__header">
+          <div>
+            <h2>Reusable characters</h2>
+            <p>Each saved character is stored as an independent JSON file.</p>
+          </div>
+          <div class="character-studio__actions">
+            <input id="character-search" type="search" placeholder="Search characters" aria-label="Search characters">
+            <button type="button" data-action="add-profile">New character</button>
+            <button type="button" data-action="duplicate-profile">Duplicate</button>
+            <button type="button" data-action="delete-profile">Delete</button>
+            <button id="export-character" type="button">Download JSON</button>
+            <label class="file-button">
+              Import JSON
+              <input id="import-character" type="file" accept=".json,application/json">
+            </label>
+          </div>
+        </div>
+        <div class="character-studio__body">
+          <nav data-role="profile-list" class="character-studio__list" aria-label="Characters"></nav>
+          <div class="character-studio__editor">
+            <p data-role="profile-empty" class="empty-character">
+              The character library is empty. Select <strong>New character</strong> to create one.
+            </p>
+            <form data-role="profile-form" class="character-form" hidden></form>
+            <p data-role="profile-status" class="control-status" role="status"></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/ui/characters-page.js"></script>
+  </body>
+</html>

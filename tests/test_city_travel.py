@@ -3,7 +3,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.api.app import app
+from stage0_sim.application.characters import prepare_scenario
 from stage0_sim.application.scenario import (
     ScenarioDefinition,
     create_runner,
@@ -26,6 +28,27 @@ from stage0_sim.domain.world import (
 SCENARIO_PATH = (
     Path(__file__).parents[1] / "scenarios" / "sparse-city-car-demo.json"
 )
+CHARACTER_DIRECTORY = Path(__file__).parents[1] / "characters"
+
+
+def create_city_runner(
+    scenario: ScenarioDefinition | None = None,
+    *,
+    run_id: str | None = None,
+):
+    scenario = scenario or load_scenario(SCENARIO_PATH)
+    prepared = prepare_scenario(
+        scenario,
+        FileSystemCharacterLibrary(CHARACTER_DIRECTORY),
+    )
+    return create_runner(
+        scenario,
+        run_id=run_id,
+        resolved_characters={
+            character_id: character.profile()
+            for character_id, character in prepared.characters.items()
+        },
+    )
 
 
 def test_city_schema_and_references_are_validated() -> None:
@@ -37,7 +60,7 @@ def test_city_schema_and_references_are_validated() -> None:
 
 
 def test_sparse_route_is_deterministic_and_uses_access_legs() -> None:
-    runner = create_runner(load_scenario(SCENARIO_PATH))
+    runner = create_city_runner()
     city = runner.registry.get_resource(CityWorld)
 
     first = find_transport_route(
@@ -64,7 +87,7 @@ def test_sparse_route_is_deterministic_and_uses_access_legs() -> None:
 
 
 def test_scripted_car_trip_arrives_without_teleporting() -> None:
-    runner = create_runner(load_scenario(SCENARIO_PATH), run_id="city-trip")
+    runner = create_city_runner(run_id="city-trip")
 
     runner.run_for(575)
     before = runner.registry.get_component(
@@ -91,7 +114,7 @@ def test_scripted_car_trip_arrives_without_teleporting() -> None:
 
 
 def test_city_bootstrap_omits_unrequested_local_map_grids() -> None:
-    runner = create_runner(load_scenario(SCENARIO_PATH))
+    runner = create_city_runner()
 
     bootstrap = build_ui_bootstrap(runner)
 
@@ -131,7 +154,7 @@ def test_city_and_building_read_apis() -> None:
 
 
 def test_system1_interrupts_city_travel_at_next_safe_node() -> None:
-    runner = create_runner(load_scenario(SCENARIO_PATH), run_id="interrupt")
+    runner = create_city_runner(run_id="interrupt")
     state = runner.registry.get_component(
         "agent-001", HomeostasisComponent
     )
@@ -179,7 +202,7 @@ def test_cycle_and_direct_metro_routes(
         vehicle = payload["world"]["transport"]["vehicles"][0]
         vehicle["type"] = vehicle_type
         vehicle["name"] = "Demo Bicycle"
-    runner = create_runner(ScenarioDefinition.model_validate(payload))
+    runner = create_city_runner(ScenarioDefinition.model_validate(payload))
 
     runner.run_for(1400)
 

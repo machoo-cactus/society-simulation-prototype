@@ -62,9 +62,19 @@ def get_manager(request: Request) -> SimulationManager:
 async def create_scenario(
     scenario: ScenarioDefinition,
     request: Request,
-) -> dict[str, str]:
-    scenario_id = get_manager(request).add_scenario(scenario)
-    return {"scenario_id": scenario_id, "name": scenario.name}
+) -> dict[str, object]:
+    manager = get_manager(request)
+    try:
+        scenario_id = manager.add_scenario(scenario)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    prepared = manager.get_scenario(scenario_id)
+    return {
+        "scenario_id": scenario_id,
+        "name": scenario.name,
+        "characters": list(prepared.entity_summaries()),
+        "warnings": list(prepared.warnings),
+    }
 
 
 @router.post("/runs", status_code=201)

@@ -13,7 +13,6 @@ import {
   uiStateForRunStatus,
 } from "./ui-state.js";
 import {renderTranscriptView} from "./transcript-view.js";
-import {createCharacterEditor} from "./character-editor.js";
 
 const state = {
   uiState: UI_STATES.EMPTY,
@@ -22,6 +21,7 @@ const state = {
   scenarioId: null,
   scenarioRevision: 0,
   characterAssignments: {},
+  characters: [],
   runId: null,
   runStatus: "created",
   bootstrap: null,
@@ -81,7 +81,7 @@ const elements = Object.fromEntries(
     "resume-button", "step-button", "stop-button", "speed-select",
     "scenario-label", "run-label", "control-status",
     "character-assignment-panel", "character-assignments",
-    "character-studio-panel",
+    "refresh-characters-button",
     "event-filter", "event-search", "event-order", "auto-scroll",
     "load-older-events", "expand-log", "clear-log", "event-log", "event-count",
     "event-detail-dialog", "event-detail-title", "event-detail-meta",
@@ -95,15 +95,6 @@ const elements = Object.fromEntries(
 
 const canvas = elements["world-canvas"];
 const context = canvas.getContext("2d");
-const characterEditor = createCharacterEditor({
-  root: elements["character-studio-panel"],
-  onScenarioChange: async (scenario, successMessage) => {
-    state.loadedScenario = structuredClone(scenario);
-    initializeCharacterAssignments();
-    renderCharacterAssignments();
-    return revalidateAssignedScenario(successMessage);
-  },
-});
 
 function normalizeAgent(raw, fallbackId = "unknown-agent", staticAgent = null) {
   const agent = isObject(raw) ? raw : {};
@@ -306,12 +297,12 @@ async function loadScenario(scenario, sourceLabel = "JSON file") {
   state.loadedScenario = structuredClone(scenario);
   const revision = ++state.scenarioRevision;
   state.loadedScenarioName = optionalString(scenario.name) ?? "Unnamed scenario";
-  initializeCharacterAssignments();
-  renderCharacterAssignments();
-  characterEditor.setScenario(state.loadedScenario);
   setControlStatus(`Validating ${state.loadedScenarioName}...`);
   updateControls();
   try {
+    await refreshCharacterCatalog(false);
+    initializeCharacterAssignments();
+    renderCharacterAssignments();
     const created = await api("/simulation/scenarios", {
       method: "POST",
       body: JSON.stringify(buildAssignedScenario()),
@@ -377,59 +368,55 @@ async function startLoadedScenario() {
 
 function initializeCharacterAssignments() {
   state.characterAssignments = {};
-  const profiles = Object.keys(state.loadedScenario?.character_profiles ?? {});
-  if (!profiles.length) return;
+  const availableIds = new Set(state.characters.map((character) => character.id));
   const entities = Array.isArray(state.loadedScenario?.entities)
     ? state.loadedScenario.entities
     : [];
-  entities.forEach((entity, index) => {
+  entities.forEach((entity) => {
     if (!isObject(entity)) return;
     const components = isObject(entity.components) ? entity.components : {};
-    const current = isObject(components.character_profile)
-      ? optionalString(components.character_profile.profile_ref)
-      : null;
+    if (!isObject(components.character_profile)) return;
+    const current =
+      optionalString(components.character_profile.character_id)
+      ?? optionalString(components.character_profile.profile_ref);
     state.characterAssignments[entity.id] =
-      current && profiles.includes(current)
-        ? current
-        : profiles[index % profiles.length];
+      current && availableIds.has(current) ? current : current ?? "";
   });
 }
 
 function renderCharacterAssignments() {
   const container = elements["character-assignments"];
   container.replaceChildren();
-  const profiles = state.loadedScenario?.character_profiles ?? {};
-  const profileEntries = Object.entries(profiles);
   const assignments = Object.entries(state.characterAssignments);
   elements["character-assignment-panel"].hidden =
-    !profileEntries.length || !assignments.length;
-  for (const [entityId, selectedProfile] of assignments) {
+    !assignments.length;
+  for (const [entityId, selectedCharacter] of assignments) {
     const row = document.createElement("label");
     row.className = "character-assignments__row";
     const slot = document.createElement("span");
     slot.textContent = entityId;
     const select = document.createElement("select");
     select.dataset.entityId = entityId;
-    for (const [profileId, profile] of profileEntries) {
-      const name = profileDisplayName(profile, profileId);
-      select.add(new Option(`${name} (${profileId})`, profileId));
+    select.add(new Option("Select a character", ""));
+    for (const character of state.characters) {
+      select.add(
+        new Option(
+          `${character.display_name} (${character.id})`,
+          character.id
+        )
+      );
     }
-    select.value = selectedProfile;
+    if (
+      selectedCharacter
+      && !state.characters.some((character) => character.id === selectedCharacter)
+    ) {
+      select.add(
+        new Option(`Missing: ${selectedCharacter}`, selectedCharacter)
+      );
+    }
+    select.value = selectedCharacter;
     select.addEventListener("change", async (event) => {
       state.characterAssignments[entityId] = event.target.value;
-      const entity = state.loadedScenario.entities.find(
-        (candidate) => candidate.id === entityId
-      );
-      if (entity) {
-        entity.components ??= {};
-        entity.components.character_profile = {
-          ...(isObject(entity.components.character_profile)
-            ? entity.components.character_profile
-            : {}),
-          profile_ref: event.target.value,
-        };
-        characterEditor.syncScenario(state.loadedScenario);
-      }
       await revalidateAssignedScenario();
     });
     row.append(slot, select);
@@ -468,24 +455,44 @@ async function revalidateAssignedScenario(
 function buildAssignedScenario() {
   const scenario = structuredClone(state.loadedScenario);
   if (!scenario) throw new Error("No scenario loaded");
+  let usesLegacyCatalog = false;
   for (const entity of scenario.entities ?? []) {
     const profileId = state.characterAssignments[entity.id];
+    if (Object.hasOwn(state.characterAssignments, entity.id) && !profileId) {
+      throw new Error(`Select a character for ${entity.id}`);
+    }
     if (!profileId) continue;
     entity.components ??= {};
-    entity.components.character_profile = {
-      ...(isObject(entity.components.character_profile)
-        ? entity.components.character_profile
-        : {}),
-      profile_ref: profileId,
-    };
+    if (
+      state.characters.some((character) => character.id === profileId)
+    ) {
+      entity.components.character_profile = {character_id: profileId};
+    } else if (scenario.character_profiles?.[profileId]) {
+      entity.components.character_profile = {profile_ref: profileId};
+      usesLegacyCatalog = true;
+    } else {
+      throw new Error(`Character not found: ${profileId}`);
+    }
   }
+  if (!usesLegacyCatalog) delete scenario.character_profiles;
   return scenario;
 }
 
-function profileDisplayName(profile, fallback) {
-  return optionalString(profile?.identity?.display_name)
-    ?? optionalString(profile?.display_name)
-    ?? fallback;
+async function refreshCharacterCatalog(revalidate = true) {
+  const response = await api("/characters");
+  state.characters = Array.isArray(response.characters)
+    ? response.characters
+    : [];
+  if (!state.loadedScenario) return;
+  const previous = {...state.characterAssignments};
+  initializeCharacterAssignments();
+  for (const [entityId, characterId] of Object.entries(previous)) {
+    if (state.characters.some((character) => character.id === characterId)) {
+      state.characterAssignments[entityId] = characterId;
+    }
+  }
+  renderCharacterAssignments();
+  if (revalidate) await revalidateAssignedScenario("Character library refreshed.");
 }
 
 function connectStream() {
@@ -1658,7 +1665,7 @@ function updateControls() {
   elements["speed-select"].disabled = !availability.speed;
   elements["scenario-file"].disabled = !availability.loadScenario;
   elements["load-example-button"].disabled = !availability.loadScenario;
-  characterEditor.setDisabled(!availability.loadScenario);
+  elements["refresh-characters-button"].disabled = !availability.loadScenario;
   elements["load-older-events"].disabled = !availability.loadHistory;
   elements["vitals-form"].querySelectorAll("input, button").forEach((control) => {
     control.disabled = !availability.mutate;
@@ -1724,6 +1731,11 @@ function resetRunState() {
 }
 
 elements["load-example-button"].addEventListener("click", loadExample);
+elements["refresh-characters-button"].addEventListener("click", () =>
+  refreshCharacterCatalog().catch((error) =>
+    setControlStatus(`Could not refresh characters: ${error.message}`, true)
+  )
+);
 elements["start-button"].addEventListener("click", startLoadedScenario);
 elements["pause-button"].addEventListener("click", () => control("pause"));
 elements["resume-button"].addEventListener("click", () => control("resume"));
@@ -1866,6 +1878,13 @@ canvas.addEventListener("pointerup", (event) => {
 });
 window.addEventListener("resize", drawWorld);
 window.addEventListener("beforeunload", () => closeSocket(true));
+window.addEventListener("focus", () => {
+  if (state.loadedScenario && !state.runId) {
+    void refreshCharacterCatalog(false).catch((error) =>
+      setControlStatus(`Could not refresh characters: ${error.message}`, true)
+    );
+  }
+});
 
 fetch("/health")
   .then((response) => {

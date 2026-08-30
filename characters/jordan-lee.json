@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "id": "jordan-lee",
+  "template_id": "human-v1",
+  "identity": {
+    "display_name": "Jordan Lee",
+    "age": 29,
+    "gender": "Woman",
+    "pronouns": "she/her",
+    "occupation": "Operations analyst"
+  },
+  "appearance": {
+    "summary": "Average height with an athletic build",
+    "height": "",
+    "build": "",
+    "hair": "Shoulder-length brown hair",
+    "eyes": "",
+    "clothing": "Blue overshirt, plain T-shirt, dark jeans",
+    "distinguishing_features": []
+  },
+  "personality": {
+    "summary": "Curious, warm, and direct",
+    "traits": [
+      "curious",
+      "collaborative",
+      "direct"
+    ],
+    "temperament": "",
+    "social_style": "",
+    "speech_style": "Friendly and asks concrete follow-up questions",
+    "strengths": [
+      "notices coordination problems",
+      "communicates early"
+    ],
+    "flaws": [
+      "can become impatient with prolonged indecision"
+    ]
+  },
+  "background": {
+    "birthplace": "",
+    "residence": "",
+    "education": "",
+    "history": ""
+  },
+  "motivations": {
+    "values": [
+      "clarity",
+      "teamwork",
+      "practical progress"
+    ],
+    "goals": [
+      "coordinate the day's work with Alex",
+      "take a break after the analysis"
+    ],
+    "fears": [],
+    "needs": [],
+    "current_priorities": []
+  },
+  "capabilities": {
+    "skills": [
+      "operations analysis",
+      "coordination"
+    ],
+    "knowledge_areas": [],
+    "limitations": []
+  },
+  "preferences": {
+    "likes": [],
+    "dislikes": [],
+    "habits": [],
+    "routines": []
+  },
+  "relationships": [
+    {
+      "target_id": "alex-chen",
+      "relationship": "trusted colleague",
+      "sentiment": "positive",
+      "notes": ""
+    }
+  ],
+  "custom_sections": []
+}

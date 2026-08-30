@@ -233,6 +233,8 @@ export function createCharacterEditor({root, onScenarioChange}) {
   let scenario = null;
   let selectedId = null;
   let disabled = false;
+  let filter = "";
+  let dirty = false;
   const list = root.querySelector('[data-role="profile-list"]');
   const empty = root.querySelector('[data-role="profile-empty"]');
   const form = root.querySelector('[data-role="profile-form"]');
@@ -254,19 +256,32 @@ export function createCharacterEditor({root, onScenarioChange}) {
   function renderList() {
     list.replaceChildren();
     for (const [profileId, profile] of Object.entries(profiles())) {
+      const name =
+        profile?.identity?.display_name ?? profile?.display_name ?? profileId;
+      if (
+        filter
+        && !`${name} ${profileId}`.toLowerCase().includes(filter)
+      ) {
+        continue;
+      }
       const button = document.createElement("button");
       button.type = "button";
       button.className = "character-studio__profile";
       button.classList.toggle("selected", profileId === selectedId);
       button.disabled = disabled;
-      const name =
-        profile?.identity?.display_name ?? profile?.display_name ?? profileId;
       const strong = document.createElement("strong");
       strong.textContent = name;
       const small = document.createElement("small");
       small.textContent = profileId;
       button.append(strong, small);
       button.addEventListener("click", () => {
+        if (
+          dirty
+          && !window.confirm("Discard unsaved character changes?")
+        ) {
+          return;
+        }
+        dirty = false;
         selectedId = profileId;
         render();
       });
@@ -414,12 +429,20 @@ export function createCharacterEditor({root, onScenarioChange}) {
   }
 
   async function commit(message) {
+    dirty = false;
     setStatus("Validating character changes...");
-    const accepted = await onScenarioChange(structuredClone(scenario), message);
-    setStatus(
-      accepted ? message : "Character changes need correction before Start.",
-      !accepted
-    );
+    try {
+      const accepted = await onScenarioChange(
+        structuredClone(scenario),
+        message
+      );
+      setStatus(
+        accepted ? message : "Character changes were not saved.",
+        !accepted
+      );
+    } catch (error) {
+      setStatus(`Could not save character: ${error.message}`, true);
+    }
   }
 
   addButton.addEventListener("click", async () => {
@@ -444,6 +467,7 @@ export function createCharacterEditor({root, onScenarioChange}) {
 
   deleteButton.addEventListener("click", async () => {
     if (!selectedId) return;
+    if (!window.confirm(`Delete character "${selectedId}"?`)) return;
     const removedId = selectedId;
     delete profiles()[removedId];
     const replacement = Object.keys(profiles())[0] ?? null;
@@ -501,17 +525,34 @@ export function createCharacterEditor({root, onScenarioChange}) {
       setStatus(error.message, true);
     }
   });
+  form.addEventListener("input", () => {
+    dirty = true;
+    setStatus("Unsaved changes.");
+  });
 
   return {
     setScenario(nextScenario) {
       scenario = nextScenario ? structuredClone(nextScenario) : null;
       selectedId = null;
+      dirty = false;
       setStatus("");
       render();
     },
     syncScenario(nextScenario) {
       scenario = nextScenario ? structuredClone(nextScenario) : null;
+      dirty = false;
       render();
+    },
+    setFilter(value) {
+      filter = value.trim().toLowerCase();
+      renderList();
+    },
+    getSelected() {
+      if (!scenario || !selectedId) return null;
+      return {
+        id: selectedId,
+        profile: structuredClone(profiles()[selectedId]),
+      };
     },
     setDisabled(nextDisabled) {
       if (disabled === nextDisabled) return;

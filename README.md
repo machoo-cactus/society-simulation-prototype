@@ -53,6 +53,9 @@ Open <http://127.0.0.1:8000/ui/>. The health endpoint is
 <http://127.0.0.1:8000/health>, and OpenAPI documentation is available at
 <http://127.0.0.1:8000/docs>.
 
+Reusable characters are stored as individual JSON files under `characters/`.
+Manage them at <http://127.0.0.1:8000/ui/characters.html>.
+
 ## Update an existing checkout
 
 On Windows, run the repository update script from PowerShell:
@@ -122,6 +125,14 @@ stage0-sim run scenarios/navigation.json --ticks 20 --full-events
 
 # Pace simulation time against wall time at 4x speed.
 stage0-sim run scenarios/homeostasis.json --ticks 60 --realtime --speed 4
+
+# Use a different character library.
+stage0-sim run scenarios/real-llm-tool-agent.json \
+  --characters-dir path/to/characters --ticks 30
+
+# Migrate an older scenario containing an inline character catalog.
+stage0-sim characters extract scenarios/legacy.json \
+  --directory characters --write
 ```
 
 Use `python -m stage0_sim.cli` instead of `stage0-sim` if the virtual
@@ -143,7 +154,7 @@ all `web/*.js` files are shipped as package data.
 From the UI you can:
 
 - load and validate a scenario without starting it;
-- assign reusable character profiles to each scenario entity slot;
+- assign reusable character-library entries to scenario character slots;
 - start, pause, single-step, resume, stop, and restart the loaded scenario;
 - inspect positions, paths, destinations, activities, plans, and memories;
 - watch satiety, energy, and stress change;
@@ -156,6 +167,10 @@ From the UI you can:
 - follow characters between building and city views with AUTO/MANUAL scale,
   pan, zoom, vehicle progress, and travel events;
 - download the run's versioned JSONL dataset.
+
+The Characters page provides durable create, duplicate, rename, edit, and
+delete operations for the JSON character library. Character editing is
+independent from loading or running a scenario.
 
 The empty top-level `frontend/` scaffold from the original proposed architecture
 has been removed. It had no source files and was not used by packaging or at
@@ -216,13 +231,16 @@ Invalid fields and values are rejected when a scenario is loaded.
 
 The browser uses the same public API available to other clients:
 
-1. `POST /simulation/scenarios` with a scenario document.
-2. `POST /simulation/runs` with the returned `scenario_id`.
-3. Inspect `/simulation/runs/{run_id}` or its `/snapshot`.
-4. Control the run with `/pause`, `/resume`, `/step`, `/speed`, and `/stop`.
-5. Stream ordered telemetry from
+1. Manage reusable files through `GET/POST /characters` and
+   `GET/PUT/DELETE /characters/{character_id}`.
+2. `POST /simulation/scenarios` with a scenario document. Character references
+   are resolved and frozen at this boundary.
+3. `POST /simulation/runs` with the returned `scenario_id`.
+4. Inspect `/simulation/runs/{run_id}` or its `/snapshot`.
+5. Control the run with `/pause`, `/resume`, `/step`, `/speed`, and `/stop`.
+6. Stream ordered telemetry from
    `ws://127.0.0.1:8000/simulation/runs/{run_id}/stream`.
-6. Export records from `/simulation/runs/{run_id}/export`.
+7. Export records from `/simulation/runs/{run_id}/export`.
 
 Additional endpoints provide agent inspection, controlled vital mutation, event
 history, and dataset summaries. Model APIs are deliberately not mounted in the
@@ -287,6 +305,7 @@ Settings use `STAGE0_` environment variables and may be placed in `.env`:
 | `STAGE0_CORS_ORIGINS` | `[]` | Optional origins for separately hosted clients |
 | `STAGE0_DATA_DIRECTORY` | `data/runs` | API dataset directory |
 | `STAGE0_DATASET_DATABASE` | `stage0.sqlite3` | API SQLite filename |
+| `STAGE0_CHARACTER_DIRECTORY` | `characters` | Reusable character JSON directory |
 | `STAGE0_LLM_PROVIDER` | unset | Set to `openai-compatible` to enable a real model |
 | `STAGE0_LLM_BASE_URL` | unset | OpenAI-compatible API root, including `/v1` |
 | `STAGE0_LLM_MODEL` | unset | Provider model identifier |

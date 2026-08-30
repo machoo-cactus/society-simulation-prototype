@@ -40,7 +40,6 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
 
     assert script.status_code == 200
     assert "javascript" in script.headers["content-type"]
-    assert "function normalizeEnvelope" in script.text
     assert "function normalizeSnapshot" in script.text
     assert 'if (message.type === "world_snapshot")' in script.text
     assert "state.snapshot = normalizeSnapshot" in script.text
@@ -57,9 +56,35 @@ def test_ui_assets_and_protocol_adapter_are_served() -> None:
     assert "function showEventDetail" in script.text
     assert 'filter === "dialogue"' in script.text
     assert "/^(dialogue|speech)\\./" in script.text
+    assert 'from "./ui-state.js"' in script.text
+    assert "/ING$/" not in script.text
+    assert "recoverTelemetry" in script.text
+    assert "lastDomainEventOffset" in script.text
+    assert "drawSpeechBubble" in script.text
+    assert "auditoryUntil" in script.text
     assert styles.status_code == 200
     assert "text/css" in styles.headers["content-type"]
     assert "#world-canvas" in styles.text
+
+    with TestClient(app) as client:
+        protocol = client.get("/ui/protocol.js")
+        api_client = client.get("/ui/api-client.js")
+    assert "function normalizeEnvelope" in protocol.text
+    assert "stage0.telemetry.v2" in protocol.text
+    assert "async function api" in api_client.text
+
+
+def test_ui_state_module_defines_explicit_pending_states() -> None:
+    with TestClient(app) as client:
+        module = client.get("/ui/ui-state.js")
+
+    assert module.status_code == 200
+    assert "PENDING_UI_STATES" in module.text
+    assert "UI_STATES.RUN_STARTING" in module.text
+    assert "UI_STATES.RUNNING" not in module.text.split(
+        "PENDING_UI_STATES", 1
+    )[1].split("]);", 1)[0]
+    assert "pause: hasRun && running && !busy" in module.text
 
 
 def test_bundled_demo_is_a_valid_runnable_scenario() -> None:

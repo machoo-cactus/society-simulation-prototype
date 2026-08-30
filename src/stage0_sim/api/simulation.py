@@ -15,7 +15,9 @@ from stage0_sim.application.manager import (
 )
 from stage0_sim.application.scenario import ScenarioDefinition
 from stage0_sim.application.telemetry import (
+    TELEMETRY_SCHEMA_VERSION,
     build_agent_snapshot,
+    build_ui_bootstrap,
     build_world_snapshot,
 )
 from stage0_sim.domain.events import JsonValue
@@ -96,6 +98,9 @@ async def get_run(run_id: str, request: Request) -> dict[str, object]:
         "tick": managed.runner.clock.tick,
         "simulation_time": managed.runner.clock.simulation_time,
         "latest_sequence": managed.broker.latest_sequence,
+        "oldest_sequence": managed.broker.oldest_sequence,
+        "domain_event_offset": managed.broker.domain_event_offset,
+        "snapshot_revision": managed.broker.snapshot_revision,
     }
 
 
@@ -103,8 +108,12 @@ async def get_run(run_id: str, request: Request) -> dict[str, object]:
 async def get_snapshot(run_id: str, request: Request) -> dict[str, object]:
     managed = _managed_run(get_manager(request), run_id)
     return {
+        "schema_version": TELEMETRY_SCHEMA_VERSION,
         "run_id": run_id,
         "sequence": managed.broker.latest_sequence,
+        "oldest_sequence": managed.broker.oldest_sequence,
+        "domain_event_offset": managed.broker.domain_event_offset,
+        "snapshot_revision": managed.broker.snapshot_revision,
         "snapshot": build_world_snapshot(managed.runner),
     }
 
@@ -273,21 +282,71 @@ async def stream_run(websocket: WebSocket, run_id: str) -> None:
         await websocket.close(code=4404, reason=f"unknown run: {run_id}")
         return
     raw_sequence = websocket.query_params.get("after_sequence", "0")
+    raw_snapshot_revision = websocket.query_params.get(
+        "after_snapshot_revision", "0"
+    )
     try:
         cursor = max(0, int(raw_sequence))
+        snapshot_cursor = max(0, int(raw_snapshot_revision))
     except ValueError:
-        await websocket.close(code=4400, reason="after_sequence must be an integer")
+        await websocket.close(
+            code=4400,
+            reason="telemetry cursors must be integers",
+        )
         return
 
     await websocket.accept()
-    managed.broker.publish_status()
-    managed.broker.publish_snapshot()
+    broker = managed.broker
+    await websocket.send_json(
+        {
+            "schema_version": TELEMETRY_SCHEMA_VERSION,
+            "sequence": broker.latest_sequence,
+            "type": "hello",
+            "run_id": run_id,
+            "simulation_tick": managed.runner.clock.tick,
+            "simulation_time": managed.runner.clock.simulation_time,
+            "payload": {
+                "oldest_sequence": broker.oldest_sequence,
+                "latest_sequence": broker.latest_sequence,
+                "domain_event_offset": broker.domain_event_offset,
+                "snapshot_revision": broker.snapshot_revision,
+                "bootstrap": build_ui_bootstrap(managed.runner),
+            },
+        }
+    )
+    if not broker.can_resume_after(cursor):
+        await websocket.send_json(
+            {
+                "schema_version": TELEMETRY_SCHEMA_VERSION,
+                "sequence": broker.latest_sequence,
+                "type": "resync_required",
+                "run_id": run_id,
+                "simulation_tick": managed.runner.clock.tick,
+                "simulation_time": managed.runner.clock.simulation_time,
+                "payload": {
+                    "oldest_sequence": broker.oldest_sequence,
+                    "latest_sequence": broker.latest_sequence,
+                    "domain_event_offset": broker.domain_event_offset,
+                    "snapshot_revision": broker.snapshot_revision,
+                },
+            }
+        )
+        await websocket.close(code=4409, reason="telemetry cursor expired")
+        return
     try:
         while True:
-            messages = managed.broker.messages_after(cursor)
+            messages = broker.messages_after(cursor)
             for message in messages:
                 await websocket.send_json(message.to_dict())
                 cursor = message.sequence
+            snapshot = broker.latest_snapshot
+            if (
+                snapshot is not None
+                and snapshot.snapshot_revision is not None
+                and snapshot.snapshot_revision > snapshot_cursor
+            ):
+                await websocket.send_json(snapshot.to_dict())
+                snapshot_cursor = snapshot.snapshot_revision
             await asyncio.sleep(0.05)
     except WebSocketDisconnect:
         return

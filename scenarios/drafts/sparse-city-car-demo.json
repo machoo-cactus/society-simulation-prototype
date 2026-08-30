@@ -1,0 +1,248 @@
+{
+  "$comment": "DESIGN DRAFT: this scenario targets the planned hierarchical city schema and is not runnable by the current schema_version 1 loader.",
+  "schema_version": 2,
+  "name": "sparse-city-car-demo",
+  "seed": 20260830,
+  "dt": 1.0,
+  "speed": 20.0,
+  "world": {
+    "type": "city",
+    "city": {
+      "id": "demo-city",
+      "name": "Demo City",
+      "bounds_meters": {
+        "min_x": 0,
+        "min_y": 0,
+        "max_x": 6000,
+        "max_y": 3000
+      }
+    },
+    "districts": [
+      {
+        "id": "district-west",
+        "name": "West Residential",
+        "center": {"x": 800, "y": 1500}
+      },
+      {
+        "id": "district-central",
+        "name": "Central",
+        "center": {"x": 3000, "y": 1500}
+      },
+      {
+        "id": "district-east",
+        "name": "East Business",
+        "center": {"x": 5200, "y": 1500}
+      }
+    ],
+    "buildings": [
+      {
+        "id": "building-home",
+        "name": "Alex's Apartment",
+        "district_id": "district-west",
+        "city_position": {"x": 600, "y": 1400},
+        "local_map_id": "map-home",
+        "entrances": [
+          {
+            "id": "entrance-home",
+            "local_coordinate": {"x": 2, "y": 1},
+            "neighborhood_node_id": "node-home-entrance"
+          }
+        ]
+      },
+      {
+        "id": "building-office",
+        "name": "East Research Office",
+        "district_id": "district-east",
+        "city_position": {"x": 5400, "y": 1400},
+        "local_map_id": "map-office",
+        "entrances": [
+          {
+            "id": "entrance-office",
+            "local_coordinate": {"x": 0, "y": 1},
+            "neighborhood_node_id": "node-office-entrance"
+          }
+        ]
+      }
+    ],
+    "local_maps": {
+      "map-home": {
+        "width": 3,
+        "height": 3,
+        "blocked": [],
+        "zones": [
+          {
+            "id": "home-entry",
+            "name": "Home Entry",
+            "type": "ENTRY",
+            "bounds": {"x": 1, "y": 0, "width": 2, "height": 3}
+          }
+        ],
+        "stations": []
+      },
+      "map-office": {
+        "width": 3,
+        "height": 3,
+        "blocked": [],
+        "zones": [
+          {
+            "id": "office-entry",
+            "name": "Office Entry",
+            "type": "ENTRY",
+            "bounds": {"x": 0, "y": 0, "width": 2, "height": 3}
+          }
+        ],
+        "stations": []
+      }
+    },
+    "transport": {
+      "nodes": [
+        {
+          "id": "node-home-entrance",
+          "kind": "BUILDING_ENTRANCE",
+          "position": {"x": 650, "y": 1400},
+          "place_id": "building-home"
+        },
+        {
+          "id": "node-home-parking",
+          "kind": "PARKING",
+          "position": {"x": 800, "y": 1500},
+          "place_id": "building-home"
+        },
+        {
+          "id": "node-central-junction",
+          "kind": "ROAD_JUNCTION",
+          "position": {"x": 3000, "y": 1500},
+          "place_id": "district-central"
+        },
+        {
+          "id": "node-office-parking",
+          "kind": "PARKING",
+          "position": {"x": 5200, "y": 1500},
+          "place_id": "building-office"
+        },
+        {
+          "id": "node-office-entrance",
+          "kind": "BUILDING_ENTRANCE",
+          "position": {"x": 5350, "y": 1400},
+          "place_id": "building-office"
+        }
+      ],
+      "edges": [
+        {
+          "id": "walk-home-to-parking",
+          "from_node_id": "node-home-entrance",
+          "to_node_id": "node-home-parking",
+          "allowed_modes": ["WALK"],
+          "distance_meters": 180,
+          "geometry": [
+            {"x": 650, "y": 1400},
+            {"x": 800, "y": 1500}
+          ],
+          "bidirectional": true
+        },
+        {
+          "id": "road-west-central",
+          "from_node_id": "node-home-parking",
+          "to_node_id": "node-central-junction",
+          "allowed_modes": ["CAR"],
+          "distance_meters": 2200,
+          "speed_limit_mps": 13.9,
+          "geometry": [
+            {"x": 800, "y": 1500},
+            {"x": 3000, "y": 1500}
+          ],
+          "bidirectional": true
+        },
+        {
+          "id": "road-central-east",
+          "from_node_id": "node-central-junction",
+          "to_node_id": "node-office-parking",
+          "allowed_modes": ["CAR"],
+          "distance_meters": 2200,
+          "speed_limit_mps": 13.9,
+          "geometry": [
+            {"x": 3000, "y": 1500},
+            {"x": 5200, "y": 1500}
+          ],
+          "bidirectional": true
+        },
+        {
+          "id": "walk-parking-to-office",
+          "from_node_id": "node-office-parking",
+          "to_node_id": "node-office-entrance",
+          "allowed_modes": ["WALK"],
+          "distance_meters": 180,
+          "geometry": [
+            {"x": 5200, "y": 1500},
+            {"x": 5350, "y": 1400}
+          ],
+          "bidirectional": true
+        }
+      ],
+      "metro_lines": [],
+      "vehicles": [
+        {
+          "id": "car-001",
+          "type": "CAR",
+          "name": "Demo Car",
+          "capacity": 4,
+          "location": {
+            "scale": "NEIGHBORHOOD",
+            "place_id": "building-home",
+            "network_node_id": "node-home-parking"
+          }
+        }
+      ]
+    }
+  },
+  "character_profiles": {
+    "alex-driver": {
+      "identity": {
+        "display_name": "Alex Chen",
+        "age": 34,
+        "pronouns": "he/him",
+        "occupation": "Software research engineer"
+      },
+      "personality": {
+        "summary": "Calm and attentive",
+        "traits": ["methodical"],
+        "speech_style": "Brief and precise"
+      },
+      "motivations": {
+        "goals": ["drive to the office"]
+      },
+      "capabilities": {
+        "skills": ["licensed car driver"]
+      }
+    }
+  },
+  "entities": [
+    {
+      "id": "agent-001",
+      "components": {
+        "spatial_location": {
+          "scale": "BUILDING",
+          "place_id": "building-home",
+          "local_coordinate": {"x": 2, "y": 1}
+        },
+        "homeostasis": {
+          "satiety": 80,
+          "energy": 80,
+          "stress": 20
+        },
+        "character_profile": {
+          "profile_ref": "alex-driver"
+        },
+        "plan": {
+          "queue": [
+            {
+              "action": "TRAVEL_TO",
+              "target": "building-office",
+              "mode": "CAR"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -89,6 +89,16 @@
           <pre id="character-profile-text">No character profile available</pre>
         </details>
 
+        <section class="perception-inspector">
+          <h3>Perception</h3>
+          <div><strong>Seeing now</strong><p id="seeing-now">Nobody</p></div>
+          <div><strong>Recently heard</strong><p id="recently-heard">Nothing</p></div>
+          <div>
+            <strong>Recent observations</strong>
+            <ol id="recent-observations"><li class="muted">No observations</li></ol>
+          </div>
+        </section>
+
         <form id="vitals-form" class="vitals-form">
           <h3>Controlled vital mutation</h3>
           <label>Satiety <input id="mutate-satiety" type="number" min="0" max="100"></label>
@@ -166,6 +176,33 @@
           </div>
         </div>
         <div id="event-log" class="event-log" role="log"></div>
+      </section>
+
+      <section class="panel transcript-panel">
+        <div class="panel__header">
+          <div>
+            <h2>Conversation transcript</h2>
+            <p>Exact delivered speech and legacy dialogue</p>
+          </div>
+        </div>
+        <div id="conversation-transcript" class="conversation-transcript">
+          <p class="muted">No speech yet</p>
+        </div>
+      </section>
+
+      <section class="panel overlay-panel">
+        <div class="panel__header">
+          <div><h2>World overlays</h2><p>Operator display options</p></div>
+        </div>
+        <div class="overlay-controls">
+          <label><input id="overlay-names" type="checkbox" checked> Names</label>
+          <label><input id="overlay-paths" type="checkbox" checked> Paths</label>
+          <label><input id="overlay-speech" type="checkbox" checked> Speech bubbles</label>
+          <label><input id="overlay-vision" type="checkbox" checked> Vision indicators</label>
+          <label><input id="overlay-hearing" type="checkbox" checked> Hearing indicators</label>
+          <label><input id="overlay-selected-visibility" type="checkbox"> Selected observer visibility</label>
+          <label><input id="overlay-debug-destinations" type="checkbox"> Debug destinations</label>
+        </div>
       </section>
     </main>
 

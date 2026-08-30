@@ -111,7 +111,8 @@ def test_telemetry_clock_does_not_advance_paused_simulation() -> None:
         after = client.get(f"/simulation/runs/{run_id}").json()
         assert after["tick"] == before["tick"] == 0
         assert after["simulation_time"] == before["simulation_time"] == 0.0
-        assert after["latest_sequence"] > before["latest_sequence"]
+        assert after["latest_sequence"] == before["latest_sequence"]
+        assert after["snapshot_revision"] > before["snapshot_revision"]
 
 
 def test_websocket_stream_has_ordered_sequences_and_authoritative_snapshot() -> None:
@@ -119,24 +120,44 @@ def test_websocket_stream_has_ordered_sequences_and_authoritative_snapshot() -> 
         run_id = create_run(client)
         client.post(f"/simulation/runs/{run_id}/pause")
         client.post(f"/simulation/runs/{run_id}/step")
-        latest = client.get(f"/simulation/runs/{run_id}").json()["latest_sequence"]
+        run = client.get(f"/simulation/runs/{run_id}").json()
+        latest = run["latest_sequence"]
 
         with client.websocket_connect(
             f"/simulation/runs/{run_id}/stream?after_sequence={latest}"
+            f"&after_snapshot_revision=0"
         ) as websocket:
             first = websocket.receive_json()
             second = websocket.receive_json()
 
-        assert [first["type"], second["type"]] == [
-            "simulation_status",
-            "world_snapshot",
-        ]
-        assert second["sequence"] > first["sequence"] > latest
+        assert [first["type"], second["type"]] == ["hello", "world_snapshot"]
+        assert first["schema_version"] == "stage0.telemetry.v2"
+        assert second["sequence"] == first["sequence"] == latest
+        assert second["snapshot_revision"] >= 1
         assert second["simulation_tick"] == 1
         snapshot = second["payload"]
         assert snapshot["tick"] == 1
         assert snapshot["agents"][0]["position"] == {"x": 5, "y": 1}
         assert snapshot["agents"][0]["homeostasis"]["satiety"] == 9.95
+
+
+def test_websocket_subscription_does_not_mutate_shared_sequence() -> None:
+    with TestClient(app) as client:
+        run_id = create_run(client)
+        client.post(f"/simulation/runs/{run_id}/pause")
+        before = client.get(f"/simulation/runs/{run_id}").json()
+
+        with client.websocket_connect(
+            f"/simulation/runs/{run_id}/stream"
+            f"?after_sequence={before['latest_sequence']}"
+            f"&after_snapshot_revision={before['snapshot_revision']}"
+        ) as websocket:
+            hello = websocket.receive_json()
+
+        after = client.get(f"/simulation/runs/{run_id}").json()
+
+    assert hello["type"] == "hello"
+    assert after["latest_sequence"] == before["latest_sequence"]
 
 
 def test_unknown_resources_and_invalid_mutation_are_rejected() -> None:

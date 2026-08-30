@@ -1,5 +1,20 @@
+import {api} from "./api-client.js";
+import {
+  TELEMETRY_SCHEMA_VERSION,
+  finiteNumber,
+  isObject,
+  normalizeCoordinate,
+  normalizeEnvelope,
+  optionalString,
+} from "./protocol.js";
+import {
+  UI_STATES,
+  controlAvailability,
+  uiStateForRunStatus,
+} from "./ui-state.js";
+
 const state = {
-  uiState: "EMPTY",
+  uiState: UI_STATES.EMPTY,
   loadedScenario: null,
   loadedScenarioName: null,
   scenarioId: null,
@@ -7,9 +22,13 @@ const state = {
   characterAssignments: {},
   runId: null,
   runStatus: "created",
+  bootstrap: null,
   snapshot: null,
   selectedAgentId: null,
   lastSequence: 0,
+  lastDomainEventOffset: 0,
+  lastSnapshotRevision: 0,
+  recoveringTelemetry: false,
   socket: null,
   reconnectTimer: null,
   reconnectAttempt: 0,
@@ -23,6 +42,18 @@ const state = {
   selectedEvent: null,
   eventHistoryTotal: 0,
   eventHistoryOffset: 0,
+  sensorEffects: {},
+  speechBubbles: {},
+  recentPerceptions: {},
+  overlayOptions: {
+    names: true,
+    paths: true,
+    speech: true,
+    vision: true,
+    hearing: true,
+    selectedVisibility: false,
+    debugDestinations: false,
+  },
 };
 
 const elements = Object.fromEntries(
@@ -33,6 +64,7 @@ const elements = Object.fromEntries(
     "energy-gauge", "stress-value", "stress-gauge", "activity-value",
     "system1-value", "drive-value", "destination-value", "memory-value",
     "plan-list", "character-profile-text", "vitals-form",
+    "seeing-now", "recently-heard", "recent-observations",
     "mutate-satiety", "mutate-energy",
     "mutate-stress", "scenario-file", "load-example-button", "start-button",
     "pause-button",
@@ -43,44 +75,29 @@ const elements = Object.fromEntries(
     "load-older-events", "expand-log", "clear-log", "event-log", "event-count",
     "event-detail-dialog", "event-detail-title", "event-detail-meta",
     "event-detail-text", "close-event-detail", "copy-event-text",
-    "copy-event-json",
+    "copy-event-json", "conversation-transcript",
+    "overlay-names", "overlay-paths", "overlay-speech", "overlay-vision",
+    "overlay-hearing", "overlay-selected-visibility",
+    "overlay-debug-destinations",
   ].map((id) => [id, document.getElementById(id)])
 );
 
 const canvas = elements["world-canvas"];
 const context = canvas.getContext("2d");
 
-function isObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function finiteNumber(value, fallback = 0) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
-
-function optionalString(value) {
-  return typeof value === "string" && value.length ? value : null;
-}
-
-function normalizeCoordinate(value) {
-  if (Array.isArray(value) && value.length >= 2) {
-    return {x: finiteNumber(value[0]), y: finiteNumber(value[1])};
-  }
-  if (!isObject(value)) return null;
-  const x = Number(value.x);
-  const y = Number(value.y);
-  return Number.isFinite(x) && Number.isFinite(y) ? {x, y} : null;
-}
-
-function normalizeAgent(raw, fallbackId = "unknown-agent") {
+function normalizeAgent(raw, fallbackId = "unknown-agent", staticAgent = null) {
   const agent = isObject(raw) ? raw : {};
   const homeostasis = isObject(agent.homeostasis) ? agent.homeostasis : {};
   const movement = isObject(agent.movement) ? agent.movement : {};
   const system1 = isObject(agent.system1) ? agent.system1 : {};
   const plan = isObject(agent.plan) ? agent.plan : {};
   const memory = isObject(agent.memory) ? agent.memory : {};
-  const profile = isObject(agent.character_profile) ? agent.character_profile : {};
+  const profile = isObject(agent.character_profile)
+    ? agent.character_profile
+    : isObject(staticAgent?.character_profile)
+      ? staticAgent.character_profile
+      : {};
+  const perception = isObject(agent.perception) ? agent.perception : {};
   return {
     id: optionalString(agent.id) ?? fallbackId,
     displayName: optionalString(profile.display_name) ?? optionalString(agent.id) ?? fallbackId,
@@ -114,18 +131,29 @@ function normalizeAgent(raw, fallbackId = "unknown-agent") {
         : null,
     },
     memoryCount: finiteNumber(memory.count, 0),
+    perception: {
+      inboxCount: finiteNumber(perception.inbox_count, 0),
+      visibleNow: Array.isArray(perception.visible_now)
+        ? perception.visible_now.filter((value) => typeof value === "string")
+        : [],
+      knownCharacterCount: finiteNumber(perception.known_character_count, 0),
+    },
   };
 }
 
 function normalizeSnapshot(raw) {
   if (!isObject(raw)) throw new Error("Snapshot payload is not an object");
   const worldRaw = isObject(raw.world) ? raw.world : null;
+  const bootstrapWorld = isObject(state.bootstrap?.world)
+    ? state.bootstrap.world
+    : null;
+  const previousWorld = state.snapshot?.world ?? null;
   const agentValues = Array.isArray(raw.agents)
     ? raw.agents
     : isObject(raw.agents)
       ? Object.entries(raw.agents).map(([id, value]) => ({id, ...value}))
       : [];
-  const world = worldRaw
+  let world = worldRaw && Number.isFinite(Number(worldRaw.width))
     ? {
         width: Math.max(1, finiteNumber(worldRaw.width, 1)),
         height: Math.max(1, finiteNumber(worldRaw.height, 1)),
@@ -154,7 +182,28 @@ function normalizeSnapshot(raw) {
             }))
           : [],
       }
-    : null;
+    : previousWorld ?? (bootstrapWorld ? normalizeStaticWorld(bootstrapWorld) : null);
+  if (world && Array.isArray(worldRaw?.station_states)) {
+    const availability = new Map(
+      worldRaw.station_states
+        .filter(isObject)
+        .map((station) => [station.id, station.available !== false])
+    );
+    world = {
+      ...world,
+      stations: world.stations.map((station) => ({
+        ...station,
+        available: availability.has(station.id)
+          ? availability.get(station.id)
+          : station.available,
+      })),
+    };
+  }
+  const staticAgents = new Map(
+    (state.bootstrap?.agents ?? [])
+      .filter(isObject)
+      .map((agent) => [agent.id, agent])
+  );
   return {
     status: optionalString(raw.status) ?? state.runStatus,
     speed: finiteNumber(raw.speed, 1),
@@ -162,47 +211,49 @@ function normalizeSnapshot(raw) {
     simulationTime: Math.max(0, finiteNumber(raw.simulation_time, 0)),
     world,
     agents: agentValues.map((agent, index) =>
-      normalizeAgent(agent, `agent-${index + 1}`)
+      normalizeAgent(
+        agent,
+        `agent-${index + 1}`,
+        staticAgents.get(agent.id)
+      )
     ),
   };
 }
 
-function normalizeEnvelope(raw) {
-  if (!isObject(raw)) throw new Error("WebSocket message is not an object");
-  const sequence = Number(raw.sequence);
-  if (!Number.isInteger(sequence) || sequence < 1) {
-    throw new Error("WebSocket message has no valid sequence");
-  }
+function normalizeStaticWorld(worldRaw) {
   return {
-    sequence,
-    type: optionalString(raw.type) ?? "unknown",
-    tick: finiteNumber(raw.simulation_tick, 0),
-    simulationTime: finiteNumber(raw.simulation_time, 0),
-    payload: isObject(raw.payload) ? raw.payload : {},
+    width: Math.max(1, finiteNumber(worldRaw.width, 1)),
+    height: Math.max(1, finiteNumber(worldRaw.height, 1)),
+    blocked: Array.isArray(worldRaw.blocked)
+      ? worldRaw.blocked.map(normalizeCoordinate).filter(Boolean)
+      : [],
+    zones: Array.isArray(worldRaw.zones)
+      ? worldRaw.zones.filter(isObject).map((zone, index) => ({
+          id: optionalString(zone.id) ?? `zone-${index}`,
+          name: optionalString(zone.name) ?? optionalString(zone.id) ?? "Zone",
+          type: optionalString(zone.type) ?? "UNKNOWN",
+          tiles: Array.isArray(zone.tiles)
+            ? zone.tiles.map(normalizeCoordinate).filter(Boolean)
+            : [],
+        }))
+      : [],
+    stations: Array.isArray(worldRaw.stations)
+      ? worldRaw.stations.filter(isObject).map((station, index) => ({
+          id: optionalString(station.id) ?? `station-${index}`,
+          name: optionalString(station.name) ?? "Station",
+          position: normalizeCoordinate(station.position),
+          actions: Array.isArray(station.actions)
+            ? station.actions.filter((item) => typeof item === "string")
+            : [],
+          available: station.available !== false,
+        }))
+      : [],
   };
-}
-
-async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: {"Content-Type": "application/json", ...(options.headers ?? {})},
-  });
-  if (!response.ok) {
-    let detail = `${response.status} ${response.statusText}`;
-    try {
-      const body = await response.json();
-      detail = typeof body.detail === "string" ? body.detail : detail;
-    } catch {
-      // The HTTP status is sufficient when the body is not JSON.
-    }
-    throw new Error(detail);
-  }
-  return response.json();
 }
 
 async function loadScenario(scenario, sourceLabel = "JSON file") {
   if (!isObject(scenario)) throw new Error("Scenario must be a JSON object");
-  state.uiState = "SCENARIO_LOADING";
+  state.uiState = UI_STATES.SCENARIO_LOADING;
   state.loadedScenario = structuredClone(scenario);
   const revision = ++state.scenarioRevision;
   state.loadedScenarioName = optionalString(scenario.name) ?? "Unnamed scenario";
@@ -217,7 +268,7 @@ async function loadScenario(scenario, sourceLabel = "JSON file") {
     });
     if (revision !== state.scenarioRevision) return;
     state.scenarioId = created.scenario_id;
-    state.uiState = "SCENARIO_READY";
+    state.uiState = UI_STATES.SCENARIO_READY;
     elements["scenario-label"].textContent =
       `Ready: ${state.loadedScenarioName} (${sourceLabel})`;
     setControlStatus("Scenario loaded. Assign characters if needed, then press Start.");
@@ -225,7 +276,7 @@ async function loadScenario(scenario, sourceLabel = "JSON file") {
   } catch (error) {
     if (revision !== state.scenarioRevision) return;
     state.scenarioId = null;
-    state.uiState = "ERROR";
+    state.uiState = UI_STATES.ERROR;
     setControlStatus(`Scenario invalid: ${error.message}`, true);
     addLocalEvent("ui.scenario_invalid", {message: error.message}, "error");
     updateControls();
@@ -244,7 +295,7 @@ async function loadExample() {
 
 async function startLoadedScenario() {
   if (!state.loadedScenario || !state.scenarioId) return;
-  state.uiState = "RUN_STARTING";
+  state.uiState = UI_STATES.RUN_STARTING;
   setControlStatus("Starting simulation...");
   updateControls();
   try {
@@ -260,14 +311,14 @@ async function startLoadedScenario() {
     resetRunState();
     state.runId = run.run_id;
     state.runStatus = run.status;
-    state.uiState = "RUNNING";
+    state.uiState = UI_STATES.RUNNING;
     state.intentionalClose = false;
     elements["run-label"].textContent = `${run.run_id} / running`;
     setControlStatus("Simulation running.");
     updateControls();
     connectStream();
   } catch (error) {
-    state.uiState = "SCENARIO_READY";
+    state.uiState = UI_STATES.SCENARIO_READY;
     setControlStatus(`Start failed: ${error.message}`, true);
     addLocalEvent("ui.start_failed", {message: error.message}, "error");
     updateControls();
@@ -325,7 +376,7 @@ function renderCharacterAssignments() {
 
 async function revalidateAssignedScenario() {
   const revision = ++state.scenarioRevision;
-  state.uiState = "SCENARIO_LOADING";
+  state.uiState = UI_STATES.SCENARIO_LOADING;
   state.scenarioId = null;
   setControlStatus("Validating character assignments...");
   updateControls();
@@ -336,11 +387,11 @@ async function revalidateAssignedScenario() {
     });
     if (revision !== state.scenarioRevision) return;
     state.scenarioId = created.scenario_id;
-    state.uiState = "SCENARIO_READY";
+    state.uiState = UI_STATES.SCENARIO_READY;
     setControlStatus("Character assignments ready.");
   } catch (error) {
     if (revision !== state.scenarioRevision) return;
-    state.uiState = "ERROR";
+    state.uiState = UI_STATES.ERROR;
     setControlStatus(`Assignment invalid: ${error.message}`, true);
   }
   updateControls();
@@ -370,7 +421,9 @@ function connectStream() {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   const url = `${scheme}://${location.host}/simulation/runs/${encodeURIComponent(
     state.runId
-  )}/stream?after_sequence=${state.lastSequence}`;
+  )}/stream?after_sequence=${state.lastSequence}&after_snapshot_revision=${
+    state.lastSnapshotRevision
+  }`;
   setConnection("warning", "Connecting telemetry...");
   const socket = new WebSocket(url);
   state.socket = socket;
@@ -388,7 +441,13 @@ function connectStream() {
   });
   socket.addEventListener("close", () => {
     if (state.socket === socket) state.socket = null;
-    if (!state.intentionalClose && state.runId) scheduleReconnect();
+    if (
+      !state.intentionalClose
+      && !state.recoveringTelemetry
+      && state.runId
+    ) {
+      scheduleReconnect();
+    }
   });
   socket.addEventListener("error", () => {
     setConnection("offline", "Telemetry connection error");
@@ -400,7 +459,6 @@ function scheduleReconnect() {
   state.reconnectAttempt += 1;
   setConnection("warning", `Reconnecting in ${(delay / 1000).toFixed(1)}s`);
   state.reconnectTimer = setTimeout(async () => {
-    await refreshSnapshot();
     connectStream();
   }, delay);
 }
@@ -415,22 +473,46 @@ function closeSocket(intentional) {
 }
 
 function handleEnvelope(message) {
-  if (message.sequence <= state.lastSequence) return;
-  if (state.lastSequence && message.sequence > state.lastSequence + 1) {
+  if (
+    message.schemaVersion
+    && message.schemaVersion !== TELEMETRY_SCHEMA_VERSION
+  ) {
     showProtocolWarning(
-      `Telemetry gap: expected ${state.lastSequence + 1}, received ${message.sequence}`
+      `Unsupported telemetry schema: ${message.schemaVersion}`
     );
-    refreshSnapshot();
+    return;
   }
-  state.lastSequence = message.sequence;
-  elements["sequence-label"].textContent = `seq ${message.sequence}`;
-
+  if (message.type === "hello") {
+    state.bootstrap = isObject(message.payload.bootstrap)
+      ? message.payload.bootstrap
+      : state.bootstrap;
+    clearProtocolWarning();
+    return;
+  }
+  if (message.type === "resync_required") {
+    void recoverTelemetry();
+    return;
+  }
   if (message.type === "world_snapshot") {
+    if (
+      message.snapshotRevision !== null
+      && message.snapshotRevision <= state.lastSnapshotRevision
+    ) {
+      return;
+    }
     try {
       state.snapshot = normalizeSnapshot(
         isObject(message.payload.snapshot) ? message.payload.snapshot : message.payload
       );
       state.runStatus = state.snapshot.status;
+      state.uiState = uiStateForRunStatus(
+        state.runStatus,
+        Boolean(state.loadedScenario)
+      );
+      state.lastSnapshotRevision = Math.max(
+        state.lastSnapshotRevision,
+        message.snapshotRevision ?? 0
+      );
       clearProtocolWarning();
       render();
     } catch (error) {
@@ -438,9 +520,23 @@ function handleEnvelope(message) {
     }
     return;
   }
+  if (message.sequence <= state.lastSequence) return;
+  if (state.lastSequence && message.sequence > state.lastSequence + 1) {
+    showProtocolWarning(
+      `Telemetry gap: expected ${state.lastSequence + 1}, received ${message.sequence}`
+    );
+    void recoverTelemetry();
+    return;
+  }
+  state.lastSequence = message.sequence;
+  elements["sequence-label"].textContent = `seq ${message.sequence}`;
+
   if (message.type === "simulation_status") {
     state.runStatus = optionalString(message.payload.status) ?? state.runStatus;
-    state.uiState = uiStateForRunStatus(state.runStatus);
+    state.uiState = uiStateForRunStatus(
+      state.runStatus,
+      Boolean(state.loadedScenario)
+    );
     updateRunLabel();
     setControlStatus(statusMessage(state.runStatus));
     updateControls();
@@ -455,7 +551,7 @@ function handleEnvelope(message) {
         simulation_time: message.simulationTime,
         payload: message.payload,
       };
-  addEvent(event);
+  addEvent(event, message.domainEventOffset);
 }
 
 async function refreshSnapshot() {
@@ -465,16 +561,83 @@ async function refreshSnapshot() {
       `/simulation/runs/${encodeURIComponent(state.runId)}/snapshot`
     );
     state.snapshot = normalizeSnapshot(response.snapshot);
-    state.lastSequence = Math.max(state.lastSequence, finiteNumber(response.sequence, 0));
+    state.lastSnapshotRevision = Math.max(
+      state.lastSnapshotRevision,
+      finiteNumber(response.snapshot_revision, 0)
+    );
     render();
   } catch (error) {
     setConnection("offline", `Snapshot refresh failed: ${error.message}`);
   }
 }
 
+async function recoverTelemetry() {
+  if (!state.runId || state.recoveringTelemetry) return;
+  state.recoveringTelemetry = true;
+  showProtocolWarning("Recovering missed telemetry...");
+  try {
+    const snapshotResponse = await api(
+      `/simulation/runs/${encodeURIComponent(state.runId)}/snapshot`
+    );
+    state.snapshot = normalizeSnapshot(snapshotResponse.snapshot);
+    const targetEventOffset = finiteNumber(
+      snapshotResponse.domain_event_offset,
+      state.lastDomainEventOffset
+    );
+    let offset = state.lastDomainEventOffset;
+    while (offset < targetEventOffset) {
+      const page = await api(
+        `/simulation/runs/${encodeURIComponent(state.runId)}/events?offset=${
+          offset
+        }&limit=1000`
+      );
+      for (let index = 0; index < (page.events ?? []).length; index += 1) {
+        addEvent(
+          page.events[index],
+          offset + index + 1,
+          {animate: false, render: false}
+        );
+      }
+      const nextOffset = finiteNumber(page.next_offset, offset);
+      if (nextOffset <= offset) break;
+      offset = nextOffset;
+    }
+    state.lastDomainEventOffset = Math.max(
+      state.lastDomainEventOffset,
+      offset
+    );
+    state.lastSequence = finiteNumber(
+      snapshotResponse.sequence,
+      state.lastSequence
+    );
+    state.lastSnapshotRevision = finiteNumber(
+      snapshotResponse.snapshot_revision,
+      state.lastSnapshotRevision
+    );
+    renderEventLog();
+    renderTranscript();
+    render();
+    clearProtocolWarning();
+  } catch (error) {
+    showProtocolWarning(`Telemetry recovery failed: ${error.message}`);
+  } finally {
+    state.recoveringTelemetry = false;
+    if (!state.intentionalClose && state.runId) {
+      if (state.socket) state.socket.close();
+      scheduleReconnect();
+    }
+  }
+}
+
 async function control(action, body = null) {
   if (!state.runId) return;
-  state.uiState = `${action.toUpperCase()}ING`;
+  state.uiState = {
+    pause: UI_STATES.PAUSING,
+    resume: UI_STATES.RESUMING,
+    step: UI_STATES.STEPPING,
+    stop: UI_STATES.STOPPING,
+    speed: UI_STATES.SPEED_CHANGING,
+  }[action] ?? state.uiState;
   setControlStatus(`${action[0].toUpperCase()}${action.slice(1)} in progress...`);
   updateControls();
   try {
@@ -492,7 +655,10 @@ async function control(action, body = null) {
       setConnection("warning", "Run stopped; scenario remains loaded");
     }
   } catch (error) {
-    state.uiState = uiStateForRunStatus(state.runStatus);
+    state.uiState = uiStateForRunStatus(
+      state.runStatus,
+      Boolean(state.loadedScenario)
+    );
     setControlStatus(`${action} failed: ${error.message}`, true);
     addLocalEvent(`ui.${action}_failed`, {message: error.message}, "error");
     updateControls();
@@ -503,7 +669,10 @@ async function refreshRunState() {
   if (!state.runId) return;
   const run = await api(`/simulation/runs/${encodeURIComponent(state.runId)}`);
   state.runStatus = run.status;
-  state.uiState = uiStateForRunStatus(run.status);
+  state.uiState = uiStateForRunStatus(
+    run.status,
+    Boolean(state.loadedScenario)
+  );
   await refreshSnapshot();
   updateRunLabel();
   setControlStatus(statusMessage(run.status));
@@ -563,7 +732,9 @@ function syncAgentSelection() {
     elements["agent-select"].add(new Option("No agents", ""));
   } else {
     for (const agent of agents) {
-      elements["agent-select"].add(new Option(agent.id, agent.id));
+      elements["agent-select"].add(
+        new Option(`${agent.displayName} (${agent.id})`, agent.id)
+      );
     }
   }
   elements["agent-select"].value =
@@ -595,7 +766,38 @@ function renderInspector() {
   elements["character-profile-text"].textContent =
     optionalString(agent?.characterProfile?.description)
     ?? "No character profile available";
+  renderPerceptionInspector(agent);
   renderPlan(agent);
+}
+
+function renderPerceptionInspector(agent) {
+  const visibleNames = (agent?.perception.visibleNow ?? []).map(
+    (agentId) => agentDisplayName(agentId)
+  );
+  elements["seeing-now"].textContent =
+    visibleNames.length ? visibleNames.join(", ") : "Nobody";
+  const recent = state.recentPerceptions[agent?.id] ?? [];
+  const heard = recent.find((item) => item.modality === "auditory");
+  elements["recently-heard"].textContent = heard?.text ?? "Nothing";
+  const list = elements["recent-observations"];
+  list.replaceChildren();
+  if (!recent.length) {
+    const item = document.createElement("li");
+    item.className = "muted";
+    item.textContent = "No observations";
+    list.append(item);
+    return;
+  }
+  for (const observation of recent.slice(0, 8)) {
+    const item = document.createElement("li");
+    item.textContent = observation.text;
+    list.append(item);
+  }
+}
+
+function agentDisplayName(agentId) {
+  return state.snapshot?.agents.find((agent) => agent.id === agentId)
+    ?.displayName ?? agentId;
 }
 
 function setGauge(name, rawValue) {
@@ -720,7 +922,7 @@ function drawWorld() {
 function drawAgent(agent, originX, originY, tile) {
   if (!agent.position) return;
   const points = [agent.position, ...agent.movement.path];
-  if (points.length > 1) {
+  if (state.overlayOptions.paths && points.length > 1) {
     context.strokeStyle = "#f4be5b";
     context.lineWidth = Math.max(2, tile * 0.08);
     context.setLineDash([tile * 0.18, tile * 0.12]);
@@ -733,7 +935,10 @@ function drawAgent(agent, originX, originY, tile) {
     context.stroke();
     context.setLineDash([]);
   }
-  if (agent.movement.destination) {
+  if (
+    state.overlayOptions.debugDestinations
+    && agent.movement.destination
+  ) {
     const x = originX + (agent.movement.destination.x + 0.5) * tile;
     const y = originY + (agent.movement.destination.y + 0.5) * tile;
     context.strokeStyle = "#f4be5b";
@@ -750,6 +955,17 @@ function drawAgent(agent, originX, originY, tile) {
   context.strokeStyle =
     agent.system1.state !== "NORMAL" ? "#ef7070" : "rgba(255,255,255,.55)";
   context.stroke();
+  const selected = selectedAgent();
+  if (
+    state.overlayOptions.selectedVisibility
+    && selected?.perception.visibleNow.includes(agent.id)
+  ) {
+    context.beginPath();
+    context.arc(x, y, tile * 0.36, 0, Math.PI * 2);
+    context.strokeStyle = "#54d78b";
+    context.lineWidth = 2;
+    context.stroke();
+  }
   const next = agent.movement.path[0];
   if (next) {
     const dx = next.x - agent.position.x;
@@ -761,6 +977,79 @@ function drawAgent(agent, originX, originY, tile) {
     context.lineTo(x + dx * tile * 0.22, y + dy * tile * 0.22);
     context.stroke();
   }
+  drawAgentOverlays(agent, x, y, tile);
+}
+
+function drawAgentOverlays(agent, x, y, tile) {
+  const now = Date.now();
+  const effects = state.sensorEffects[agent.id] ?? {};
+  const bubble = state.speechBubbles[agent.id];
+  if (state.overlayOptions.names) {
+    context.fillStyle = "#e7edf5";
+    context.font = `700 ${Math.max(10, tile * 0.22)}px system-ui`;
+    context.textAlign = "center";
+    context.textBaseline = "bottom";
+    context.fillText(agent.displayName, x, y - tile * 0.34);
+  }
+  const indicators = [];
+  if (state.overlayOptions.vision && agent.perception.visibleNow.length) {
+    indicators.push(`👁 ${agent.perception.visibleNow.length}`);
+  }
+  if (
+    state.overlayOptions.hearing
+    && effects.auditoryUntil
+    && effects.auditoryUntil > now
+  ) {
+    indicators.push("👂");
+    context.beginPath();
+    context.arc(x, y, tile * 0.42, 0, Math.PI * 2);
+    context.strokeStyle = "rgba(103, 215, 218, .75)";
+    context.lineWidth = Math.max(2, tile * 0.05);
+    context.stroke();
+  }
+  if (indicators.length) {
+    context.fillStyle = "#d8e8f4";
+    context.font = `${Math.max(10, tile * 0.2)}px system-ui`;
+    context.textAlign = "center";
+    context.textBaseline = "top";
+    context.fillText(indicators.join("  "), x, y + tile * 0.34);
+  }
+  if (
+    state.overlayOptions.speech
+    && bubble
+    && bubble.until > now
+  ) {
+    drawSpeechBubble(bubble.text, x, y - tile * 0.65, tile);
+  }
+}
+
+function drawSpeechBubble(text, x, y, tile) {
+  const preview = text.length > 72 ? `${text.slice(0, 69)}...` : text;
+  const width = Math.min(260, Math.max(90, preview.length * 6.2));
+  const height = preview.length > 35 ? 42 : 28;
+  const left = x - width / 2;
+  const top = y - height;
+  context.fillStyle = "rgba(231, 237, 245, .96)";
+  context.strokeStyle = "#26394b";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.roundRect(left, top, width, height, Math.max(4, tile * 0.08));
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#071019";
+  context.font = `${Math.max(9, tile * 0.16)}px system-ui`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  const lines = preview.length > 35
+    ? [preview.slice(0, 35), preview.slice(35)]
+    : [preview];
+  lines.forEach((line, index) => {
+    context.fillText(
+      line,
+      x,
+      top + height / 2 + (index - (lines.length - 1) / 2) * 14
+    );
+  });
 }
 
 function zoneColor(type) {
@@ -778,12 +1067,22 @@ function stationLabel(station) {
   return labels[station.actions[0]] ?? "?";
 }
 
-function addEvent(raw) {
+function addEvent(
+  raw,
+  domainEventOffset = null,
+  {animate = true, render = true} = {}
+) {
   const event = isObject(raw) ? raw : {};
   const eventId = optionalString(event.event_id)
     ?? `local:${optionalString(event.event_type) ?? "unknown"}:${
       event.simulation_tick ?? 0
     }:${state.events.length}`;
+  if (Number.isInteger(domainEventOffset)) {
+    state.lastDomainEventOffset = Math.max(
+      state.lastDomainEventOffset,
+      domainEventOffset
+    );
+  }
   if (state.eventIds.has(eventId)) return;
   state.eventIds.add(eventId);
   state.events.push({
@@ -797,11 +1096,94 @@ function addEvent(raw) {
     correlationId: optionalString(event.correlation_id),
     wallTime: optionalString(event.wall_time),
   });
+  updateReadableEventState(
+    state.events[state.events.length - 1],
+    animate
+  );
   if (state.events.length > 5000) {
     const removed = state.events.splice(0, state.events.length - 5000);
     removed.forEach((item) => state.eventIds.delete(item.eventId));
   }
-  renderEventLog();
+  if (render) renderEventLog();
+}
+
+function updateReadableEventState(event, animate) {
+  const now = Date.now();
+  if (event.type === "perception.delivered" && event.agentId) {
+    const modality = optionalString(event.payload.modality) ?? "unknown";
+    const subject = optionalString(event.payload.subject_id);
+    const factType = optionalString(event.payload.fact_type) ?? "perception";
+    if (animate) {
+      state.sensorEffects[event.agentId] ??= {};
+      state.sensorEffects[event.agentId][`${modality}Until`] = now + 1800;
+    }
+    const text = modality === "auditory"
+      ? `Heard ${subject ? agentDisplayName(subject) : "something"}`
+      : `${factType.replaceAll("_", " ")}${
+          subject ? `: ${agentDisplayName(subject)}` : ""
+        }`;
+    recordRecentPerception(event.agentId, {modality, text, tick: event.tick});
+  }
+  if (event.type === "speech.delivered" && event.agentId) {
+    const text = String(event.payload.text ?? "");
+    if (animate) {
+      state.speechBubbles[event.agentId] = {
+        text,
+        until: now + Math.min(8000, Math.max(2500, text.length * 70)),
+      };
+    }
+    const recipients = Array.isArray(event.payload.recipient_ids)
+      ? event.payload.recipient_ids
+      : [];
+    for (const recipientId of recipients) {
+      if (typeof recipientId !== "string") continue;
+      if (animate) {
+        state.sensorEffects[recipientId] ??= {};
+        state.sensorEffects[recipientId].auditoryUntil = now + 1800;
+      }
+      recordRecentPerception(recipientId, {
+        modality: "auditory",
+        text: `${agentDisplayName(event.agentId)}: "${text}"`,
+        tick: event.tick,
+      });
+    }
+  }
+  if (animate && event.type === "dialogue.generated" && event.agentId) {
+    const text = String(event.payload.text ?? "");
+    state.speechBubbles[event.agentId] = {
+      text,
+      until: now + Math.min(8000, Math.max(2500, text.length * 70)),
+    };
+  }
+  if (animate) {
+    renderTranscript();
+    renderInspector();
+    drawWorld();
+    scheduleOverlayExpiry();
+  }
+}
+
+function recordRecentPerception(agentId, observation) {
+  state.recentPerceptions[agentId] ??= [];
+  state.recentPerceptions[agentId].unshift(observation);
+  state.recentPerceptions[agentId] =
+    state.recentPerceptions[agentId].slice(0, 20);
+}
+
+let overlayExpiryTimer = null;
+function scheduleOverlayExpiry() {
+  clearTimeout(overlayExpiryTimer);
+  const expiries = [
+    ...Object.values(state.sensorEffects).flatMap((effect) =>
+      Object.values(effect).filter(Number.isFinite)
+    ),
+    ...Object.values(state.speechBubbles).map((bubble) => bubble.until),
+  ].filter((expiry) => expiry > Date.now());
+  if (!expiries.length) return;
+  overlayExpiryTimer = setTimeout(() => {
+    drawWorld();
+    scheduleOverlayExpiry();
+  }, Math.max(50, Math.min(...expiries) - Date.now() + 25));
 }
 
 function addLocalEvent(type, payload, category = null) {
@@ -839,6 +1221,42 @@ function renderEventLog() {
       if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
         keyboardEvent.preventDefault();
         showEventDetail(event);
+      }
+
+      function renderTranscript() {
+        const transcript = elements["conversation-transcript"];
+        const entries = state.events.filter((event) =>
+          /^(speech\.delivered|dialogue\.generated)$/.test(event.type)
+        );
+        transcript.replaceChildren();
+        if (!entries.length) {
+          const empty = document.createElement("p");
+          empty.className = "muted";
+          empty.textContent = "No speech yet";
+          transcript.append(empty);
+          return;
+        }
+        for (const event of entries.slice(-100).reverse()) {
+          const entry = document.createElement("article");
+          entry.className = "transcript-entry";
+          const recipients = Array.isArray(event.payload.recipient_ids)
+            ? event.payload.recipient_ids.map(agentDisplayName).join(", ")
+            : optionalString(event.payload.target_id)
+              ? agentDisplayName(event.payload.target_id)
+              : "unspecified";
+          const meta = document.createElement("div");
+          meta.className = "transcript-entry__meta";
+          meta.textContent = `t${event.tick} · ${
+            agentDisplayName(event.agentId ?? "unknown")
+          } → ${recipients}${
+            event.type === "dialogue.generated" ? " · legacy dialogue" : ""
+          }`;
+          const quote = document.createElement("blockquote");
+          quote.textContent = String(event.payload.text ?? "");
+          entry.append(meta, quote);
+          entry.addEventListener("click", () => showEventDetail(event));
+          transcript.append(entry);
+        }
       }
     });
     fragment.append(row);
@@ -913,13 +1331,22 @@ async function loadOlderEvents() {
       }&limit=1000`
     );
     state.eventHistoryTotal = finiteNumber(page.total, 0);
-    for (const event of page.events ?? []) addEvent(event);
+    for (let index = 0; index < (page.events ?? []).length; index += 1) {
+      addEvent(
+        page.events[index],
+        state.eventHistoryOffset + index + 1,
+        {animate: false, render: false}
+      );
+    }
     state.eventHistoryOffset = finiteNumber(
       page.next_offset,
       state.eventHistoryOffset
     );
     elements["load-older-events"].disabled =
       state.eventHistoryOffset >= state.eventHistoryTotal;
+    renderEventLog();
+    renderTranscript();
+    renderInspector();
   } catch (error) {
     setControlStatus(`Could not load event history: ${error.message}`, true);
   }
@@ -927,36 +1354,28 @@ async function loadOlderEvents() {
 
 function updateControls() {
   const hasRun = Boolean(state.runId);
-  const running = state.runStatus === "running";
-  const paused = state.runStatus === "paused";
-  const stopped = state.runStatus === "stopped";
-  const busy = /ING$/.test(state.uiState);
-  const scenarioReady = Boolean(state.loadedScenario) &&
-    ["SCENARIO_READY", "STOPPED"].includes(state.uiState);
-  elements["start-button"].disabled = !scenarioReady || (hasRun && !stopped) || busy;
-  elements["pause-button"].disabled = busy || !hasRun || !running;
-  elements["resume-button"].disabled = busy || !hasRun || !paused;
-  elements["step-button"].disabled = busy || !hasRun || !paused;
-  elements["stop-button"].disabled = busy || !hasRun || stopped;
-  elements["speed-select"].disabled = busy || !hasRun || stopped;
-  elements["scenario-file"].disabled = busy || (hasRun && !stopped);
-  elements["load-example-button"].disabled = busy || (hasRun && !stopped);
-  elements["load-older-events"].disabled =
-    !hasRun
-    || (
-      state.eventHistoryTotal > 0
-      && state.eventHistoryOffset >= state.eventHistoryTotal
-    );
-  elements["vitals-form"].querySelectorAll("input, button").forEach((control) => {
-    control.disabled = busy || !hasRun || stopped;
+  const historyComplete =
+    state.eventHistoryTotal > 0
+    && state.eventHistoryOffset >= state.eventHistoryTotal;
+  const availability = controlAvailability({
+    uiState: state.uiState,
+    runStatus: state.runStatus,
+    hasRun,
+    hasScenario: Boolean(state.loadedScenario),
+    historyComplete,
   });
-}
-
-function uiStateForRunStatus(status) {
-  if (status === "running") return "RUNNING";
-  if (status === "paused") return "PAUSED";
-  if (status === "stopped") return "STOPPED";
-  return state.loadedScenario ? "SCENARIO_READY" : "EMPTY";
+  elements["start-button"].disabled = !availability.start;
+  elements["pause-button"].disabled = !availability.pause;
+  elements["resume-button"].disabled = !availability.resume;
+  elements["step-button"].disabled = !availability.step;
+  elements["stop-button"].disabled = !availability.stop;
+  elements["speed-select"].disabled = !availability.speed;
+  elements["scenario-file"].disabled = !availability.loadScenario;
+  elements["load-example-button"].disabled = !availability.loadScenario;
+  elements["load-older-events"].disabled = !availability.loadHistory;
+  elements["vitals-form"].querySelectorAll("input, button").forEach((control) => {
+    control.disabled = !availability.mutate;
+  });
 }
 
 function statusMessage(status) {
@@ -996,14 +1415,21 @@ function resetRunState() {
   state.runId = null;
   state.runStatus = "created";
   state.snapshot = null;
+  state.bootstrap = null;
   state.selectedAgentId = null;
   state.lastSequence = 0;
   state.events = [];
   state.eventIds = new Set();
   state.eventHistoryTotal = 0;
   state.eventHistoryOffset = 0;
+  state.lastDomainEventOffset = 0;
+  state.lastSnapshotRevision = 0;
+  state.sensorEffects = {};
+  state.speechBubbles = {};
+  state.recentPerceptions = {};
   elements["sequence-label"].textContent = "seq --";
   renderEventLog();
+  renderTranscript();
   render();
 }
 
@@ -1059,6 +1485,20 @@ elements["copy-event-text"].addEventListener("click", () =>
 elements["copy-event-json"].addEventListener("click", () =>
   copySelectedEvent("json")
 );
+for (const [elementId, option] of [
+  ["overlay-names", "names"],
+  ["overlay-paths", "paths"],
+  ["overlay-speech", "speech"],
+  ["overlay-vision", "vision"],
+  ["overlay-hearing", "hearing"],
+  ["overlay-selected-visibility", "selectedVisibility"],
+  ["overlay-debug-destinations", "debugDestinations"],
+]) {
+  elements[elementId].addEventListener("change", (event) => {
+    state.overlayOptions[option] = event.target.checked;
+    drawWorld();
+  });
+}
 elements["vitals-form"].addEventListener("submit", mutateVitals);
 elements["scenario-file"].addEventListener("change", async (event) => {
   const [file] = event.target.files;

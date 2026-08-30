@@ -858,6 +858,12 @@ Telemetry is a realtime operator projection:
 - event stream;
 - simulation status and sequence number.
 
+The browser transport uses separate cursors for durable telemetry messages,
+domain events, and replaceable runtime snapshots. Static world and character
+profile bootstrap data is sent separately from high-frequency state. A client
+whose replay cursor expires must recover the latest snapshot and backfill domain
+events before resuming live display.
+
 The browser does not own simulation behavior.
 
 Telemetry snapshots may reveal more than any character could know. Never pass a

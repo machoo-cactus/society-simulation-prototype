@@ -119,6 +119,8 @@ From the UI you can:
 - search and filter planning, survival, perception, cognition, speech, dialogue,
   and failure events;
 - expand, copy, and inspect complete long-form event payloads;
+- view character names, current vision, hearing pulses, speech bubbles, and a
+  delivered-speech transcript;
 - download the run's versioned JSONL dataset.
 
 The empty top-level `frontend/` scaffold from the original proposed architecture
@@ -187,6 +189,11 @@ simulation process.
 
 API run objects are process-local. Restarting the server does not restore a live
 runner, although completed records and episodic memories remain in SQLite.
+
+The browser uses telemetry schema `stage0.telemetry.v2`. Static world/profile
+bootstrap data, latest runtime snapshots, and durable domain-event cursors are
+separate. Reconnecting clients backfill missed events through the REST history
+endpoint before resuming live updates.
 
 ## Reproducibility and provider isolation
 
@@ -306,6 +313,7 @@ Design and status documents:
 - [Project state assessment](docs/PROJECT_STATE_ASSESSMENT.md)
 - [Real LLM tool-agent plan](docs/REAL_LLM_TOOL_AGENT_PLAN.md)
 - [Character profile authoring guide](docs/CHARACTER_PROFILE_GUIDE.md)
+- [Large-scale world and transport plan](docs/LARGE_SCALE_WORLD_AND_TRANSPORT_PLAN.md)
 
 ## Platform support
 

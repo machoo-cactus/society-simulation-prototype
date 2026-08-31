@@ -82,6 +82,7 @@ def test_completed_run_contains_offline_analysis_records(tmp_path: Path) -> None
     assert payload["scenario"]["name"] == "phase-4-system1-preemption"
     assert record_types.count("state_vector") == 11
     assert record_types.count("trajectory") == 11
+    assert record_types.count("environment_state") == 11
     assert "activity_interval" in record_types
     assert "threshold_crossing" in record_types
     assert "plan_transition" in record_types
@@ -225,6 +226,7 @@ def test_api_exposes_summary_and_versioned_jsonl_export() -> None:
     lines = [json.loads(line) for line in export.text.splitlines()]
     assert lines[0]["record_type"] == "run"
     assert any(line["record_type"] == "state_vector" for line in lines)
+    assert any(line["record_type"] == "environment_state" for line in lines)
 
 
 def test_cli_persists_and_exports_without_ui(tmp_path: Path) -> None:

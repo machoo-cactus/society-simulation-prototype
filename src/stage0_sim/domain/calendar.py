@@ -16,7 +16,7 @@ class SimulationCalendar:
             raise ValueError("update_interval_seconds must be greater than zero")
 
     def payload_at(self, simulation_time: float) -> dict[str, JsonValue]:
-        current = self.start_datetime + timedelta(seconds=simulation_time)
+        current = self.datetime_at(simulation_time)
         hour = current.hour
         period = (
             "night"
@@ -34,3 +34,6 @@ class SimulationCalendar:
             "weekday": current.strftime("%A"),
             "period": period,
         }
+
+    def datetime_at(self, simulation_time: float) -> datetime:
+        return self.start_datetime + timedelta(seconds=simulation_time)

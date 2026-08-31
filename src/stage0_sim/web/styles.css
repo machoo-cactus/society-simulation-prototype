@@ -78,6 +78,10 @@ summary { cursor: pointer; font-weight: 750; }
 .view-controls { justify-content: flex-end; padding: 0; }
 .view-controls select { width: auto; }
 .view-controls output { min-width: 3.5rem; align-self: center; text-align: center; }
+.semantic-scale { align-self: center; color: var(--muted); font-size: .78rem; }
+.scale-override { position: relative; margin: 0; padding: .4rem .55rem; }
+.scale-override summary { color: var(--muted); font-size: .76rem; }
+.scale-override[open] { display: grid; gap: .4rem; }
 .check { display: inline-flex !important; align-items: center; gap: .35rem; color: var(--muted); font-size: .78rem; }
 .check input { width: auto; }
 .world-scroll { min-height: 30rem; padding: 1rem; overflow: auto; background: #061019; cursor: grab; touch-action: none; overscroll-behavior: contain; }
@@ -106,12 +110,15 @@ summary { cursor: pointer; font-weight: 750; }
 .sensor-label { fill: var(--accent); font-size: .16px; font-weight: 800; }
 .speech-label { fill: #fff; font-size: .15px; text-anchor: middle; paint-order: stroke; stroke: #071018; stroke-width: .05px; }
 .transport-edge { fill: none; stroke: #365a73; stroke-width: 4; }
+.district-center { fill: #89a5b8; opacity: .7; }
 .building { fill: #35637b; stroke: #8fb8cd; stroke-width: 2; }
 .outdoor-place { fill: var(--good); }
-.city-character { fill: var(--accent); stroke: #fff; stroke-width: 3; }
+.city-character { fill: var(--accent); stroke: #fff; stroke-width: 3; cursor: pointer; filter: drop-shadow(0 0 3px #001); }
 .city-character.selected { fill: var(--good); stroke: var(--warning); stroke-width: 5; }
 .city-label { fill: #dbeafa; font-size: 12px; paint-order: stroke; stroke: #071018; stroke-width: 3px; }
-.character-label { fill: var(--accent); font-weight: 800; }
+.city-label--district { fill: #9fb3c1; font-size: 15px; font-weight: 800; }
+.city-label--character { fill: #79dcff; font-weight: 800; }
+.city-label--vehicle { fill: var(--warning); }
 .city-speech-label { fill: #fff; font-size: 11px; text-anchor: middle; paint-order: stroke; stroke: #071018; stroke-width: 3px; }
 .vehicle-marker { fill: var(--warning); stroke: #111; stroke-width: 2; }
 .overlay-controls { display: flex; flex-wrap: wrap; gap: .8rem; padding: .75rem 1rem; border-top: 1px solid var(--border); }
@@ -213,6 +220,23 @@ summary { cursor: pointer; font-weight: 750; }
   .scenario-library-layout { grid-template-columns: 1fr; }
   .scenario-list { position: static; }
   .scenario-group--depth-0 > .scenario-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.surface-damp,
+.surface-wet,
+.surface-soaked {
+  stroke: #3f83c5;
+}
+
+.surface-wet,
+.surface-soaked {
+  stroke-width: 5;
+}
+
+.resource-closed {
+  opacity: 0.5;
+  stroke: #8b1e1e !important;
+  stroke-dasharray: 8 5;
 }
 @media (max-width: 640px) {
   .topbar { align-items: flex-start; flex-direction: column; }

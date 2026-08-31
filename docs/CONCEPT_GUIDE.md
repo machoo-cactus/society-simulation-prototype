@@ -459,6 +459,39 @@ clock. Configured interval boundaries emit public `time.updated` facts so
 character controllers receive clock updates without changing physical
 authority or interrupting active behavior.
 
+### 7.1.1 Environmental weather and availability
+
+The environment subsystem composes civil time with a deterministic,
+scenario-authored weather timeline. Weather transitions run before surface,
+availability, movement, travel, perception, and cognition work. Ordered systems
+never call a provider or choose random weather.
+
+Rain accumulates continuous wetness on exposed city surfaces and clear weather
+dries them using configured temperature and wind rates. Events are emitted only
+when a surface crosses the named `DRY`, `DAMP`, `WET`, or `SOAKED` bands.
+Configured effects reduce outdoor visual range and slow exposed walking and
+cycling; cars, metro, indoor perception, physiology, and System 1 thresholds
+remain unchanged.
+
+Weekly schedules and weather closure rules feed one dynamic availability
+registry for stations, buildings, outdoor places, transport edges, and
+vehicles. Closed topology remains known. New use is rejected with a precise
+reason, ongoing affordances may finish, and travel stops at the next safe
+boundary before using a later closed resource.
+
+Characters receive allowed current environment information on every decision
+and material `time.updated`, `weather.changed`, and known-resource
+`availability.changed` facts. The read-only `check_environment` tool may add a
+bounded provider round but never creates an intent; one final state-changing
+action is still required. Automatic observations and explicit reads both pass
+through `EnvironmentInformationService` and `EnvironmentAccessPolicy`. The
+default policy allows all topics, while future window, device, or location
+restrictions can replace that policy without changing tools or prompts.
+
+Operator telemetry is intentionally omniscient and includes current weather,
+effects, surface wetness, and all dynamic availability. It must not be reused
+as controller context.
+
 ### 7.2 Micro-clock
 
 The **micro-clock** is the fixed-step execution rhythm for:
@@ -650,6 +683,11 @@ building, neighborhood, and city scales; `TravelComponent` records route legs,
 mode, progress, vehicle, and interruption state. `NavigationComponent` retains
 the generalized route, compiled primitive progress, status, and failure reason.
 Authoritative execution always resolves against `SpaceRegistry`.
+
+The operator map camera, semantic zoom level, inspected character, and optional
+follow mode are presentation state only. They do not change
+`SpatialLocationComponent`, navigation, character perception, or controller
+context. An operator may view the world without inspecting any character.
 
 Controller destination context comes from the character's
 `KnownTopologyProjection`, backed by `knowledge.place` and `knowledge.route`

@@ -91,6 +91,7 @@ def test_calendar_time_reaches_controller_and_telemetry() -> None:
         "weekday": "Sunday",
         "period": "morning",
     }
+    assert snapshot["environment"]["time"] == snapshot["calendar_time"]
 
 
 def test_calendar_start_requires_utc_offset() -> None:

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -385,6 +386,33 @@ class AgentWorkCoordinator:
         turn = decision.model_turn
         self.input_tokens += turn.input_tokens or 0
         self.output_tokens += turn.output_tokens or 0
+        for read in decision.read_tools:
+            context.events.emit(
+                "tool.read_requested",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=request.agent_id,
+                payload={
+                    "decision_id": request.decision_id,
+                    "tool_call_id": read.call.call_id,
+                    "tool_name": read.call.name,
+                    "arguments": read.call.arguments,
+                },
+                correlation_id=request.decision_id,
+            )
+            context.events.emit(
+                "tool.read_completed",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=request.agent_id,
+                payload={
+                    "decision_id": request.decision_id,
+                    "tool_call_id": read.call.call_id,
+                    "tool_name": read.call.name,
+                    "result": read.result,
+                },
+                correlation_id=request.decision_id,
+            )
         context.events.emit(
             "cognition.completed",
             simulation_tick=context.clock.tick,
@@ -773,6 +801,18 @@ def _build_information_query(
         *(
             [f"current civil time: {request.observation.calendar_time.datetime}"]
             if request.observation.calendar_time is not None
+            else []
+        ),
+        *(
+            [
+                "current environment: "
+                + json.dumps(
+                    request.observation.environment.values,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            ]
+            if request.observation.environment is not None
             else []
         ),
         *(

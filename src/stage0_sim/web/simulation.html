@@ -131,6 +131,30 @@
     </div>
   </section>
 
+  {% if environment %}
+  <section id="environment-panel" class="panel environment-panel" aria-labelledby="environment-heading">
+    <header class="panel__header">
+      <div><h2 id="environment-heading">Environment</h2><p>Omniscient current conditions</p></div>
+    </header>
+    <dl class="status-grid">
+      {% if environment.time %}
+        <div><dt>Local time</dt><dd>{{ environment.time.weekday }} {{ environment.time.local_datetime }}</dd></div>
+      {% endif %}
+      {% if environment.weather %}
+        <div><dt>Weather</dt><dd>{{ environment.weather.condition|replace("_", " ")|title }}</dd></div>
+        <div><dt>Temperature</dt><dd>{{ "%.1f"|format(environment.weather.temperature_c) }} °C</dd></div>
+        <div><dt>Precipitation</dt><dd>{{ "%.1f"|format(environment.weather.precipitation_mm_per_hour) }} mm/h</dd></div>
+        <div><dt>Wind</dt><dd>{{ "%.1f"|format(environment.weather.wind_speed_mps) }} m/s at {{ "%.0f"|format(environment.weather.wind_direction_degrees) }}°</dd></div>
+        <div><dt>Visibility</dt><dd>{{ "%.0f"|format(environment.weather.visibility_meters) }} m</dd></div>
+      {% endif %}
+      {% if environment.surface_conditions %}
+        <div><dt>Outdoor wetness</dt><dd>{{ environment.surface_conditions[0].band|title }} ({{ "%.0f"|format(environment.surface_conditions[0].wetness * 100) }}%)</dd></div>
+      {% endif %}
+      <div><dt>Closures</dt><dd>{{ environment.availability|selectattr("available", "equalto", false)|list|length }}</dd></div>
+    </dl>
+  </section>
+  {% endif %}
+
   <section id="world-panel" class="panel world-panel {% if request.query_params.get('focus') == 'world' %}focused{% endif %}" aria-labelledby="world-heading">
     <header class="panel__header">
       <div>
@@ -138,16 +162,25 @@
         <p id="world-heading-detail">{{ world_view.title if world_view else "Load a scenario to preview its world" }}</p>
       </div>
       <form class="view-controls" method="post" action="/ui/view" data-ui-targets="#world-panel">
-        <label for="view-level">Scale</label>
-        <select id="view-level" name="view_level">
-          {% for level in ("auto", "building", "neighborhood", "city") %}
-            <option value="{{ level }}" {% if session.view_level == level %}selected{% endif %}>{{ level|title }}</option>
-          {% endfor %}
-        </select>
+        <span class="semantic-scale">Detail: <strong>{{ world_view.semantic_level|title if world_view else "None" }}</strong></span>
         <button name="zoom_action" value="out" aria-label="Zoom out">−</button>
         <output data-map-zoom-output aria-label="Zoom level" aria-live="polite">{{ (session.zoom * 100)|round|int }}%</output>
         <button name="zoom_action" value="in" aria-label="Zoom in">+</button>
         <button name="zoom_action" value="fit">Fit</button>
+        <details class="scale-override">
+          <summary>Advanced scale override</summary>
+          <label for="view-level">Scale</label>
+          <select id="view-level" name="view_level">
+            {% for level, label in (("auto", "Automatic from zoom"), ("building", "Building"), ("neighborhood", "Neighborhood"), ("city", "City")) %}
+              <option value="{{ level }}" {% if session.view_level == level %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </details>
+        <input type="hidden" name="follow_present" value="yes">
+        <label class="check">
+          <input type="checkbox" name="follow_selected" {% if session.follow_selected %}checked{% endif %} {% if not selected_agent %}disabled{% endif %}>
+          Follow inspected character
+        </label>
         {% if request.query_params.get("focus") == "world" %}
           <a class="button-link" href="/ui/#world-heading" data-ui-link-targets="#world-panel" data-ui-remove-query="focus">Exit focus</a>
         {% else %}
@@ -168,6 +201,10 @@
           style="width: {{ world_view.display_width }}px"
           data-base-width="{{ world_view.base_display_width }}"
           data-map-zoom="{{ session.zoom }}"
+          data-semantic-level="{{ world_view.semantic_level }}"
+          data-camera-x="{{ world_view.camera_x }}"
+          data-camera-y="{{ world_view.camera_y }}"
+          data-follow-selected="{{ 'true' if world_view.follow_selected else 'false' }}"
           role="img"
           aria-label="{{ world_view.title }}"
         >
@@ -188,8 +225,8 @@
               <polyline class="path" points="{{ path }}"/>
             {% endfor %}
             {% for station in world_view.stations %}
-              <rect class="station" x="{{ station.position.x + 0.22 }}" y="{{ station.position.y + 0.22 }}" width=".56" height=".56">
-                <title>{{ station.name }} · {{ (station.get("actions") or station.get("supported_actions") or [])|join(", ") }}</title>
+              <rect class="station {% if station.environment_availability and not station.environment_availability.available %}resource-closed{% endif %}" x="{{ station.position.x + 0.22 }}" y="{{ station.position.y + 0.22 }}" width=".56" height=".56">
+                <title>{{ station.name }} · {{ (station.get("actions") or station.get("supported_actions") or [])|join(", ") }}{% if station.environment_availability and not station.environment_availability.available %} · Closed: {{ station.environment_availability.reason }}{% endif %}</title>
               </rect>
             {% endfor %}
             {% for agent in world_view.agents %}
@@ -210,28 +247,36 @@
             {% for y in range(world_view.height + 1) %}<line class="grid-line" x1="0" y1="{{ y }}" x2="{{ world_view.width }}" y2="{{ y }}"/>{% endfor %}
           {% else %}
             <rect class="map-background" x="0" y="0" width="1000" height="650"/>
+            {% for district in world_view.districts %}
+              <circle class="district-center" cx="{{ district.px }}" cy="{{ district.py }}" r="4"><title>{{ district.name }}</title></circle>
+            {% endfor %}
             {% for edge in world_view.edges %}
-              <polyline class="transport-edge" points="{{ edge.points }}"><title>{{ edge.id }}</title></polyline>
+              <polyline class="transport-edge {% if edge.surface_condition %}surface-{{ edge.surface_condition.band|lower }}{% endif %} {% if edge.environment_availability and not edge.environment_availability.available %}resource-closed{% endif %}" points="{{ edge.points }}"><title>{{ edge.id }}{% if edge.surface_condition %} · {{ edge.surface_condition.band|lower }}{% endif %}{% if edge.environment_availability and not edge.environment_availability.available %} · Closed: {{ edge.environment_availability.reason }}{% endif %}</title></polyline>
             {% endfor %}
             {% for building in world_view.buildings %}
-              <rect class="building" x="{{ building.px - 10 }}" y="{{ building.py - 10 }}" width="20" height="20">
-                <title>{{ building.name }}</title>
+              <rect class="building {% if building.environment_availability and not building.environment_availability.available %}resource-closed{% endif %}" x="{{ building.px - 10 }}" y="{{ building.py - 10 }}" width="20" height="20">
+                <title>{{ building.name }}{% if building.environment_availability and not building.environment_availability.available %} · Closed: {{ building.environment_availability.reason }}{% endif %}</title>
               </rect>
-              {% if "names" in session.overlays %}<text class="city-label" x="{{ building.px + 13 }}" y="{{ building.py + 4 }}">{{ building.name }}</text>{% endif %}
             {% endfor %}
             {% for place in world_view.places %}
-              <circle class="outdoor-place" cx="{{ place.px }}" cy="{{ place.py }}" r="7"><title>{{ place.name }}</title></circle>
+              <circle class="outdoor-place {% if place.surface_condition %}surface-{{ place.surface_condition.band|lower }}{% endif %} {% if place.environment_availability and not place.environment_availability.available %}resource-closed{% endif %}" cx="{{ place.px }}" cy="{{ place.py }}" r="7"><title>{{ place.name }}{% if place.surface_condition %} · {{ place.surface_condition.band|lower }}{% endif %}{% if place.environment_availability and not place.environment_availability.available %} · Closed: {{ place.environment_availability.reason }}{% endif %}</title></circle>
             {% endfor %}
             {% for agent in world_view.agents %}
-              <circle class="city-character {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %}" cx="{{ agent.px }}" cy="{{ agent.py }}" r="9">
-                <title>{{ agent.name }}</title>
-              </circle>
-              {% if "names" in session.overlays %}<text class="city-label character-label" x="{{ agent.px + 12 }}" y="{{ agent.py - 10 }}">{{ agent.name }}</text>{% endif %}
-              {% if "speech" in session.overlays and agent.speech %}<text class="city-speech-label" x="{{ agent.px }}" y="{{ agent.py - 18 }}">{{ agent.speech[:48] }}</text>{% endif %}
+              <a href="/ui/?selected={{ agent.id|urlencode }}" aria-label="Inspect {{ agent.name }}" data-ui-link-targets="#world-panel,#inspector-panel">
+                <circle class="city-character {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %}" cx="{{ agent.px }}" cy="{{ agent.py }}" r="9" data-character-id="{{ agent.id }}">
+                  <title>{{ agent.name }}</title>
+                </circle>
+                {% if "speech" in session.overlays and agent.speech %}<text class="city-speech-label" x="{{ agent.px }}" y="{{ agent.py - 18 }}">{{ agent.speech[:48] }}</text>{% endif %}
+              </a>
             {% endfor %}
             {% for vehicle in world_view.vehicles %}
               <rect class="vehicle-marker" x="{{ vehicle.px - 7 }}" y="{{ vehicle.py - 4 }}" width="14" height="8"><title>{{ vehicle.name }}</title></rect>
             {% endfor %}
+            {% if "names" in session.overlays %}
+              {% for label in world_view.labels %}
+                <text class="city-label city-label--{{ label.kind }}" data-label-id="{{ label.kind }}:{{ label.id }}" x="{{ label.x }}" y="{{ label.y }}">{{ label.text }}</text>
+              {% endfor %}
+            {% endif %}
           {% endif %}
         </svg>
       {% else %}
@@ -253,13 +298,15 @@
     <header class="panel__header">
       <div><h2 id="inspector-heading">Character inspector</h2><p>Omniscient operator telemetry</p></div>
     </header>
-    <form class="agent-picker" method="post" action="/ui/view" data-ui-targets="#world-panel,#inspector-panel">
+    <form class="agent-picker" method="post" action="/ui/view" data-ui-targets="#world-panel,#inspector-panel" data-ui-remove-query="selected">
       <label for="selected-agent">Character</label>
       <select id="selected-agent" name="selected_agent" {% if not agents %}disabled{% endif %}>
+        <option value="" {% if not session.selected_agent_id %}selected{% endif %}>Not inspecting a character</option>
         {% for agent in agents %}
           <option value="{{ agent.id }}" {% if agent.id == session.selected_agent_id %}selected{% endif %}>{{ agent.character_profile.display_name if agent.character_profile else agent.id }}</option>
         {% endfor %}
       </select>
+      <input type="hidden" name="selected_agent_present" value="yes">
       <input type="hidden" name="view_level" value="{{ session.view_level }}">
       <label class="check"><input type="checkbox" name="live_refresh" {% if session.live_refresh %}checked{% endif %}> Live refresh</label>
       <button type="submit" {% if not agents %}disabled{% endif %}>Inspect</button>
@@ -309,7 +356,7 @@
         </fieldset>
         </form>
       {% else %}
-        <p class="empty-state">Start a run to inspect characters.</p>
+        <p class="empty-state">{% if agents %}Not inspecting a character. The world map remains free to pan and zoom.{% else %}Start a run to inspect characters.{% endif %}</p>
       {% endif %}
     </div>
   </aside>
@@ -333,7 +380,7 @@
       <label>Search <input name="search" type="search" value="{{ event_search }}"></label>
       <label>Category
         <select name="filter">
-          {% for value, label in (("all", "All events"), ("system1", "System 1"), ("actions", "Plans and actions"), ("dialogue", "Speech and dialogue"), ("cognition", "Cognition and tools"), ("perception", "Perception"), ("travel", "Travel"), ("errors", "Failures"), ("ui", "Simulation lifecycle")) %}
+          {% for value, label in (("all", "All events"), ("system1", "System 1"), ("actions", "Plans and actions"), ("dialogue", "Speech and dialogue"), ("cognition", "Cognition and tools"), ("perception", "Perception"), ("travel", "Travel"), ("environment", "Environment"), ("errors", "Failures"), ("ui", "Simulation lifecycle")) %}
             <option value="{{ value }}" {% if event_filter == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>

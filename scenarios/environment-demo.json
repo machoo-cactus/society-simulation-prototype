@@ -1,0 +1,127 @@
+{
+  "schema_version": 2,
+  "name": "environment-demo",
+  "seed": 20260824,
+  "dt": 60.0,
+  "speed": 1.0,
+  "calendar": {
+    "start_datetime": "2026-08-31T08:45:00+00:00",
+    "update_interval_seconds": 900
+  },
+  "weather": {
+    "initial": {
+      "condition": "CLEAR",
+      "temperature_c": 19.0,
+      "wind_speed_mps": 2.0,
+      "wind_direction_degrees": 240.0,
+      "visibility_meters": 10000.0
+    },
+    "transitions": [
+      {
+        "at_seconds": 900,
+        "state": {
+          "condition": "RAIN",
+          "temperature_c": 16.0,
+          "precipitation_mm_per_hour": 8.0,
+          "wind_speed_mps": 5.0,
+          "wind_direction_degrees": 260.0,
+          "visibility_meters": 1800.0
+        }
+      },
+      {
+        "at_seconds": 2700,
+        "state": {
+          "condition": "CLEAR",
+          "temperature_c": 18.0,
+          "wind_speed_mps": 4.0,
+          "wind_direction_degrees": 270.0,
+          "visibility_meters": 10000.0
+        }
+      }
+    ],
+    "effects": {
+      "RAIN": {
+        "walking_speed_multiplier": 0.8,
+        "cycling_speed_multiplier": 0.65,
+        "visibility_multiplier": 0.45,
+        "wetness_gain_per_mm_hour_second": 0.0001
+      },
+      "CLEAR": {
+        "base_drying_per_second": 0.0002,
+        "wind_drying_per_mps_second": 0.00002,
+        "temperature_drying_per_degree_second": 0.000005
+      }
+    }
+  },
+  "world": {
+    "width": 5,
+    "height": 3,
+    "zones": [
+      {
+        "id": "market-hall",
+        "name": "Market Hall",
+        "type": "ROOM",
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 5,
+          "height": 3
+        }
+      }
+    ],
+    "stations": [
+      {
+        "id": "cafe",
+        "name": "Morning Cafe",
+        "position": {
+          "x": 2,
+          "y": 1
+        },
+        "supported_actions": [
+          "EAT",
+          "RELAX"
+        ],
+        "environment": {
+          "schedule": {
+            "windows": [
+              {
+                "weekdays": [
+                  "MONDAY",
+                  "TUESDAY",
+                  "WEDNESDAY",
+                  "THURSDAY",
+                  "FRIDAY"
+                ],
+                "opens": "08:00",
+                "closes": "09:30"
+              }
+            ]
+          },
+          "closed_weather": [
+            "STORM"
+          ]
+        }
+      }
+    ]
+  },
+  "entities": [
+    {
+      "id": "agent-001",
+      "components": {
+        "position": {
+          "x": 2,
+          "y": 1
+        },
+        "metadata": {
+          "display_name": "Alex"
+        },
+        "character_slot": {
+          "label": "Alex",
+          "briefing": "Observe changing weather and business hours.",
+          "default_character_id": "alex-chen",
+          "constraints": {}
+        }
+      }
+    }
+  ]
+}

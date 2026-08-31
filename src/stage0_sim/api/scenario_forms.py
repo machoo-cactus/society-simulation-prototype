@@ -4,7 +4,7 @@ import json
 import types
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time
 from enum import Enum
 from typing import Any, ForwardRef, Literal, Union, get_args, get_origin
 from uuid import uuid4
@@ -190,7 +190,23 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     scenario_models.BoundsDefinition: frozenset(["x", "y", "width", "height"]),
     scenario_models.ZoneDefinition: frozenset(["id", "name", "type", "bounds", "tiles"]),
     scenario_models.StationDefinition: frozenset(
-        ["id", "name", "position", "supported_actions", "actions", "available", "capacity"]
+        [
+            "id",
+            "name",
+            "position",
+            "supported_actions",
+            "actions",
+            "available",
+            "capacity",
+            "environment",
+        ]
+    ),
+    scenario_models.OpeningWindowDefinition: frozenset(
+        ["weekdays", "opens", "closes"]
+    ),
+    scenario_models.WeeklyScheduleDefinition: frozenset(["windows"]),
+    scenario_models.EnvironmentalAvailabilityDefinition: frozenset(
+        ["schedule", "closed_weather"]
     ),
     scenario_models.HomeostasisEffectDefinition: frozenset(
         [
@@ -212,10 +228,27 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         ["id", "local_coordinate", "neighborhood_node_id"]
     ),
     scenario_models.BuildingDefinition: frozenset(
-        ["id", "name", "district_id", "city_position", "local_map_id", "entrances"]
+        [
+            "id",
+            "name",
+            "district_id",
+            "city_position",
+            "local_map_id",
+            "entrances",
+            "available",
+            "environment",
+        ]
     ),
     scenario_models.OutdoorPlaceDefinition: frozenset(
-        ["id", "name", "district_id", "city_position", "network_node_id"]
+        [
+            "id",
+            "name",
+            "district_id",
+            "city_position",
+            "network_node_id",
+            "available",
+            "environment",
+        ]
     ),
     scenario_models.TransportNodeDefinition: frozenset(["id", "kind", "position", "place_id"]),
     scenario_models.TransportEdgeDefinition: frozenset(
@@ -228,10 +261,22 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "geometry",
             "speed_limit_mps",
             "bidirectional",
+            "available",
+            "environment",
         ]
     ),
     scenario_models.VehicleLocationDefinition: frozenset(["scale", "place_id", "network_node_id"]),
-    scenario_models.VehicleDefinition: frozenset(["id", "type", "name", "capacity", "location"]),
+    scenario_models.VehicleDefinition: frozenset(
+        [
+            "id",
+            "type",
+            "name",
+            "capacity",
+            "location",
+            "available",
+            "environment",
+        ]
+    ),
     scenario_models.TransportDefinition: frozenset(
         [
             "nodes",
@@ -300,6 +345,33 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     scenario_models.CalendarSettingsDefinition: frozenset(
         ["start_datetime", "update_interval_seconds"]
     ),
+    scenario_models.WeatherStateDefinition: frozenset(
+        [
+            "condition",
+            "temperature_c",
+            "precipitation_mm_per_hour",
+            "wind_speed_mps",
+            "wind_direction_degrees",
+            "visibility_meters",
+        ]
+    ),
+    scenario_models.WeatherTransitionDefinition: frozenset(
+        ["at_seconds", "state"]
+    ),
+    scenario_models.WeatherEffectsDefinition: frozenset(
+        [
+            "walking_speed_multiplier",
+            "cycling_speed_multiplier",
+            "visibility_multiplier",
+            "wetness_gain_per_mm_hour_second",
+            "base_drying_per_second",
+            "wind_drying_per_mps_second",
+            "temperature_drying_per_degree_second",
+        ]
+    ),
+    scenario_models.WeatherSettingsDefinition: frozenset(
+        ["initial", "transitions", "effects"]
+    ),
     scenario_models.ScenarioDefinition: frozenset(
         [
             "schema_version",
@@ -309,6 +381,7 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "speed",
             "run_id",
             "calendar",
+            "weather",
             "world",
             "homeostasis",
             "system1",
@@ -671,6 +744,15 @@ def _field_schema(
             field_name=field_name,
             annotation=annotation,
             input_type="datetime",
+            required=required,
+        )
+    if annotation is time:
+        return ScenarioFieldSchema(
+            kind="scalar",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            input_type="time",
             required=required,
         )
     if annotation is str:

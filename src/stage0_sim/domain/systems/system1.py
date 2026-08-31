@@ -20,6 +20,7 @@ from stage0_sim.domain.components import (
     System1State,
     TravelComponent,
 )
+from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.affordances import cancel_affordance
@@ -246,7 +247,15 @@ class System1ArbitrationSystem:
         )
         candidates: list[tuple[int, str, AffordanceStation]] = []
         for station in world.stations:
-            if not station.available or corrective_action not in station.supported_actions:
+            available = station.available
+            if context.registry.has_resource(EnvironmentAvailabilityRegistry):
+                available = context.registry.get_resource(
+                    EnvironmentAvailabilityRegistry
+                ).state(
+                    station.id,
+                    base_available=station.available,
+                ).available
+            if not available or corrective_action not in station.supported_actions:
                 continue
             active_count = sum(
                 execution.station_id == station.id

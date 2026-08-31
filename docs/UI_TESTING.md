@@ -47,6 +47,16 @@ layer may improve transport but must not become the only implementation.
 The map viewport is keyboard focusable and retains ordinary scrollbars. Pointer
 drag pans it, wheel input zooms around the pointer, and the named Zoom
 in/Zoom out/Fit buttons remain the accessible and no-JavaScript alternatives.
+Zoom normally selects city, neighborhood, or building detail automatically.
+The advanced scale override is diagnostic UI, not a second source of spatial
+state.
+
+Character inspection and camera following are independent. The operator may
+inspect nobody and freely pan the map. Selecting a marker updates the inspector
+without locking the camera; following occurs only while the labeled follow
+control is enabled. Visible map labels are zoom-tiered and collision-filtered,
+while suppressed names remain available through SVG titles and accessible
+operator text.
 
 ## Install the browser test environment
 
@@ -145,6 +155,12 @@ Playwright assertions auto-wait. Use `expect(...)` instead of sleeps.
   assert scroll, focus, and unfinished input remain intact.
 - Cover wheel zoom and drag panning, then trigger another server-rendered update
   to prove the synchronized zoom survives.
+- For city changes, cover characters located in buildings, at transport nodes,
+  and partway along transport edges.
+- Prove the map remains usable with no inspected character and that optional
+  follow can be enabled and disabled without changing simulation state.
+- At dense city zoom levels, compare visible SVG label bounding boxes and reject
+  overlaps rather than relying on source inspection.
 - Keep one Chromium workflow with JavaScript disabled to verify the native
   server-rendered fallback.
 - Use the bundled deterministic demo unless a test specifically needs a city or
@@ -170,6 +186,13 @@ Every page must retain:
 World maps are SVG images with an accessible name and a `<title>`. Important
 state must also appear as text in the inspector or event history; color and
 geometry are never the only representation.
+
+Environment UI changes must keep the server-rendered environment summary,
+environment event filter, and map resource titles synchronized with the same
+runtime snapshot. Wet and closed map styling is supplemental: condition,
+wetness band, closure state, and reason must remain available as text. Browser
+coverage should step a deterministic weather scenario and verify that a
+partial refresh preserves the map viewport and current operator focus.
 
 When a role locator is ambiguous, improve the accessible naming if two controls
 perform different jobs. If two controls genuinely share a role, scope the

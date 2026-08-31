@@ -172,6 +172,8 @@ def test_operator_lifecycle_is_driven_by_accessible_controls(page: Page) -> None
     )
     expect(tick_value).to_have_text(str(tick_before + 1))
 
+    page.get_by_role("combobox", name="Character").select_option("agent-001")
+    page.get_by_role("button", name="Inspect").click()
     page.get_by_role("spinbutton", name="Satiety").fill("6")
     page.get_by_role("button", name="Apply supplied values").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
@@ -347,9 +349,94 @@ def test_city_scenario_has_server_rendered_city_controls(page: Page) -> None:
     expect(page.locator(".notice[role=status]")).to_contain_text(
         "Simulation paused"
     )
+    page.get_by_text("Advanced scale override", exact=True).click()
     page.get_by_role("combobox", name="Scale").select_option("city")
     page.get_by_role("button", name="Apply view").click()
     expect(page.get_by_role("img", name=re.compile(r"City ·"))).to_be_visible()
+
+
+def test_city_map_supports_unfocused_inspection_follow_and_semantic_zoom(
+    page: Page,
+) -> None:
+    root = Path(__file__).parents[1]
+    page.goto("/ui/")
+    page.get_by_label("Scenario JSON").set_input_files(
+        root / "scenarios" / "sparse-city-car-demo.json"
+    )
+    page.get_by_role("button", name="Validate and stage").click()
+    page.get_by_role("button", name="Start run").click()
+    page.get_by_role("button", name="Pause").click()
+
+    expect(
+        page.get_by_text(
+            "Not inspecting a character. The world map remains free to pan and zoom.",
+            exact=True,
+        )
+    ).to_be_visible()
+    marker = page.get_by_role("link", name=re.compile(r"^Inspect "))
+    expect(marker).to_be_visible()
+
+    viewport = page.locator("#world-render")
+    camera_before = page.locator("[data-map-zoom]").get_attribute("data-camera-x")
+    marker.click()
+    expect(page.get_by_role("combobox", name="Character")).not_to_have_value("")
+    expect(page.get_by_label("Follow inspected character")).not_to_be_checked()
+    expect(page.locator("[data-map-zoom]")).to_have_attribute(
+        "data-camera-x", camera_before or "0.5"
+    )
+
+    page.get_by_label("Follow inspected character").check()
+    page.get_by_role("button", name="Apply view").click()
+    expect(page.get_by_label("Follow inspected character")).to_be_checked()
+
+    page.get_by_role("combobox", name="Character").select_option("")
+    page.get_by_role("button", name="Inspect").click()
+    expect(page.get_by_role("combobox", name="Character")).to_have_value("")
+    expect(page.get_by_label("Follow inspected character")).not_to_be_checked()
+
+    page.get_by_text("Advanced scale override", exact=True).click()
+    page.get_by_role("combobox", name="Scale").select_option("auto")
+    page.get_by_role("button", name="Apply view").click()
+    viewport.hover(position={"x": 300, "y": 220})
+    page.mouse.wheel(0, -500)
+    expect(page.get_by_text("Detail: Neighborhood", exact=True)).to_be_visible()
+    page.mouse.wheel(0, -500)
+    expect(page.get_by_text("Detail: Building", exact=True)).to_be_visible()
+    assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
+
+
+def test_dense_city_labels_do_not_overlap_at_high_zoom(page: Page) -> None:
+    root = Path(__file__).parents[1]
+    page.goto("/ui/")
+    page.get_by_label("Scenario JSON").set_input_files(
+        root / "scenarios" / "greyford-office-evening.json"
+    )
+    page.get_by_role("button", name="Validate and stage").click()
+    page.get_by_text("Advanced scale override", exact=True).click()
+    page.get_by_role("combobox", name="Scale").select_option("city")
+    page.get_by_role("button", name="Apply view").click()
+
+    viewport = page.locator("#world-render")
+    viewport.hover(position={"x": 300, "y": 220})
+    page.mouse.wheel(0, -1000)
+    expect(page.get_by_role("status", name="Zoom level")).to_have_text("300%")
+    labels = page.locator(".city-label")
+    expect(labels.first).to_be_visible()
+    boxes = labels.evaluate_all(
+        """elements => elements.map((element) => {
+            const box = element.getBBox();
+            return {left: box.x, top: box.y, right: box.x + box.width,
+                    bottom: box.y + box.height};
+        })"""
+    )
+    for index, box in enumerate(boxes):
+        for other in boxes[index + 1 :]:
+            assert (
+                box["right"] + 2 <= other["left"]
+                or other["right"] + 2 <= box["left"]
+                or box["bottom"] + 2 <= other["top"]
+                or other["bottom"] + 2 <= box["top"]
+            )
 
 
 def test_live_updates_do_not_reload_or_discard_active_input(page: Page) -> None:

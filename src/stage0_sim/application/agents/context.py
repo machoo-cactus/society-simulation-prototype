@@ -3,9 +3,11 @@ from typing import Literal, cast
 from stage0_sim.application.agents.contracts import (
     CalendarTimeObservation,
     CharacterObservation,
+    EnvironmentObservation,
     ObservationFact,
     ObservedTarget,
 )
+from stage0_sim.application.environment import EnvironmentInformationService
 from stage0_sim.application.navigation import NavigationService
 from stage0_sim.application.perception.renderer import (
     DeterministicPerceptionRenderer,
@@ -118,10 +120,34 @@ def build_character_observation(
     perception.inbox.clear()
     zone = world.zone_at(position.coordinate)
     calendar_time = None
-    if registry.has_resource(SimulationCalendar):
-        calendar_payload = registry.get_resource(
-            SimulationCalendar
-        ).payload_at(context.clock.simulation_time)
+    environment = None
+    if registry.has_resource(EnvironmentInformationService):
+        environment_result = registry.get_resource(
+            EnvironmentInformationService
+        ).query(
+            agent_id,
+            context.clock.simulation_time,
+            availability_resource_ids=frozenset(
+                str(target.id)
+                for target in targets
+                if target.kind
+                in {"zone", "station", "building", "outdoor"}
+            ),
+        )
+        environment = EnvironmentObservation(
+            values=environment_result.values,
+            unavailable_topics=environment_result.unavailable_topics,
+        )
+        calendar_payload = environment_result.values.get("time")
+    else:
+        calendar_payload = (
+            registry.get_resource(SimulationCalendar).payload_at(
+                context.clock.simulation_time
+            )
+            if registry.has_resource(SimulationCalendar)
+            else None
+        )
+    if isinstance(calendar_payload, dict):
         calendar_time = CalendarTimeObservation(
             datetime=str(calendar_payload["datetime"]),
             date=str(calendar_payload["date"]),
@@ -151,4 +177,5 @@ def build_character_observation(
         spatial_location=spatial_payload,
         available_travel_modes=available_travel_modes,
         calendar_time=calendar_time,
+        environment=environment,
     )

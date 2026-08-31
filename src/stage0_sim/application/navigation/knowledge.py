@@ -1,10 +1,11 @@
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from stage0_sim.application.information import InformationStore
 from stage0_sim.domain.components import SpatialLocationComponent
 from stage0_sim.domain.ecs import Registry
+from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.information import (
     InformationDocument,
@@ -23,6 +24,7 @@ class KnownDestination:
     locators: tuple[Locator, ...]
     supported_actions: tuple[str, ...] = ()
     available: bool = True
+    availability_reason: str | None = None
 
 
 class KnownTopologyProjection(Protocol):
@@ -100,8 +102,24 @@ class InformationKnownTopologyProjection:
                         available=previous.available and candidate.available,
                     )
                 )
+        availability = (
+            self.registry.get_resource(EnvironmentAvailabilityRegistry)
+            if self.registry.has_resource(EnvironmentAvailabilityRegistry)
+            else None
+        )
         return tuple(
-            projected[destination_id]
+            (
+                replace(
+                    projected[destination_id],
+                    available=availability.state(destination_id).available,
+                    availability_reason=availability.state(
+                        destination_id
+                    ).reason.value,
+                )
+                if availability is not None
+                and destination_id in availability.states
+                else projected[destination_id]
+            )
             for destination_id in sorted(projected)
         )
 
@@ -174,7 +192,18 @@ class InformationKnownTopologyProjection:
                     station.name,
                     locators,
                     station.supported_actions,
-                    station.available,
+                    (
+                        self.registry.get_resource(
+                            EnvironmentAvailabilityRegistry
+                        ).state(
+                            station.id,
+                            base_available=station.available,
+                        ).available
+                        if self.registry.has_resource(
+                            EnvironmentAvailabilityRegistry
+                        )
+                        else station.available
+                    ),
                 )
             )
         return tuple(destinations)

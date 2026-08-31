@@ -132,6 +132,27 @@ class OpenAICompatibleClient(ModelClient):
                         if message.tool_call_id is not None
                         else {}
                     ),
+                    **(
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": call.call_id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": call.name,
+                                        "arguments": json.dumps(
+                                            call.arguments,
+                                            sort_keys=True,
+                                            separators=(",", ":"),
+                                        ),
+                                    },
+                                }
+                                for call in message.tool_calls
+                            ]
+                        }
+                        if message.tool_calls
+                        else {}
+                    ),
                 }
                 for message in request.messages
             ],

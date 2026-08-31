@@ -176,6 +176,45 @@ def test_scripted_controller_moves_only_through_tool_commit() -> None:
     assert event_types.index("tool.committed") < event_types.index("agent.moved")
 
 
+def test_controller_can_read_environment_before_one_action() -> None:
+    payload = _tool_scenario().model_dump(mode="json")
+    payload["calendar"] = {
+        "start_datetime": "2026-08-31T08:00:00+00:00",
+        "update_interval_seconds": 1800,
+    }
+    payload["weather"] = {
+        "initial": {
+            "condition": "RAIN",
+            "temperature_c": 16,
+            "precipitation_mm_per_hour": 3,
+            "visibility_meters": 2000,
+        }
+    }
+    client = ScriptedModelClient(
+        (
+            _turn("check_environment", {"topics": ["time", "weather"]}),
+            _turn("skip", {"reconsider_after_seconds": 30}),
+        )
+    )
+    runner = create_runner(
+        ScenarioDefinition.model_validate(payload),
+        model_client=client,
+    )
+
+    runner.run_for(2)
+
+    event_types = [event.event_type for event in runner.events.events]
+    completed = next(
+        event
+        for event in runner.events.events
+        if event.event_type == "tool.read_completed"
+    )
+    assert completed.payload["result"]["values"]["weather"]["condition"] == "RAIN"
+    assert event_types.count("tool.read_requested") == 1
+    assert event_types.count("tool.read_completed") == 1
+    assert "tool.committed" in event_types
+
+
 def test_controller_retrieves_dossier_and_episode_capsules() -> None:
     payload = _tool_scenario().model_dump(mode="json")
     character = CharacterProfileDefinition.model_validate(

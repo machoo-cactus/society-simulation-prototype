@@ -19,8 +19,11 @@ GENERAL_CHARACTER_CONTROLLER_PROMPT = (
     "Use say only for exact in-world words. Refer only to supplied IDs. A tool "
     "call is mandatory: never answer only in prose. Use skip when no useful "
     "decision is needed now. Use wait only for intentional in-world idleness "
-    "for a bounded duration. Give only a short decision reason, never hidden "
-    "reasoning."
+    "for a bounded duration. check_environment is read-only and may be used "
+    "only to inspect available current environment information; after any read "
+    "you must still choose exactly one state-changing action tool. Never invent "
+    "environment information marked unavailable. Give only a short decision "
+    "reason, never hidden reasoning."
 )
 
 

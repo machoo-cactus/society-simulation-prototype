@@ -1,6 +1,8 @@
 from collections import deque
 from dataclasses import dataclass
 
+from stage0_sim.application.environment import EnvironmentInformationService
+from stage0_sim.application.navigation import NavigationService
 from stage0_sim.domain.components import (
     ActivityComponent,
     PerceptionComponent,
@@ -8,6 +10,7 @@ from stage0_sim.domain.components import (
     SensesComponent,
     SpatialLocationComponent,
 )
+from stage0_sim.domain.environment import WeatherRuntime
 from stage0_sim.domain.events import DomainEvent, JsonValue
 from stage0_sim.domain.perception import (
     DisclosureClass,
@@ -17,7 +20,7 @@ from stage0_sim.domain.perception import (
 )
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
-from stage0_sim.domain.world import Coordinate, WorldGrid, WorldMap
+from stage0_sim.domain.world import Coordinate, SpatialScale, WorldGrid, WorldMap
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +75,22 @@ class PerceptionSystem:
                 self._route_visual_event(context, world, event, observers)
             elif event.event_type == "time.updated":
                 self._route_time_update(context, event, observers)
+            elif event.event_type == "weather.changed":
+                self._route_environment_update(
+                    context,
+                    event,
+                    observers,
+                    topic="weather",
+                    fact_type="weather_changed",
+                )
+            elif event.event_type == "availability.changed":
+                self._route_environment_update(
+                    context,
+                    event,
+                    observers,
+                    topic="availability",
+                    fact_type="availability_changed",
+                )
         for observer_id in observers:
             perception = context.registry.get_component(
                 observer_id, PerceptionComponent
@@ -92,6 +111,23 @@ class PerceptionSystem:
         perception = context.registry.get_component(
             observer_id, PerceptionComponent
         )
+        vision_range = senses.vision_range
+        if (
+            context.registry.has_resource(WeatherRuntime)
+            and context.registry.has_component(
+                observer_id, SpatialLocationComponent
+            )
+            and context.registry.get_component(
+                observer_id, SpatialLocationComponent
+            ).location.scale
+            is not SpatialScale.BUILDING
+        ):
+            vision_range = int(
+                vision_range
+                * context.registry.get_resource(
+                    WeatherRuntime
+                ).effects.visibility_multiplier
+            )
         visible: set[str] = set()
         for subject_id in context.registry.query_entities(PositionComponent):
             if subject_id == observer_id:
@@ -105,7 +141,7 @@ class PerceptionSystem:
                 world.grid,
                 observer_position,
                 subject_position,
-                senses.vision_range,
+                vision_range,
                 configuration.blocked_tiles_are_opaque,
             ):
                 continue
@@ -285,13 +321,94 @@ class PerceptionSystem:
                 self._fact(
                     context,
                     "time_updated",
-                    Modality.AUDITORY,
+                    Modality.ENVIRONMENTAL,
                     DisclosureClass.PUBLIC_WORLD,
                     event_id=event.event_id,
                     properties=dict(event.payload),
                 ),
                 salience=0.8,
             )
+
+    def _route_environment_update(
+        self,
+        context: SystemContext,
+        event: DomainEvent,
+        observers: tuple[str, ...],
+        *,
+        topic: str,
+        fact_type: str,
+    ) -> None:
+        service = context.registry.get_resource(EnvironmentInformationService)
+        for observer_id in observers:
+            resource_id = event.payload.get("resource_id")
+            if (
+                topic == "availability"
+                and isinstance(resource_id, str)
+                and not self._resource_is_known(
+                    context,
+                    observer_id,
+                    resource_id,
+                )
+            ):
+                continue
+            result = service.query(
+                observer_id,
+                context.clock.simulation_time,
+                frozenset({topic}),
+                availability_resource_ids=(
+                    frozenset({resource_id})
+                    if isinstance(resource_id, str)
+                    else None
+                ),
+            )
+            if topic in result.unavailable_topics:
+                continue
+            perception = context.registry.get_component(
+                observer_id, PerceptionComponent
+            )
+            if fact_type == "weather_changed":
+                perception.inbox[:] = [
+                    item
+                    for item in perception.inbox
+                    if item.fact.fact_type != fact_type
+                ]
+            self._deliver(
+                context,
+                observer_id,
+                self._fact(
+                    context,
+                    fact_type,
+                    Modality.ENVIRONMENTAL,
+                    DisclosureClass.PUBLIC_WORLD,
+                    subject_id=(
+                        str(resource_id)
+                        if isinstance(resource_id, str)
+                        else None
+                    ),
+                    event_id=event.event_id,
+                    properties={
+                        **dict(event.payload),
+                        "environment": result.values,
+                    },
+                ),
+                salience=0.8,
+            )
+
+    @staticmethod
+    def _resource_is_known(
+        context: SystemContext,
+        observer_id: str,
+        resource_id: str,
+    ) -> bool:
+        if not context.registry.has_resource(NavigationService):
+            return False
+        navigation = context.registry.get_resource(NavigationService)
+        return resource_id in {
+            destination.id
+            for destination in navigation.known_topology.destinations(
+                observer_id
+            )
+        }
 
     def _route_movement(
         self,
@@ -454,7 +571,8 @@ class PerceptionSystem:
             item
             for item in perception.inbox
             if (
-                item.fact.fact_type != "time_updated"
+                item.fact.fact_type
+                not in {"time_updated", "weather_changed"}
                 and item.perceived_tick < minimum_tick
             )
         ]

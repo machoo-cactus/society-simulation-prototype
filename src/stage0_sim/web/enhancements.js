@@ -201,6 +201,8 @@ async function updateFromForm(form, submitter) {
   const formData = new FormData(form);
   if (submitter?.name) formData.append(submitter.name, submitter.value);
   const snapshotUrl = new URL(window.location.href);
+  const removedKeys = removableQueryKeys(form);
+  for (const key of removedKeys) snapshotUrl.searchParams.delete(key);
   const interaction = interactionSnapshot();
   interaction.focus = describeFocus(submitter) || interaction.focus;
   actionInFlight = true;
@@ -232,6 +234,9 @@ async function updateFromForm(form, submitter) {
           : await fetchPage(snapshotUrl);
     }
     replaceTargets(selectors, stateDocument, noticeDocument, interaction);
+    if (method !== "GET" && removedKeys.length) {
+      history.replaceState(null, "", snapshotUrl);
+    }
     if (navigationUrl) {
       history.pushState(null, "", navigationUrl);
       if (navigationUrl.hash) {
@@ -250,7 +255,7 @@ async function updateFromLink(link) {
     .split(",")
     .map((selector) => selector.trim())
     .filter(Boolean);
-  const requested = new URL(link.href);
+  const requested = new URL(link.getAttribute("href"), window.location.href);
   const destination = mergedUrl(
     requested,
     requested.searchParams.entries(),
@@ -314,21 +319,57 @@ function clampZoom(value) {
   return Math.min(3, Math.max(0.5, value));
 }
 
-function synchronizeZoom(zoom) {
+function mapCamera(viewport, map) {
+  const viewportBounds = viewport.getBoundingClientRect();
+  const mapBounds = map.getBoundingClientRect();
+  const x =
+    (viewportBounds.left + viewport.clientWidth / 2 - mapBounds.left) /
+    Math.max(1, mapBounds.width);
+  const y =
+    (viewportBounds.top + viewport.clientHeight / 2 - mapBounds.top) /
+    Math.max(1, mapBounds.height);
+  return {
+    x: Math.min(1, Math.max(0, x)),
+    y: Math.min(1, Math.max(0, y)),
+  };
+}
+
+function centerFollowedCharacter(viewport, map) {
+  if (map.dataset.followSelected !== "true") return;
+  const marker = map.querySelector(".character-marker.selected, .city-character.selected");
+  if (!(marker instanceof SVGCircleElement)) return;
+  const markerBounds = marker.getBoundingClientRect();
+  const viewportBounds = viewport.getBoundingClientRect();
+  viewport.scrollLeft +=
+    markerBounds.left + markerBounds.width / 2 -
+    (viewportBounds.left + viewportBounds.width / 2);
+  viewport.scrollTop +=
+    markerBounds.top + markerBounds.height / 2 -
+    (viewportBounds.top + viewportBounds.height / 2);
+}
+
+function synchronizeZoom(zoom, viewport, map) {
   if (zoomTimer) window.clearTimeout(zoomTimer);
   zoomTimer = window.setTimeout(async () => {
     zoomTimer = null;
     try {
+      const camera = mapCamera(viewport, map);
       const response = await fetch("/ui/view/zoom", {
         method: "POST",
         cache: "no-store",
         credentials: "same-origin",
         headers: {"Content-Type": "application/x-www-form-urlencoded"},
-        body: new URLSearchParams({zoom: zoom.toFixed(4)}),
+        body: new URLSearchParams({
+          zoom: zoom.toFixed(4),
+          camera_x: camera.x.toFixed(6),
+          camera_y: camera.y.toFixed(6),
+        }),
       });
       if (!response.ok) {
         throw new Error(`Zoom synchronization failed with HTTP ${response.status}`);
       }
+      const stateDocument = await fetchPage(window.location.href);
+      replaceTargets(["#world-panel"], stateDocument);
     } catch (error) {
       console.error("Map zoom synchronization failed", error);
     } finally {
@@ -365,13 +406,17 @@ function applyWheelZoom(viewport, event) {
     viewport.scrollLeft = contentX * ratio - pointerX;
     viewport.scrollTop = contentY * ratio - pointerY;
   });
-  synchronizeZoom(nextZoom);
+  synchronizeZoom(nextZoom, viewport, map);
 }
 
 function setupMaps() {
   const viewport = document.getElementById("world-render");
   if (!viewport || viewport.dataset.mapEnhanced === "true") return;
   viewport.dataset.mapEnhanced = "true";
+  const initialMap = viewport.querySelector("[data-map-zoom]");
+  if (initialMap instanceof SVGElement) {
+    requestAnimationFrame(() => centerFollowedCharacter(viewport, initialMap));
+  }
   let startX = 0;
   let startY = 0;
   let startLeft = 0;
@@ -379,7 +424,11 @@ function setupMaps() {
   let dragged = false;
 
   viewport.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 || !viewport.querySelector("[data-map-zoom]")) return;
+    if (
+      event.button !== 0 ||
+      event.target.closest("a") ||
+      !viewport.querySelector("[data-map-zoom]")
+    ) return;
     startX = event.clientX;
     startY = event.clientY;
     startLeft = viewport.scrollLeft;
@@ -406,8 +455,18 @@ function setupMaps() {
     if (!viewport.hasPointerCapture(event.pointerId)) return;
     viewport.releasePointerCapture(event.pointerId);
     viewport.classList.remove("is-panning");
-    mapInteractionActive = false;
-    scheduleLiveRefresh();
+    if (!dragged) {
+      mapInteractionActive = false;
+      scheduleLiveRefresh();
+      return;
+    }
+    const map = viewport.querySelector("[data-map-zoom]");
+    if (map instanceof SVGElement) {
+      synchronizeZoom(Number(map.dataset.mapZoom), viewport, map);
+    } else {
+      mapInteractionActive = false;
+      scheduleLiveRefresh();
+    }
   };
   viewport.addEventListener("pointerup", finishPan);
   viewport.addEventListener("pointercancel", finishPan);
@@ -460,7 +519,7 @@ document.addEventListener("click", (event) => {
     event.preventDefault();
     updateFromLink(link).catch((error) => {
       console.error("Partial navigation failed", error);
-      window.location.assign(link.href);
+      window.location.assign(link.getAttribute("href"));
     });
     return;
   }

@@ -47,6 +47,10 @@ WEB_DIRECTORY = Path(__file__).parents[1] / "web"
 templates = Jinja2Templates(directory=WEB_DIRECTORY)
 SESSION_COOKIE = "stage0_operator_session"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MIN_MAP_ZOOM = 0.5
+MAX_MAP_ZOOM = 3.0
+NEIGHBORHOOD_ZOOM = 1.5
+BUILDING_ZOOM = 2.5
 
 EVENT_FILTERS: dict[str, re.Pattern[str]] = {
     "system1": re.compile(r"^(system1\.|threshold\.breached$)"),
@@ -55,6 +59,9 @@ EVENT_FILTERS: dict[str, re.Pattern[str]] = {
     "cognition": re.compile(r"^(cognition|tool)\."),
     "perception": re.compile(r"^perception\."),
     "travel": re.compile(r"^(travel|building|vehicle|metro)\."),
+    "environment": re.compile(
+        r"^(time\.|weather\.|surface_condition\.|availability\.)"
+    ),
     "errors": re.compile(r"(failed|blocked|cancelled|error|rejected)"),
     "ui": re.compile(r"^simulation\."),
 }
@@ -153,7 +160,10 @@ class OperatorSession:
     run_id: str | None = None
     selected_agent_id: str | None = None
     view_level: str = "auto"
+    follow_selected: bool = False
     zoom: float = 1.0
+    camera_x: float = 0.5
+    camera_y: float = 0.5
     overlays: set[str] = field(
         default_factory=lambda: {
             "names",
@@ -257,16 +267,22 @@ def _stage_scenario(
     session.scenario_id = scenario_id
     session.scenario_warnings = ()
     session.character_assignments = dict(prepared.assignments)
-    session.selected_agent_id = scenario.entities[0].id if scenario.entities else None
+    session.selected_agent_id = None
+    session.follow_selected = False
+    session.view_level = "auto"
+    session.zoom = 1.0
+    session.camera_x = 0.5
+    session.camera_y = 0.5
     session.notify(f"{scenario.name} is validated and staged. Starting remains a separate action.")
 
 
 @router.get("/", response_class=HTMLResponse, name="operator")
 async def operator_page(request: Request) -> Response:
     session_id, session = _session(request)
-    requested_agent = request.query_params.get("selected")
-    if requested_agent:
-        session.selected_agent_id = requested_agent
+    if "selected" in request.query_params:
+        session.selected_agent_id = request.query_params.get("selected", "").strip() or None
+        if session.selected_agent_id is None:
+            session.follow_selected = False
     manager = _manager(request)
     managed = _managed_run(manager, session)
     snapshot: dict[str, JsonValue] | None = None
@@ -285,8 +301,9 @@ async def operator_page(request: Request) -> Response:
         status = managed.runner.status.value
     session.event_start_index = min(session.event_start_index, len(all_events))
     events = all_events[session.event_start_index :]
-    if agents and session.selected_agent_id not in {str(agent["id"]) for agent in agents}:
-        session.selected_agent_id = str(agents[0]["id"])
+    if session.selected_agent_id not in {str(agent["id"]) for agent in agents}:
+        session.selected_agent_id = None
+        session.follow_selected = False
     selected_agent = next(
         (agent for agent in agents if agent["id"] == session.selected_agent_id),
         None,
@@ -342,6 +359,12 @@ async def operator_page(request: Request) -> Response:
                 bootstrap,
                 selected_agent,
                 events,
+            ),
+            "environment": (
+                snapshot.get("environment")
+                if snapshot is not None
+                and isinstance(snapshot.get("environment"), dict)
+                else None
             ),
             "events": filtered_events[:event_limit],
             "event_total": len(events),
@@ -586,17 +609,22 @@ async def mutate_vitals(request: Request) -> Response:
 async def update_view(request: Request) -> Response:
     session_id, session = _session(request)
     form = await request.form()
-    selected_agent = str(form.get("selected_agent", "")).strip()
-    if selected_agent:
-        session.selected_agent_id = selected_agent
+    if form.get("selected_agent_present") == "yes":
+        selected_agent = str(form.get("selected_agent", "")).strip()
+        session.selected_agent_id = selected_agent or None
     level = str(form.get("view_level", session.view_level)).lower()
     if level in {"auto", "building", "neighborhood", "city"}:
         session.view_level = level
+    if form.get("follow_present") == "yes":
+        session.follow_selected = (
+            form.get("follow_selected") == "on"
+            and session.selected_agent_id is not None
+        )
     zoom_action = str(form.get("zoom_action", ""))
     if zoom_action == "in":
-        session.zoom = min(3.0, session.zoom * 1.25)
+        session.zoom = min(MAX_MAP_ZOOM, session.zoom * 1.25)
     elif zoom_action == "out":
-        session.zoom = max(0.5, session.zoom / 1.25)
+        session.zoom = max(MIN_MAP_ZOOM, session.zoom / 1.25)
     elif zoom_action == "fit":
         session.zoom = 1.0
     session.live_refresh = form.get("live_refresh") == "on"
@@ -612,15 +640,23 @@ async def update_zoom(request: Request) -> Response:
     form = await request.form()
     try:
         zoom = float(str(form.get("zoom", "")))
-        if not math.isfinite(zoom) or not 0.5 <= zoom <= 3.0:
-            raise ValueError("zoom must be between 0.5 and 3.0")
+        if not math.isfinite(zoom) or not MIN_MAP_ZOOM <= zoom <= MAX_MAP_ZOOM:
+            raise ValueError(
+                f"zoom must be between {MIN_MAP_ZOOM} and {MAX_MAP_ZOOM}"
+            )
+        camera_x = _bounded_fraction(form.get("camera_x"), session.camera_x)
+        camera_y = _bounded_fraction(form.get("camera_y"), session.camera_y)
     except ValueError as error:
         return _with_session(
             Response(str(error), status_code=400, media_type="text/plain"),
             session_id,
         )
     session.zoom = zoom
-    return _with_session(Response(status_code=204), session_id)
+    session.camera_x = camera_x
+    session.camera_y = camera_y
+    response = Response(status_code=204)
+    response.headers["X-Stage0-Semantic-Level"] = _effective_view_level(session)
+    return _with_session(response, session_id)
 
 
 @router.post("/events/clear")
@@ -994,6 +1030,124 @@ def _recent_perceptions(
     return rows
 
 
+def _bounded_fraction(value: object, default: float) -> float:
+    if value is None or str(value).strip() == "":
+        return default
+    parsed = float(str(value))
+    if not math.isfinite(parsed) or not 0.0 <= parsed <= 1.0:
+        raise ValueError("camera coordinates must be between 0 and 1")
+    return parsed
+
+
+def _effective_view_level(session: OperatorSession) -> str:
+    if session.view_level != "auto":
+        return session.view_level
+    if session.zoom >= BUILDING_ZOOM:
+        return "building"
+    if session.zoom >= NEIGHBORHOOD_ZOOM:
+        return "neighborhood"
+    return "city"
+
+
+def _camera_building_id(
+    city_world: CityWorldDefinition, session: OperatorSession
+) -> str | None:
+    payload = city_world.model_dump(mode="json")
+    bounds = cast(dict[str, float], payload["city"]["bounds_meters"])
+    x = float(bounds["min_x"]) + session.camera_x * (
+        float(bounds["max_x"]) - float(bounds["min_x"])
+    )
+    y = float(bounds["min_y"]) + session.camera_y * (
+        float(bounds["max_y"]) - float(bounds["min_y"])
+    )
+    buildings = cast(list[dict[str, Any]], payload.get("buildings", []))
+    if not buildings:
+        return None
+    closest = min(
+        buildings,
+        key=lambda item: (
+            (float(item["city_position"]["x"]) - x) ** 2
+            + (float(item["city_position"]["y"]) - y) ** 2,
+            str(item["id"]),
+        ),
+    )
+    return str(closest["id"])
+
+
+def _location_city_point(
+    city: dict[str, Any], location: dict[str, JsonValue]
+) -> tuple[float, float] | None:
+    edge_id = location.get("edge_id")
+    edge_progress = location.get("edge_progress")
+    if isinstance(edge_id, str) and isinstance(edge_progress, (int, float)):
+        edge = next(
+            (item for item in city.get("edges", []) if item.get("id") == edge_id),
+            None,
+        )
+        if edge is not None:
+            points = [
+                (float(point["x"]), float(point["y"]))
+                for point in edge.get("geometry", [])
+            ]
+            interpolated = _interpolate_points(points, float(edge_progress))
+            if interpolated is not None:
+                return interpolated
+    node_id = location.get("network_node_id")
+    node = next(
+        (item for item in city.get("nodes", []) if item.get("id") == node_id),
+        None,
+    )
+    if node is not None:
+        point = node["position"]
+        return float(point["x"]), float(point["y"])
+    place_id = location.get("place_id")
+    place = next(
+        (
+            item
+            for item in [*city.get("buildings", []), *city.get("outdoor_places", [])]
+            if item.get("id") == place_id
+        ),
+        None,
+    )
+    if place is None:
+        return None
+    point = place["position"]
+    return float(point["x"]), float(point["y"])
+
+
+def _normalize_city_point(
+    city: dict[str, Any], point: tuple[float, float]
+) -> tuple[float, float]:
+    bounds = cast(dict[str, float], city["bounds"])
+    span_x = max(1.0, float(bounds["max_x"]) - float(bounds["min_x"]))
+    span_y = max(1.0, float(bounds["max_y"]) - float(bounds["min_y"]))
+    return (
+        min(1.0, max(0.0, (point[0] - float(bounds["min_x"])) / span_x)),
+        min(1.0, max(0.0, (point[1] - float(bounds["min_y"])) / span_y)),
+    )
+
+
+def _project_city_point(
+    point: dict[str, Any],
+    min_x: float,
+    min_y: float,
+    span_x: float,
+    span_y: float,
+) -> tuple[float, float]:
+    return (
+        (float(point["x"]) - min_x) / span_x * 1000,
+        (float(point["y"]) - min_y) / span_y * 650,
+    )
+
+
+def _marker_offset(index: int) -> tuple[float, float]:
+    if index == 0:
+        return 0.0, 0.0
+    angle = (index - 1) * (math.pi / 3)
+    radius = 13.0 * (1 + (index - 1) // 6)
+    return math.cos(angle) * radius, math.sin(angle) * radius
+
+
 def _world_view(
     session: OperatorSession,
     scenario: ScenarioDefinition | None,
@@ -1007,31 +1161,30 @@ def _world_view(
     static_world = bootstrap.get("world")
     city = bootstrap.get("city")
     agents = cast(list[dict[str, JsonValue]], snapshot.get("agents", []))
-    level = session.view_level
+    level = _effective_view_level(session)
+    if not isinstance(city, dict):
+        level = "building"
     selected_location = (
         cast(dict[str, JsonValue], selected_agent.get("spatial_location", {}))
         if selected_agent
         else {}
     )
-    if level == "auto":
-        level = (
-            "building"
-            if selected_location.get("scale") == "BUILDING"
-            else "city"
-            if city
-            else "building"
-        )
     overlays = _world_overlays(agents, events, session.selected_agent_id)
     city_world_value = scenario.world if scenario is not None else None
     if level == "building" and isinstance(city_world_value, CityWorldDefinition):
         city_world = city_world_value
-        place_id = selected_location.get("place_id")
+        place_id = _camera_building_id(city_world, session)
+        if session.follow_selected and selected_location.get("place_id"):
+            place_id = str(selected_location["place_id"])
         building = next(
             (item for item in city_world.buildings if item.id == place_id),
             None,
         )
         if building is not None:
-            local_world = city_world.local_maps[building.local_map_id].model_dump(mode="json")
+            local_world = _apply_runtime_environment(
+                city_world.local_maps[building.local_map_id].model_dump(mode="json"),
+                snapshot,
+            )
             local_agents = [
                 agent
                 for agent in agents
@@ -1047,10 +1200,24 @@ def _world_view(
                 overlays,
             )
     if level == "building" and isinstance(static_world, dict):
-        return _grid_view(static_world, agents, session, "Building view", overlays)
+        return _grid_view(
+            _apply_runtime_environment(static_world, snapshot),
+            agents,
+            session,
+            "Building view",
+            overlays,
+        )
     if isinstance(city, dict):
-        city_payload = (
-            _neighborhood_payload(city, selected_location) if level == "neighborhood" else city
+        if session.follow_selected and selected_location:
+            followed_point = _location_city_point(city, selected_location)
+            if followed_point is not None:
+                session.camera_x, session.camera_y = _normalize_city_point(
+                    city, followed_point
+                )
+        city_payload = _apply_runtime_environment(
+            _neighborhood_payload(city, session) if level == "neighborhood" else city
+            ,
+            snapshot,
         )
         vehicle_states = cast(dict[str, JsonValue], snapshot.get("world", {})).get(
             "vehicle_states", []
@@ -1066,8 +1233,68 @@ def _world_view(
             else [],
         )
     if isinstance(static_world, dict):
-        return _grid_view(static_world, agents, session, "World view", overlays)
+        return _grid_view(
+            _apply_runtime_environment(static_world, snapshot),
+            agents,
+            session,
+            "World view",
+            overlays,
+        )
     return None
+
+
+def _apply_runtime_environment(
+    world: dict[str, Any],
+    snapshot: dict[str, JsonValue],
+) -> dict[str, Any]:
+    environment = snapshot.get("environment")
+    if not isinstance(environment, dict):
+        return world
+    raw_availability = environment.get("availability")
+    availability = {
+        str(item["resource_id"]): item
+        for item in raw_availability
+        if isinstance(item, dict) and "resource_id" in item
+    } if isinstance(raw_availability, list) else {}
+    raw_surfaces = environment.get("surface_conditions")
+    surfaces = {
+        str(item["surface_id"]): item
+        for item in raw_surfaces
+        if isinstance(item, dict) and "surface_id" in item
+    } if isinstance(raw_surfaces, list) else {}
+
+    def annotate(
+        items: list[dict[str, Any]],
+        *,
+        surface_prefix: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                **item,
+                "environment_availability": availability.get(str(item.get("id"))),
+                "surface_condition": (
+                    surfaces.get(f"{surface_prefix}:{item.get('id')}")
+                    if surface_prefix is not None
+                    else None
+                ),
+            }
+            for item in items
+        ]
+
+    return {
+        **world,
+        "stations": annotate(list(world.get("stations", []))),
+        "buildings": annotate(list(world.get("buildings", []))),
+        "outdoor_places": annotate(
+            list(world.get("outdoor_places", [])),
+            surface_prefix="place",
+        ),
+        "edges": annotate(
+            list(world.get("edges", [])),
+            surface_prefix="edge",
+        ),
+        "vehicles": annotate(list(world.get("vehicles", []))),
+    }
 
 
 def _scenario_world_view(
@@ -1191,6 +1418,10 @@ def _grid_view(
         "view_box": f"0 0 {width} {height}",
         "base_display_width": width * 72,
         "display_width": width * 72 * session.zoom,
+        "semantic_level": "building",
+        "follow_selected": session.follow_selected,
+        "camera_x": session.camera_x,
+        "camera_y": session.camera_y,
         "zones": zones,
         "blocked": world.get("blocked", []),
         "stations": world.get("stations", []),
@@ -1214,10 +1445,7 @@ def _city_view(
     span_y = max(1.0, float(bounds["max_y"]) - min_y)
 
     def project(point: dict[str, Any]) -> tuple[float, float]:
-        return (
-            (float(point["x"]) - min_x) / span_x * 1000,
-            (float(point["y"]) - min_y) / span_y * 650,
-        )
+        return _project_city_point(point, min_x, min_y, span_x, span_y)
 
     buildings = [
         {
@@ -1249,23 +1477,37 @@ def _city_view(
     building_points = {str(item["id"]): (item["px"], item["py"]) for item in buildings}
     place_points = {str(item["id"]): (item["px"], item["py"]) for item in places}
     rendered_agents = []
-    for agent in agents:
+    point_counts: dict[tuple[int, int], int] = {}
+    unplaced_agent_ids: list[str] = []
+    for agent in sorted(agents, key=lambda item: str(item["id"])):
         location = agent.get("spatial_location")
         if not isinstance(location, dict):
+            unplaced_agent_ids.append(str(agent["id"]))
             continue
-        point = (
-            building_points.get(str(location.get("place_id")))
-            or place_points.get(str(location.get("place_id")))
-            or nodes.get(str(location.get("network_node_id")))
-        )
+        point = None
+        edge_id = location.get("edge_id")
+        edge_progress = location.get("edge_progress")
+        if isinstance(edge_id, str) and isinstance(edge_progress, (int, float)):
+            point = _interpolate_points(edge_points.get(edge_id, []), float(edge_progress))
         if point is None:
+            point = nodes.get(str(location.get("network_node_id")))
+        if point is None:
+            point = building_points.get(str(location.get("place_id"))) or place_points.get(
+                str(location.get("place_id"))
+            )
+        if point is None:
+            unplaced_agent_ids.append(str(agent["id"]))
             continue
+        key = (round(point[0]), round(point[1]))
+        offset_index = point_counts.get(key, 0)
+        point_counts[key] = offset_index + 1
+        offset_x, offset_y = _marker_offset(offset_index)
         rendered_agents.append(
             {
                 "id": agent["id"],
                 "name": _agent_name(agent),
-                "px": point[0],
-                "py": point[1],
+                "px": point[0] + offset_x,
+                "py": point[1] + offset_y,
                 "selected": agent["id"] == session.selected_agent_id,
                 "visible": bool(overlays.get(str(agent["id"]), {}).get("visible")),
                 "speech": overlays.get(str(agent["id"]), {}).get("speech"),
@@ -1291,19 +1533,159 @@ def _city_view(
                 "py": point[1],
             }
         )
+    districts = [
+        {
+            **district,
+            "px": project(cast(dict[str, Any], district["center"]))[0],
+            "py": project(cast(dict[str, Any], district["center"]))[1],
+        }
+        for district in city.get("districts", [])
+    ]
     return {
         "kind": "city",
         "title": f"{title} · {city.get('name', 'City')}",
         "view_box": "0 0 1000 650",
         "base_display_width": 1000,
         "display_width": 1000 * session.zoom,
-        "districts": city.get("districts", []),
+        "semantic_level": _effective_view_level(session),
+        "follow_selected": session.follow_selected,
+        "camera_x": session.camera_x,
+        "camera_y": session.camera_y,
+        "districts": districts,
         "buildings": buildings,
         "places": places,
         "edges": edges,
         "agents": rendered_agents,
         "vehicles": rendered_vehicles,
+        "unplaced_agent_ids": unplaced_agent_ids,
+        "labels": _city_labels(
+            districts,
+            buildings,
+            places,
+            rendered_agents,
+            rendered_vehicles,
+            session.zoom,
+        ),
     }
+
+
+def _city_labels(
+    districts: list[dict[str, Any]],
+    buildings: list[dict[str, Any]],
+    places: list[dict[str, Any]],
+    agents: list[dict[str, Any]],
+    vehicles: list[dict[str, Any]],
+    zoom: float,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+
+    def add(
+        *,
+        kind: str,
+        item_id: object,
+        text: object,
+        x: float,
+        y: float,
+        priority: int,
+        minimum_zoom: float,
+    ) -> None:
+        if zoom < minimum_zoom:
+            return
+        candidates.append(
+            {
+                "kind": kind,
+                "id": str(item_id),
+                "text": str(text),
+                "x": x,
+                "y": y,
+                "priority": priority,
+                "width": max(36.0, len(str(text)) * 7.0),
+                "height": 16.0,
+            }
+        )
+
+    for district in districts:
+        add(
+            kind="district",
+            item_id=district["id"],
+            text=district["name"],
+            x=float(district["px"]),
+            y=float(district["py"]) - 22,
+            priority=20,
+            minimum_zoom=0.5,
+        )
+    for building in buildings:
+        add(
+            kind="building",
+            item_id=building["id"],
+            text=building["name"],
+            x=float(building["px"]) + 13,
+            y=float(building["py"]) + 4,
+            priority=40,
+            minimum_zoom=1.25,
+        )
+    for place in places:
+        add(
+            kind="place",
+            item_id=place["id"],
+            text=place["name"],
+            x=float(place["px"]) + 11,
+            y=float(place["py"]) + 4,
+            priority=50,
+            minimum_zoom=1.25,
+        )
+    for vehicle in vehicles:
+        add(
+            kind="vehicle",
+            item_id=vehicle["id"],
+            text=vehicle["name"],
+            x=float(vehicle["px"]) + 10,
+            y=float(vehicle["py"]) - 8,
+            priority=70,
+            minimum_zoom=2.0,
+        )
+    for agent in agents:
+        add(
+            kind="character",
+            item_id=agent["id"],
+            text=agent["name"],
+            x=float(agent["px"]) + 12,
+            y=float(agent["py"]) - 10,
+            priority=100 if agent["selected"] else 90,
+            minimum_zoom=1.0,
+        )
+
+    accepted: list[dict[str, Any]] = []
+    occupied: list[tuple[float, float, float, float]] = []
+    for candidate in sorted(
+        candidates,
+        key=lambda item: (-int(item["priority"]), str(item["kind"]), str(item["id"])),
+    ):
+        left = float(candidate["x"])
+        top = float(candidate["y"]) - float(candidate["height"])
+        box = (
+            left,
+            top,
+            left + float(candidate["width"]),
+            top + float(candidate["height"]),
+        )
+        if any(_boxes_overlap(box, prior) for prior in occupied):
+            continue
+        occupied.append(box)
+        accepted.append(candidate)
+    return sorted(accepted, key=lambda item: (str(item["kind"]), str(item["id"])))
+
+
+def _boxes_overlap(
+    left: tuple[float, float, float, float],
+    right: tuple[float, float, float, float],
+) -> bool:
+    return not (
+        left[2] + 4 <= right[0]
+        or right[2] + 4 <= left[0]
+        or left[3] + 4 <= right[1]
+        or right[3] + 4 <= left[1]
+    )
 
 
 def _world_overlays(
@@ -1358,22 +1740,27 @@ def _world_overlays(
 
 
 def _neighborhood_payload(
-    city: dict[str, Any],
-    selected_location: dict[str, JsonValue],
+    city: dict[str, Any], session: OperatorSession
 ) -> dict[str, Any]:
-    place_id = selected_location.get("place_id")
-    selected_building = next(
-        (item for item in city.get("buildings", []) if item.get("id") == place_id),
-        None,
+    bounds = cast(dict[str, float], city["bounds"])
+    target_x = float(bounds["min_x"]) + session.camera_x * (
+        float(bounds["max_x"]) - float(bounds["min_x"])
     )
-    selected_place = next(
-        (item for item in city.get("outdoor_places", []) if item.get("id") == place_id),
-        None,
+    target_y = float(bounds["min_y"]) + session.camera_y * (
+        float(bounds["max_y"]) - float(bounds["min_y"])
     )
-    selected_item = selected_building or selected_place
-    if selected_item is None:
+    districts = city.get("districts", [])
+    if not districts:
         return city
-    district_id = selected_item.get("district_id")
+    selected_district = min(
+        districts,
+        key=lambda item: (
+            (float(item["center"]["x"]) - target_x) ** 2
+            + (float(item["center"]["y"]) - target_y) ** 2,
+            str(item["id"]),
+        ),
+    )
+    district_id = selected_district.get("id")
     buildings = [
         item for item in city.get("buildings", []) if item.get("district_id") == district_id
     ]

@@ -9,6 +9,12 @@ from stage0_sim.domain.components import (
     System1State,
     TravelComponent,
 )
+from stage0_sim.domain.environment import (
+    AvailabilityReason,
+    AvailabilityState,
+    EnvironmentAvailabilityRegistry,
+    WeatherRuntime,
+)
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.world import (
@@ -92,6 +98,16 @@ class TravelSystem:
                 "travel_in_progress",
             )
             return False
+        destination_state = _availability_state(context, destination_id)
+        if not destination_state.available:
+            self._failure(
+                context,
+                agent_id,
+                destination_id,
+                mode,
+                destination_state.reason.value,
+            )
+            return False
         requested_entrance_id = (
             entrance_transition_id.removesuffix(":reverse")
             if entrance_transition_id is not None
@@ -157,6 +173,7 @@ class TravelSystem:
                     item
                     for item in sorted(city.vehicles, key=lambda item: item.id)
                     if item.vehicle_type is mode
+                    and _availability_state(context, item.id).available
                     and vehicle_states[item.id].driver_id is None
                     and vehicle_states[item.id].network_node_id in {
                         origin_node,
@@ -180,12 +197,22 @@ class TravelSystem:
                 )
                 return False
             vehicle_id = vehicle.id
+        dynamic_edge_ids = frozenset(
+            edge.id
+            for edge in city.edges
+            if _availability_state(context, edge.id).available
+        )
+        effective_allowed_edge_ids = (
+            dynamic_edge_ids
+            if allowed_edge_ids is None
+            else dynamic_edge_ids & allowed_edge_ids
+        )
         route = find_transport_route(
             city,
             origin_node,
             destination_node,
             mode,
-            allowed_edge_ids=allowed_edge_ids,
+            allowed_edge_ids=effective_allowed_edge_ids,
         )
         if route is None:
             self._failure(
@@ -230,7 +257,12 @@ class TravelSystem:
                 "destination_id": destination_id,
                 "mode": mode.value,
                 "expected_seconds": round(
-                    sum(leg.duration_seconds for leg in route), 12
+                    sum(
+                        leg.duration_seconds
+                        / _travel_speed_multiplier(context, leg.mode)
+                        for leg in route
+                    ),
+                    12,
                 ),
                 "legs": [
                     {
@@ -301,10 +333,12 @@ class TravelSystem:
             return
         leg = travel.route[travel.current_leg_index]
         remaining = leg.duration_seconds - travel.leg_elapsed_seconds
+        multiplier = _travel_speed_multiplier(context, leg.mode)
+        effective_step = context.clock.dt * multiplier
         travel.leg_elapsed_seconds = (
             leg.duration_seconds
-            if remaining <= context.clock.dt
-            else round(travel.leg_elapsed_seconds + context.clock.dt, 12)
+            if remaining <= effective_step
+            else round(travel.leg_elapsed_seconds + effective_step, 12)
         )
         progress = min(1.0, travel.leg_elapsed_seconds / leg.duration_seconds)
         location = context.registry.get_component(
@@ -341,6 +375,8 @@ class TravelSystem:
                 agent_id=agent_id,
                 payload={
                     "vehicle_id": travel.vehicle_id,
+                    "weather_speed_multiplier": multiplier,
+                    "weather_condition": _weather_condition(context),
                     "edge_id": vehicle.edge_id,
                     "edge_progress": vehicle.edge_progress,
                     "network_node_id": vehicle.network_node_id,
@@ -372,7 +408,30 @@ class TravelSystem:
         travel.current_leg_index += 1
         travel.leg_elapsed_seconds = 0.0
         if travel.current_leg_index >= len(travel.route):
+            destination_state = _availability_state(
+                context, travel.destination_id or ""
+            )
+            if not destination_state.available:
+                TravelSystem._block_at_node(
+                    context,
+                    agent_id,
+                    travel,
+                    leg.to_node_id,
+                    destination_state.reason.value,
+                )
+                return
             TravelSystem._arrive(context, city, agent_id, travel)
+            return
+        next_leg = travel.route[travel.current_leg_index]
+        next_edge_state = _availability_state(context, next_leg.edge_id)
+        if not next_edge_state.available:
+            TravelSystem._block_at_node(
+                context,
+                agent_id,
+                travel,
+                leg.to_node_id,
+                next_edge_state.reason.value,
+            )
             return
         TravelSystem._emit_leg(
             context, "travel.leg_started", agent_id, travel
@@ -485,6 +544,44 @@ class TravelSystem:
                 "destination_id": travel.destination_id,
                 "safe_node_id": node_id,
                 "reason": "system1_preemption",
+            },
+            correlation_id=travel.correlation_id,
+        )
+        TravelSystem._complete_plan(context, agent_id)
+
+    @staticmethod
+    def _block_at_node(
+        context: SystemContext,
+        agent_id: str,
+        travel: TravelComponent,
+        node_id: str,
+        reason: str,
+    ) -> None:
+        travel.status = TravelStatus.BLOCKED
+        travel.failure_reason = reason
+        if travel.vehicle_id is not None:
+            context.registry.get_resource(VehicleRegistry).states[
+                travel.vehicle_id
+            ].driver_id = None
+        event_type = (
+            "building.entry_blocked"
+            if travel.destination_id is not None
+            and reason in {
+                "base_unavailable",
+                "closed_by_schedule",
+                "closed_by_weather",
+            }
+            else "travel.blocked"
+        )
+        context.events.emit(
+            event_type,
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "destination_id": travel.destination_id,
+                "safe_node_id": node_id,
+                "reason": reason,
             },
             correlation_id=travel.correlation_id,
         )
@@ -709,3 +806,34 @@ class TravelSystem:
             agent_id=agent_id,
             payload=payload,
         )
+
+
+def _availability_state(
+    context: SystemContext,
+    resource_id: str,
+) -> AvailabilityState:
+    if context.registry.has_resource(EnvironmentAvailabilityRegistry):
+        return context.registry.get_resource(
+            EnvironmentAvailabilityRegistry
+        ).state(resource_id)
+    return AvailabilityState(True, AvailabilityReason.OPEN)
+
+
+def _travel_speed_multiplier(
+    context: SystemContext,
+    mode: TravelMode,
+) -> float:
+    if not context.registry.has_resource(WeatherRuntime):
+        return 1.0
+    effects = context.registry.get_resource(WeatherRuntime).effects
+    if mode is TravelMode.WALK:
+        return effects.walking_speed_multiplier
+    if mode is TravelMode.CYCLE:
+        return effects.cycling_speed_multiplier
+    return 1.0
+
+
+def _weather_condition(context: SystemContext) -> str | None:
+    if not context.registry.has_resource(WeatherRuntime):
+        return None
+    return context.registry.get_resource(WeatherRuntime).current.condition.value

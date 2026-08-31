@@ -17,6 +17,7 @@ class Modality(StrEnum):
     SELF = "self"
     VISUAL = "visual"
     AUDITORY = "auditory"
+    ENVIRONMENTAL = "environmental"
 
 
 @dataclass(frozen=True, slots=True)

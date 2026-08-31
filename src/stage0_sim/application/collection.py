@@ -5,10 +5,18 @@ from stage0_sim.application.dataset import AgentStateProjector, DatasetRecord
 from stage0_sim.application.information import InformationStore
 from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import SimulationRunner
+from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
     ActivityComponent,
     PositionComponent,
     SpatialLocationComponent,
+)
+from stage0_sim.domain.environment import (
+    EnvironmentAvailabilityRegistry,
+    EnvironmentAvailabilityRules,
+    SurfaceConditionRegistry,
+    WeatherRuntime,
+    wetness_band,
 )
 from stage0_sim.domain.events import DomainEvent, JsonValue
 
@@ -153,6 +161,10 @@ class RunDataCollector:
             ("travel.", "building.", "vehicle.", "metro.")
         ):
             record_type = "travel"
+        elif event.event_type.startswith(
+            ("time.", "weather.", "surface_condition.", "availability.")
+        ):
+            record_type = "environment"
         if record_type is not None:
             payload = {
                 "event_type": event.event_type,
@@ -195,6 +207,14 @@ class RunDataCollector:
             )
 
     def _collect_tick_state(self, event: DomainEvent) -> None:
+        self._append(
+            "environment_state",
+            event.simulation_tick,
+            event.simulation_time,
+            None,
+            self._environment_state(event.simulation_time),
+            event.event_id,
+        )
         for agent_id in self.runner.registry.entities():
             state = self.projector.project(self.runner.registry, agent_id)
             if not state:
@@ -244,6 +264,70 @@ class RunDataCollector:
                     trajectory,
                     event.event_id,
                 )
+
+    def _environment_state(
+        self,
+        simulation_time: float,
+    ) -> dict[str, JsonValue]:
+        registry = self.runner.registry
+        payload: dict[str, JsonValue] = {
+            "time": None,
+            "weather": None,
+            "effects": None,
+            "surface_conditions": [],
+            "availability": [],
+        }
+        if registry.has_resource(SimulationCalendar):
+            payload["time"] = registry.get_resource(
+                SimulationCalendar
+            ).payload_at(simulation_time)
+        if registry.has_resource(WeatherRuntime):
+            weather = registry.get_resource(WeatherRuntime)
+            payload["weather"] = weather.current.to_payload()
+            payload["effects"] = {
+                "walking_speed_multiplier": (
+                    weather.effects.walking_speed_multiplier
+                ),
+                "cycling_speed_multiplier": (
+                    weather.effects.cycling_speed_multiplier
+                ),
+                "visibility_multiplier": (
+                    weather.effects.visibility_multiplier
+                ),
+            }
+        if registry.has_resource(SurfaceConditionRegistry):
+            surfaces = registry.get_resource(SurfaceConditionRegistry)
+            payload["surface_conditions"] = [
+                {
+                    "surface_id": surface_id,
+                    "wetness": value,
+                    "band": wetness_band(value).value,
+                }
+                for surface_id, value in sorted(surfaces.wetness.items())
+            ]
+        if registry.has_resource(EnvironmentAvailabilityRegistry):
+            availability = registry.get_resource(
+                EnvironmentAvailabilityRegistry
+            )
+            kinds = (
+                {
+                    rule.resource_id: rule.resource_kind
+                    for rule in registry.get_resource(
+                        EnvironmentAvailabilityRules
+                    ).rules
+                }
+                if registry.has_resource(EnvironmentAvailabilityRules)
+                else {}
+            )
+            payload["availability"] = [
+                {
+                    "resource_id": resource_id,
+                    "resource_kind": kinds.get(resource_id),
+                    **state.to_payload(),
+                }
+                for resource_id, state in sorted(availability.states.items())
+            ]
+        return payload
 
     def _initialize_activities(self, event: DomainEvent) -> None:
         for agent_id, activity in self.runner.registry.query(ActivityComponent):

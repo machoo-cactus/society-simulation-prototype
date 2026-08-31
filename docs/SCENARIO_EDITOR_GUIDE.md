@@ -19,14 +19,21 @@ another tab or process.
 
 The editor provides structured controls for all typed scenario fields:
 
-- timing, calendar, homeostasis, System 1, memory, perception, and cognition;
+- timing, calendar, deterministic weather timelines and effects, homeostasis,
+  System 1, memory, perception, and cognition;
 - grid dimensions, blocked coordinates, zones, stations, actions, durations,
-  capacities, availability, and physiological effects;
+  capacities, weekly schedules, weather closures, base availability, and
+  physiological effects;
 - city bounds, districts, buildings, entrances, outdoor places, local maps,
   transport nodes and edges, geometry, modes, speeds, and vehicles;
 - entities and position, spatial location, movement, homeostasis, activity,
   character slot, plan, planner, information, controller, senses, memory,
   and conversation components.
+
+Weekly opening windows use weekday names and local `HH:MM` times. Overnight
+windows are supported when the closing time is earlier than the opening time.
+Weather transitions use simulation-time offsets and may be configured without
+a civil calendar; any weekly schedule requires a calendar.
 
 Each `character_slot` exposes a role label, temporary briefing, optional
 default character, and selection constraints. The initial constraints are

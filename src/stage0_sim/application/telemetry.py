@@ -22,6 +22,13 @@ from stage0_sim.domain.components import (
     SpatialLocationComponent,
     TravelComponent,
 )
+from stage0_sim.domain.environment import (
+    EnvironmentAvailabilityRegistry,
+    EnvironmentAvailabilityRules,
+    SurfaceConditionRegistry,
+    WeatherRuntime,
+    wetness_band,
+)
 from stage0_sim.domain.events import DomainEvent, JsonValue
 from stage0_sim.domain.world import CityWorld, VehicleRegistry, WorldMap
 
@@ -350,6 +357,52 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
         if registry.has_resource(SimulationCalendar)
         else None
     )
+    environment: dict[str, JsonValue] = {
+        "schema_version": "stage0.environment.v1",
+        "time": calendar_time,
+        "weather": None,
+        "effects": None,
+        "surface_conditions": [],
+        "availability": [],
+    }
+    if registry.has_resource(WeatherRuntime):
+        weather = registry.get_resource(WeatherRuntime)
+        environment["weather"] = weather.current.to_payload()
+        environment["effects"] = {
+            "walking_speed_multiplier": weather.effects.walking_speed_multiplier,
+            "cycling_speed_multiplier": weather.effects.cycling_speed_multiplier,
+            "visibility_multiplier": weather.effects.visibility_multiplier,
+        }
+    if registry.has_resource(SurfaceConditionRegistry):
+        surfaces = registry.get_resource(SurfaceConditionRegistry)
+        environment["surface_conditions"] = [
+            {
+                "surface_id": surface_id,
+                "wetness": value,
+                "band": wetness_band(value).value,
+            }
+            for surface_id, value in sorted(surfaces.wetness.items())
+        ]
+    if registry.has_resource(EnvironmentAvailabilityRegistry):
+        availability = registry.get_resource(EnvironmentAvailabilityRegistry)
+        kinds = (
+            {
+                rule.resource_id: rule.resource_kind
+                for rule in registry.get_resource(
+                    EnvironmentAvailabilityRules
+                ).rules
+            }
+            if registry.has_resource(EnvironmentAvailabilityRules)
+            else {}
+        )
+        environment["availability"] = [
+            {
+                "resource_id": resource_id,
+                "resource_kind": kinds.get(resource_id),
+                **state.to_payload(),
+            }
+            for resource_id, state in sorted(availability.states.items())
+        ]
     return {
         "status": runner.status.value,
         "speed": runner.speed,
@@ -369,6 +422,7 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
         "tick": runner.clock.tick,
         "simulation_time": runner.clock.simulation_time,
         "calendar_time": calendar_time,
+        "environment": environment,
         "world": {
             "station_states": station_states,
             "vehicle_states": vehicle_states,

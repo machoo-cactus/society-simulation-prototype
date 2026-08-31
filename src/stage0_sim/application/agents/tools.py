@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
@@ -76,6 +76,13 @@ class NavigateToArguments(BaseModel):
     reason: str | None = Field(default=None, max_length=300)
 
 
+class CheckEnvironmentArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topics: list[
+        Literal["time", "weather", "surface_conditions", "availability"]
+    ] = Field(default=["time", "weather"])
+
+
 ToolArguments = Annotated[
     GoToArguments
     | PerformArguments
@@ -83,7 +90,8 @@ ToolArguments = Annotated[
     | WaitArguments
     | SkipArguments
     | TravelToArguments
-    | NavigateToArguments,
+    | NavigateToArguments
+    | CheckEnvironmentArguments,
     Field(discriminator=None),
 ]
 
@@ -98,6 +106,7 @@ class ToolRegistry:
             "skip": SkipArguments,
             "travel_to": TravelToArguments,
             "navigate_to": NavigateToArguments,
+            "check_environment": CheckEnvironmentArguments,
         }
 
     def definitions(self, allowed: tuple[str, ...]) -> tuple[ToolDefinition, ...]:
@@ -125,6 +134,11 @@ class ToolRegistry:
             args = args_type.model_validate(call.arguments)
         except ValidationError as error:
             raise ToolValidationError("invalid_arguments", str(error)) from error
+        if isinstance(args, CheckEnvironmentArguments):
+            raise ToolValidationError(
+                "read_tool_requires_round",
+                call.name,
+            )
         targets = {target.id: target for target in request.observation.targets}
         if isinstance(args, GoToArguments):
             target = targets.get(args.target_id)
@@ -144,6 +158,11 @@ class ToolRegistry:
                 if target is None:
                     raise ToolValidationError(
                         "target_not_observable", args.target_id
+                    )
+                if not target.available:
+                    raise ToolValidationError(
+                        "precondition_failed",
+                        f"{target.id} is currently unavailable",
                     )
                 if target.kind == "station" and args.action not in target.supported_actions:
                     raise ToolValidationError(
@@ -242,6 +261,45 @@ class ToolRegistry:
             )
         raise ToolValidationError("invalid_arguments", call.name)
 
+    def is_read_only(self, name: str) -> bool:
+        return name == "check_environment"
+
+    def read(
+        self,
+        request: CharacterDecisionRequest,
+        call: ModelToolCall,
+    ) -> dict[str, JsonValue]:
+        if call.name not in request.allowed_tools:
+            raise ToolValidationError("tool_not_allowed", call.name)
+        if call.name != "check_environment":
+            raise ToolValidationError("not_read_tool", call.name)
+        try:
+            args = CheckEnvironmentArguments.model_validate(call.arguments)
+        except ValidationError as error:
+            raise ToolValidationError("invalid_arguments", str(error)) from error
+        if request.observation.environment is None:
+            return {
+                "values": {},
+                "unavailable_topics": list(args.topics),
+            }
+        requested_topics = set(args.topics)
+        values = {
+            topic: value
+            for topic, value in request.observation.environment.values.items()
+            if topic in requested_topics
+        }
+        unavailable = requested_topics - set(values)
+        unavailable.update(
+            topic
+            for topic in request.observation.environment.unavailable_topics
+            if topic in requested_topics
+        )
+        result: dict[str, JsonValue] = {
+            "values": cast(dict[str, JsonValue], values),
+            "unavailable_topics": cast(list[JsonValue], sorted(unavailable)),
+        }
+        return result
+
 
 def _schema(model: type[BaseModel]) -> dict[str, JsonValue]:
     return TypeAdapter(model).json_schema()
@@ -257,5 +315,9 @@ _DESCRIPTIONS = {
     "navigate_to": (
         "Navigate to a known zone, station, building, or outdoor place, "
         "optionally preferring a transport mode."
+    ),
+    "check_environment": (
+        "Read the currently available time, weather, surface, or availability "
+        "information. This does not take an in-world action."
     ),
 }

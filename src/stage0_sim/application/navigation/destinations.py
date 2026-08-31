@@ -24,6 +24,12 @@ class DestinationResolver:
     ) -> KnownDestination:
         for destination in projection.destinations(character_id):
             if destination.id == target_id:
+                if not destination.available:
+                    raise DestinationResolutionError(
+                        destination.availability_reason
+                        or "destination_unavailable",
+                        target_id,
+                    )
                 if not destination.locators:
                     raise DestinationResolutionError(
                         "known_destination_has_no_locator",

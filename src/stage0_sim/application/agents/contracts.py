@@ -8,8 +8,9 @@ from stage0_sim.domain.events import JsonValue
 @dataclass(frozen=True, slots=True)
 class ModelMessage:
     role: Literal["system", "user", "assistant", "tool"]
-    content: str
+    content: str | None
     tool_call_id: str | None = None
+    tool_calls: tuple["ModelToolCall", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +91,12 @@ class CalendarTimeObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class EnvironmentObservation:
+    values: dict[str, JsonValue]
+    unavailable_topics: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class CharacterObservation:
     agent_id: str
     display_name: str
@@ -107,6 +114,7 @@ class CharacterObservation:
     spatial_location: dict[str, JsonValue] | None = None
     available_travel_modes: tuple[str, ...] = ()
     calendar_time: CalendarTimeObservation | None = None
+    environment: EnvironmentObservation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +144,13 @@ class CharacterDecision:
     tool_call: ModelToolCall | None
     model_turn: ModelTurn
     error: str | None = None
+    read_tools: tuple["ReadToolExecution", ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ReadToolExecution:
+    call: ModelToolCall
+    result: dict[str, JsonValue]
 
 
 class CharacterController(Protocol):

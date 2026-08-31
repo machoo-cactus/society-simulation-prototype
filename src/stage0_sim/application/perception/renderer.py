@@ -31,6 +31,28 @@ class DeterministicPerceptionRenderer:
                 f"{fact.properties.get('weekday', 'an unknown day')}, "
                 f"{fact.properties.get('date', 'an unknown date')}."
             )
+        if fact.fact_type == "weather_changed":
+            environment = fact.properties.get("environment")
+            weather_value = (
+                environment.get("weather")
+                if isinstance(environment, dict)
+                else None
+            )
+            weather = weather_value if isinstance(weather_value, dict) else {}
+            return (
+                f"The weather is now {weather.get('condition', 'unknown')} at "
+                f"{weather.get('temperature_c', 'unknown')} C, with "
+                f"{weather.get('precipitation_mm_per_hour', 'unknown')} mm/h "
+                "precipitation."
+            )
+        if fact.fact_type == "availability_changed":
+            current = fact.properties.get("current")
+            current_values = current if isinstance(current, dict) else {}
+            state = "open" if current_values.get("available") else "closed"
+            return (
+                f"{fact.properties.get('resource_id', 'A place')} is now "
+                f"{state} ({current_values.get('reason', 'unknown reason')})."
+            )
         return f"{subject}: {fact.fact_type}."
 
     def render(

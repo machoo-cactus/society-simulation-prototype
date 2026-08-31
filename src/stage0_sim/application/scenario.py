@@ -1,7 +1,7 @@
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from typing import Any, Literal
 
@@ -28,6 +28,7 @@ from stage0_sim.application.cognition import (
     Planner,
 )
 from stage0_sim.application.dialogue import MacroDialogueSystem
+from stage0_sim.application.environment import EnvironmentInformationService
 from stage0_sim.application.information import InformationRetriever, InformationStore
 from stage0_sim.application.macro_work import MacroWorkCoordinator
 from stage0_sim.application.memory import EpisodicMemoryStore, MemoryConfiguration
@@ -80,6 +81,20 @@ from stage0_sim.domain.components import (
     default_drive_thresholds,
 )
 from stage0_sim.domain.ecs import Registry
+from stage0_sim.domain.environment import (
+    AvailabilityRule,
+    EnvironmentAvailabilityRegistry,
+    EnvironmentAvailabilityRules,
+    SurfaceConditionRegistry,
+    WeatherCondition,
+    WeatherEffects,
+    WeatherRuntime,
+    WeatherState,
+    WeatherTimeline,
+    WeatherTransition,
+    WeeklyOpeningWindow,
+    WeeklySchedule,
+)
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.information import (
     InformationDocument,
@@ -93,6 +108,11 @@ from stage0_sim.domain.information import (
 from stage0_sim.domain.systems import SystemExecutor
 from stage0_sim.domain.systems.affordances import AffordanceExecutionSystem
 from stage0_sim.domain.systems.calendar import CalendarUpdateSystem
+from stage0_sim.domain.systems.environment import (
+    EnvironmentAvailabilitySystem,
+    SurfaceConditionSystem,
+    WeatherUpdateSystem,
+)
 from stage0_sim.domain.systems.homeostasis import (
     HomeostasisSystem,
     MovementActivitySystem,
@@ -161,6 +181,63 @@ class BoundsDefinition(BaseModel):
         )
 
 
+WEEKDAY_NUMBERS = {
+    "MONDAY": 0,
+    "TUESDAY": 1,
+    "WEDNESDAY": 2,
+    "THURSDAY": 3,
+    "FRIDAY": 4,
+    "SATURDAY": 5,
+    "SUNDAY": 6,
+}
+WeekdayName = Literal[
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY",
+    "SATURDAY",
+    "SUNDAY",
+]
+
+
+class OpeningWindowDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    weekdays: list[WeekdayName] = Field(min_length=1)
+    opens: time
+    closes: time
+
+    def to_domain(self) -> WeeklyOpeningWindow:
+        return WeeklyOpeningWindow(
+            frozenset(WEEKDAY_NUMBERS[day] for day in self.weekdays),
+            self.opens.hour * 60 + self.opens.minute,
+            self.closes.hour * 60 + self.closes.minute,
+        )
+
+
+class WeeklyScheduleDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    windows: list[OpeningWindowDefinition] = Field(min_length=1)
+
+    def to_domain(self) -> WeeklySchedule:
+        return WeeklySchedule(tuple(window.to_domain() for window in self.windows))
+
+
+class EnvironmentalAvailabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schedule: WeeklyScheduleDefinition | None = None
+    closed_weather: list[WeatherCondition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def weather_conditions_are_unique(self) -> "EnvironmentalAvailabilityDefinition":
+        if len(self.closed_weather) != len(set(self.closed_weather)):
+            raise ValueError("closed_weather conditions must be unique")
+        return self
+
+
 class ZoneDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -189,6 +266,9 @@ class StationDefinition(BaseModel):
     actions: list["StationActionDefinition"] | None = None
     available: bool = True
     capacity: int = Field(default=1, gt=0)
+    environment: EnvironmentalAvailabilityDefinition = Field(
+        default_factory=EnvironmentalAvailabilityDefinition
+    )
 
     @model_validator(mode="after")
     def has_one_action_format(self) -> "StationDefinition":
@@ -307,6 +387,10 @@ class BuildingDefinition(BaseModel):
     city_position: MapPointDefinition
     local_map_id: str = Field(min_length=1)
     entrances: list[BuildingEntranceDefinition] = Field(min_length=1)
+    available: bool = True
+    environment: EnvironmentalAvailabilityDefinition = Field(
+        default_factory=EnvironmentalAvailabilityDefinition
+    )
 
 
 class OutdoorPlaceDefinition(BaseModel):
@@ -317,6 +401,10 @@ class OutdoorPlaceDefinition(BaseModel):
     district_id: str = Field(min_length=1)
     city_position: MapPointDefinition
     network_node_id: str = Field(min_length=1)
+    available: bool = True
+    environment: EnvironmentalAvailabilityDefinition = Field(
+        default_factory=EnvironmentalAvailabilityDefinition
+    )
 
 
 class TransportNodeDefinition(BaseModel):
@@ -339,6 +427,10 @@ class TransportEdgeDefinition(BaseModel):
     geometry: list[MapPointDefinition] = Field(min_length=2)
     speed_limit_mps: float | None = Field(default=None, gt=0)
     bidirectional: bool = False
+    available: bool = True
+    environment: EnvironmentalAvailabilityDefinition = Field(
+        default_factory=EnvironmentalAvailabilityDefinition
+    )
 
 
 class VehicleLocationDefinition(BaseModel):
@@ -357,6 +449,10 @@ class VehicleDefinition(BaseModel):
     name: str = Field(min_length=1)
     capacity: int = Field(gt=0)
     location: VehicleLocationDefinition
+    available: bool = True
+    environment: EnvironmentalAvailabilityDefinition = Field(
+        default_factory=EnvironmentalAvailabilityDefinition
+    )
 
 
 class TransportDefinition(BaseModel):
@@ -593,7 +689,7 @@ class CognitionSettingsDefinition(BaseModel):
     model_profile: str = "default"
     decision_timeout_seconds: float = Field(default=30.0, gt=0)
     max_output_tokens: int = Field(default=512, gt=0)
-    max_read_tool_rounds: int = Field(default=0, ge=0)
+    max_read_tool_rounds: int = Field(default=1, ge=0, le=4)
     max_state_changing_tools: int = Field(default=1, ge=1, le=1)
     max_concurrency: int = Field(default=4, gt=0)
     max_requests: int | None = Field(default=None, gt=0)
@@ -608,6 +704,7 @@ class CognitionSettingsDefinition(BaseModel):
             "wait",
             "skip",
             "travel_to",
+            "check_environment",
         ]
     )
 
@@ -615,8 +712,6 @@ class CognitionSettingsDefinition(BaseModel):
     def supported_values(self) -> "CognitionSettingsDefinition":
         if self.controller not in {"legacy", "tool-agent"}:
             raise ValueError("cognition controller must be legacy or tool-agent")
-        if self.max_read_tool_rounds != 0:
-            raise ValueError("read-only tool rounds are not implemented")
         unknown = set(self.tool_allowlist) - {
             "navigate_to",
             "go_to",
@@ -625,6 +720,7 @@ class CognitionSettingsDefinition(BaseModel):
             "wait",
             "skip",
             "travel_to",
+            "check_environment",
         }
         if unknown:
             raise ValueError(f"unknown cognition tools: {sorted(unknown)}")
@@ -743,6 +839,84 @@ class CalendarSettingsDefinition(BaseModel):
         )
 
 
+class WeatherStateDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    condition: WeatherCondition
+    temperature_c: float
+    precipitation_mm_per_hour: float = Field(default=0.0, ge=0)
+    wind_speed_mps: float = Field(default=0.0, ge=0)
+    wind_direction_degrees: float = Field(default=0.0, ge=0, lt=360)
+    visibility_meters: float = Field(default=10_000.0, gt=0)
+
+    def to_domain(self) -> WeatherState:
+        return WeatherState(
+            condition=self.condition,
+            temperature_c=self.temperature_c,
+            precipitation_mm_per_hour=self.precipitation_mm_per_hour,
+            wind_speed_mps=self.wind_speed_mps,
+            wind_direction_degrees=self.wind_direction_degrees,
+            visibility_meters=self.visibility_meters,
+        )
+
+
+class WeatherTransitionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    at_seconds: float = Field(gt=0)
+    state: WeatherStateDefinition
+
+
+class WeatherEffectsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    walking_speed_multiplier: float = Field(default=1.0, gt=0)
+    cycling_speed_multiplier: float = Field(default=1.0, gt=0)
+    visibility_multiplier: float = Field(default=1.0, gt=0)
+    wetness_gain_per_mm_hour_second: float = Field(default=0.00002, ge=0)
+    base_drying_per_second: float = Field(default=0.00005, ge=0)
+    wind_drying_per_mps_second: float = Field(default=0.000005, ge=0)
+    temperature_drying_per_degree_second: float = Field(default=0.000001, ge=0)
+
+    def to_domain(self) -> WeatherEffects:
+        return WeatherEffects(**self.model_dump())
+
+
+class WeatherSettingsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    initial: WeatherStateDefinition
+    transitions: list[WeatherTransitionDefinition] = Field(default_factory=list)
+    effects: dict[WeatherCondition, WeatherEffectsDefinition] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(mode="after")
+    def transitions_are_unique_and_increasing(self) -> "WeatherSettingsDefinition":
+        times = [transition.at_seconds for transition in self.transitions]
+        if times != sorted(times) or len(times) != len(set(times)):
+            raise ValueError("weather transition times must be unique and increasing")
+        return self
+
+    def to_domain(self) -> WeatherRuntime:
+        return WeatherRuntime(
+            WeatherTimeline(
+                self.initial.to_domain(),
+                tuple(
+                    WeatherTransition(
+                        transition.at_seconds,
+                        transition.state.to_domain(),
+                    )
+                    for transition in self.transitions
+                ),
+            ),
+            {
+                condition: effects.to_domain()
+                for condition, effects in self.effects.items()
+            },
+        )
+
+
 class ScenarioDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -753,6 +927,7 @@ class ScenarioDefinition(BaseModel):
     speed: float = Field(default=1.0, gt=0)
     run_id: str | None = Field(default=None, min_length=1)
     calendar: CalendarSettingsDefinition | None = None
+    weather: WeatherSettingsDefinition | None = None
     world: WorldDefinition | CityWorldDefinition | None = None
     homeostasis: HomeostasisSettingsDefinition = Field(
         default_factory=HomeostasisSettingsDefinition
@@ -790,7 +965,98 @@ class ScenarioDefinition(BaseModel):
             raw_slot = entity.components.get("character_slot")
             if raw_slot is not None:
                 _validate_component(CharacterSlotDefinition, raw_slot, entity.id)
+        if self.calendar is None and _scenario_uses_schedules(self.world):
+            raise ValueError("weekly environment schedules require a calendar")
         return self
+
+
+def _scenario_uses_schedules(
+    world: WorldDefinition | CityWorldDefinition | None,
+) -> bool:
+    return any(rule.schedule is not None for rule in _environment_rules(world))
+
+
+def _environment_rules(
+    world: WorldDefinition | CityWorldDefinition | None,
+) -> tuple[AvailabilityRule, ...]:
+    rules: list[AvailabilityRule] = []
+    if isinstance(world, WorldDefinition):
+        for station in world.stations:
+            rules.append(
+                _availability_rule(
+                    station.id,
+                    "station",
+                    station.available,
+                    station.environment,
+                )
+            )
+    elif isinstance(world, CityWorldDefinition):
+        for local_map in world.local_maps.values():
+            for station in local_map.stations:
+                rules.append(
+                    _availability_rule(
+                        station.id,
+                        "station",
+                        station.available,
+                        station.environment,
+                    )
+                )
+        for building in world.buildings:
+            rules.append(
+                _availability_rule(
+                    building.id,
+                    "building",
+                    building.available,
+                    building.environment,
+                )
+            )
+        for place in world.outdoor_places:
+            rules.append(
+                _availability_rule(
+                    place.id,
+                    "outdoor",
+                    place.available,
+                    place.environment,
+                )
+            )
+        for edge in world.transport.edges:
+            rules.append(
+                _availability_rule(
+                    edge.id,
+                    "transport_edge",
+                    edge.available,
+                    edge.environment,
+                )
+            )
+        for vehicle in world.transport.vehicles:
+            rules.append(
+                _availability_rule(
+                    vehicle.id,
+                    "vehicle",
+                    vehicle.available,
+                    vehicle.environment,
+                )
+            )
+    return tuple(sorted(rules, key=lambda rule: (rule.resource_kind, rule.resource_id)))
+
+
+def _availability_rule(
+    resource_id: str,
+    resource_kind: str,
+    base_available: bool,
+    definition: EnvironmentalAvailabilityDefinition,
+) -> AvailabilityRule:
+    return AvailabilityRule(
+        resource_id=resource_id,
+        resource_kind=resource_kind,
+        base_available=base_available,
+        schedule=(
+            definition.schedule.to_domain()
+            if definition.schedule is not None
+            else None
+        ),
+        closed_weather=frozenset(definition.closed_weather),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -860,9 +1126,22 @@ def create_runner(
     registry.set_resource(scenario.homeostasis.to_domain())
     registry.set_resource(scenario.system1.to_domain())
     registry.set_resource(scenario.perception.to_domain())
+    registry.set_resource(SurfaceConditionRegistry())
+    registry.set_resource(EnvironmentAvailabilityRegistry())
+    availability_rules = EnvironmentAvailabilityRules(
+        _environment_rules(scenario.world)
+    )
+    registry.set_resource(availability_rules)
+    if scenario.weather is not None:
+        registry.set_resource(scenario.weather.to_domain())
+        systems.add(WeatherUpdateSystem())
+        systems.add(SurfaceConditionSystem())
+    if availability_rules.rules:
+        systems.add(EnvironmentAvailabilitySystem())
     if scenario.calendar is not None:
         registry.set_resource(scenario.calendar.to_domain())
         systems.add(CalendarUpdateSystem())
+    registry.set_resource(EnvironmentInformationService(registry))
     systems.add(MovementActivitySystem())
     systems.add(HomeostasisSystem())
     systems.add(TimedPlanActionSystem())
@@ -944,6 +1223,7 @@ def create_runner(
                 if model_max_output_tokens is not None
                 else scenario.cognition.max_output_tokens
             ),
+            max_read_tool_rounds=scenario.cognition.max_read_tool_rounds,
         )
         registry.set_resource(
             AgentWorkCoordinator(
@@ -1648,6 +1928,7 @@ class ControllerDefinition(BaseModel):
             "wait",
             "skip",
             "travel_to",
+            "check_environment",
         ]
     )
 
@@ -1661,6 +1942,7 @@ class ControllerDefinition(BaseModel):
             "wait",
             "skip",
             "travel_to",
+            "check_environment",
         }
         if unknown:
             raise ValueError(f"unknown controller tools: {sorted(unknown)}")

@@ -12,6 +12,7 @@ from stage0_sim.domain.components import (
     System1Configuration,
     System1State,
 )
+from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
 from stage0_sim.domain.world import AffordanceStation
@@ -107,7 +108,13 @@ class AffordanceExecutionSystem:
                 context, agent_id, station_id, action.value, "station_not_found"
             )
             return False, "station_not_found"
-        failure = self._precondition_failure(context, agent_id, station, action.value)
+        failure = self._precondition_failure(
+            context,
+            agent_id,
+            station,
+            action.value,
+            check_availability=True,
+        )
         if failure is not None:
             self._emit_failure(context, agent_id, station.id, action.value, failure)
             return False, failure
@@ -167,7 +174,11 @@ class AffordanceExecutionSystem:
         world = local_world_for_agent(context.registry, agent_id)
         station = world.station(execution.station_id)
         failure = self._precondition_failure(
-            context, agent_id, station, execution.definition.action
+            context,
+            agent_id,
+            station,
+            execution.definition.action,
+            check_availability=False,
         )
         if failure is not None:
             cancel_affordance(context, agent_id, failure)
@@ -303,9 +314,20 @@ class AffordanceExecutionSystem:
         agent_id: str,
         station: AffordanceStation,
         action: str,
+        *,
+        check_availability: bool = True,
     ) -> str | None:
-        if not station.available:
-            return "station_unavailable"
+        if check_availability:
+            available = station.available
+            reason = "station_unavailable"
+            if context.registry.has_resource(EnvironmentAvailabilityRegistry):
+                state = context.registry.get_resource(
+                    EnvironmentAvailabilityRegistry
+                ).state(station.id, base_available=station.available)
+                available = state.available
+                reason = state.reason.value
+            if not available:
+                return reason
         if action not in station.supported_actions:
             return "action_not_supported"
         position = context.registry.get_component(agent_id, PositionComponent)

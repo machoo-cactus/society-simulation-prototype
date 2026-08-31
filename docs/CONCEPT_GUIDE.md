@@ -1087,8 +1087,10 @@ docs/                 Requirements, plans, assessment, concept guide
 
 Controller and perception additions belong in focused `application/agents` and
 `application/perception` packages rather than expanding `macro_work.py` into a
-monolithic cognition module. Browser API, protocol, UI-state, and transcript
-logic remain separate native ES modules under `web/`.
+monolithic cognition module. The browser is a server-rendered operator client:
+Python routes own UI orchestration, templates render authoritative snapshots as
+accessible HTML/SVG, and ordinary forms map directly to lifecycle functions.
+Client-side JavaScript is limited to browser-only progressive enhancement.
 
 ## 26. Rules for extending the project
 

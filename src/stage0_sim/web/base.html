@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    {% if auto_refresh %}<meta http-equiv="refresh" content="1;url={{ refresh_url }}">{% endif %}
+    <title>{% block title %}Stage 0 Simulation{% endblock %}</title>
+    <link rel="stylesheet" href="/ui/assets/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">{% block eyebrow %}Stage 0 operator console{% endblock %}</p>
+        <h1>{% block heading %}Stage 0 Simulation{% endblock %}</h1>
+      </div>
+      <nav class="page-nav" aria-label="Application">
+        <a href="/ui/" {% if request.url.path == "/ui/" %}aria-current="page"{% endif %}>Simulation</a>
+        <a href="/ui/characters/" {% if request.url.path.startswith("/ui/characters") %}aria-current="page"{% endif %}>Characters</a>
+        <a href="/docs">API</a>
+      </nav>
+    </header>
+    {% if message or error %}
+      <div class="notice {{ 'notice--error' if error else '' }}" role="{{ 'alert' if error else 'status' }}">
+        {{ error or message }}
+      </div>
+    {% endif %}
+    <main id="main">{% block content %}{% endblock %}</main>
+    <script src="/ui/assets/enhancements.js" defer></script>
+  </body>
+</html>

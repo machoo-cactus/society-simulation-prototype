@@ -53,9 +53,11 @@ $env:STAGE0_LLM_MODEL = "stage0-fake"
 stage0-sim run scenarios\real-llm-tool-agent.json --ticks 30
 ```
 
-The browser is dependency-free HTML/CSS/JavaScript under
-`src\stage0_sim\web\`; there is no Node build step. When Node is available,
-syntax-check every changed web module, not only `app.js`.
+The browser UI is Python-rendered HTML/SVG under `src\stage0_sim\web\`; there is
+no Node build step and no client-side application state. Keep authored
+JavaScript limited to browser APIs that HTML cannot provide, and cover every
+such enhancement with Playwright. Follow `docs\UI_TESTING.md` for required
+role-driven browser testing.
 
 ## Architecture
 
@@ -149,9 +151,11 @@ and dataset projections.
 - The browser stores full event envelopes for inspection and uses summarized
   text only for collapsed rows. Include both `speech.*` and legacy
   `dialogue.*` in dialogue-oriented views.
-- Browser helpers used during startup/reset must be module-level or imported
-  functions. JavaScript syntax checks do not detect accidentally nested
-  function declarations; exercise startup/reset paths when changing scopes.
+- Browser controls must remain ordinary labeled forms or links bound directly
+  to Python routes. Do not recreate lifecycle or telemetry state in JavaScript.
+- Exercise changed UI workflows with Playwright using roles, labels, and
+  visible outcomes. Source inspection and JavaScript syntax checks are not
+  substitutes for browser behavior.
 - When adding scenario fields, update the Pydantic definition, domain
   construction, representative scenario JSON, and any operator projection that
   should expose the field.

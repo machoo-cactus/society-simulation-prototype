@@ -1,56 +1,95 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
-    <title>Characters · Stage 0 Simulation</title>
-    <link rel="stylesheet" href="/ui/styles.css">
-  </head>
-  <body>
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Stage 0 configuration</p>
-        <h1>Character Library</h1>
-      </div>
-      <nav class="page-nav" aria-label="Application">
-        <a href="/ui/">Simulation</a>
-        <a href="/ui/characters.html" aria-current="page">Characters</a>
-      </nav>
+{% extends "base.html" %}
+{% block title %}Characters · Stage 0{% endblock %}
+{% block eyebrow %}Reusable character configuration{% endblock %}
+{% block heading %}Character Library{% endblock %}
+{% block content %}
+<div class="character-layout">
+  <aside class="panel character-list" aria-labelledby="character-list-heading">
+    <header class="panel__header">
+      <h2 id="character-list-heading">Saved characters</h2>
+      <a class="button-link" href="/ui/characters/?new=1">New character</a>
     </header>
+    <form class="search-form" method="get">
+      <label for="character-search">Search</label>
+      <input id="character-search" name="search" type="search" value="{{ search }}">
+      <button type="submit">Search</button>
+    </form>
+    <nav aria-label="Characters">
+      {% for character in characters %}
+        <a href="?selected={{ character.id|urlencode }}" {% if selected and selected.id == character.id %}aria-current="page"{% endif %}>
+          <strong>{{ character.display_name }}</strong><span>{{ character.id }}</span>
+        </a>
+      {% else %}
+        <p class="empty-state">No matching characters.</p>
+      {% endfor %}
+    </nav>
+    <details>
+      <summary>Import character JSON</summary>
+      <form method="post" action="/ui/characters/import" enctype="multipart/form-data">
+        <label for="character-file">Character JSON</label>
+        <input id="character-file" name="character" type="file" accept=".json,application/json" required>
+        <button type="submit">Import</button>
+      </form>
+    </details>
+  </aside>
 
-    <main class="character-page">
-      <section id="character-studio-panel" class="panel character-studio">
-        <div class="panel__header">
-          <div>
-            <h2>Reusable characters</h2>
-            <p>Each saved character is stored as an independent JSON file.</p>
-          </div>
-          <div class="character-studio__actions">
-            <input id="character-search" type="search" placeholder="Search characters" aria-label="Search characters">
-            <button type="button" data-action="add-profile">New character</button>
-            <button type="button" data-action="duplicate-profile">Duplicate</button>
-            <button type="button" data-action="delete-profile">Delete</button>
-            <button id="export-character" type="button">Download JSON</button>
-            <label class="file-button">
-              Import JSON
-              <input id="import-character" type="file" accept=".json,application/json">
+  <section class="panel character-editor" aria-labelledby="character-editor-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="character-editor-heading">{{ selected.identity.display_name if selected else "New character" }}</h2>
+        <p>Structured human-v1 profile. One list item per line.</p>
+      </div>
+      {% if selected %}
+        <div class="header-actions">
+          <a class="button-link" href="/ui/characters/{{ selected.id }}/download">Download JSON</a>
+          <form method="post" action="/ui/characters/{{ selected.id }}/duplicate"><button type="submit">Duplicate</button></form>
+        </div>
+      {% endif %}
+    </header>
+    <form class="character-form" method="post" action="{{ '/ui/characters/' ~ selected.id ~ '/save' if selected else '/ui/characters/create' }}">
+      {% if selected %}<input type="hidden" name="expected_hash" value="{{ selected_hash }}">{% endif %}
+      <fieldset>
+        <legend>Profile</legend>
+        <label>Character ID <input name="id" value="{{ selected.id if selected else '' }}" pattern="[a-z0-9][a-z0-9._\-]*" required></label>
+        <label>Template ID <input name="template_id" value="{{ selected.template_id if selected else 'human-v1' }}" required></label>
+      </fieldset>
+      {% for section in sections %}
+        <fieldset>
+          <legend>{{ section.title }}</legend>
+          {% for name, label, kind, required in section.fields %}
+            <label class="{% if kind in ('textarea', 'list') %}wide{% endif %}">
+              {{ label }}
+              {% if kind in ("textarea", "list") %}
+                <textarea name="{{ section.id }}.{{ name }}" rows="{{ 3 if kind == 'list' else 5 }}" {% if required %}required{% endif %}>{{ field_values.get(section.id ~ "." ~ name, "") }}</textarea>
+              {% else %}
+                <input name="{{ section.id }}.{{ name }}" type="{{ kind }}" value="{{ field_values.get(section.id ~ "." ~ name, "") }}" {% if kind == "number" %}min="0" max="150"{% endif %} {% if required %}required{% endif %}>
+              {% endif %}
             </label>
-          </div>
-        </div>
-        <div class="character-studio__body">
-          <nav data-role="profile-list" class="character-studio__list" aria-label="Characters"></nav>
-          <div class="character-studio__editor">
-            <p data-role="profile-empty" class="empty-character">
-              The character library is empty. Select <strong>New character</strong> to create one.
-            </p>
-            <form data-role="profile-form" class="character-form" hidden></form>
-            <p data-role="profile-status" class="control-status" role="status"></p>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <script type="module" src="/ui/characters-page.js"></script>
-  </body>
-</html>
+          {% endfor %}
+        </fieldset>
+      {% endfor %}
+      <fieldset class="wide-fieldset">
+        <legend>Relationships</legend>
+        <p>Ordered JSON records with target_id, relationship, sentiment, and notes.</p>
+        <textarea name="relationships" rows="10">{{ field_values.get("relationships", "[]") }}</textarea>
+      </fieldset>
+      <fieldset class="wide-fieldset">
+        <legend>Custom sections</legend>
+        <p>Ordered experimental sections and fields, including prompt_visible and ui_visible.</p>
+        <textarea name="custom_sections" rows="12">{{ field_values.get("custom_sections", "[]") }}</textarea>
+      </fieldset>
+      <div class="form-actions"><button class="primary" type="submit">{{ "Save character" if selected else "Create character" }}</button></div>
+    </form>
+    {% if selected %}
+      <details class="danger-zone">
+        <summary>Delete {{ selected.id }}</summary>
+        <form method="post" action="/ui/characters/{{ selected.id }}/delete">
+          <input type="hidden" name="expected_hash" value="{{ selected_hash }}">
+          <label><input type="checkbox" name="confirm" value="yes" required> I understand this permanently deletes the character file.</label>
+          <button class="danger" type="submit">Delete character</button>
+        </form>
+      </details>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

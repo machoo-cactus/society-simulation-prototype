@@ -31,9 +31,9 @@ process-local, and stopped simulations remain non-resumable by design.
 | Correction target selection ignored capacity | **Resolved.** Selection counts active users and deterministic reservations, then falls back by path cost and station ID. |
 | Failed planner records lacked provider metadata | **Resolved and extended.** Planner/dialogue completed, failed, and cancelled records include provider plus latency/input/output token fields using null when failure metadata is unknown and zero for work cancelled before invocation. |
 | Exact acceptance and long-run evidence were absent | **Resolved.** Tests cover the nine plan steps, zero provider calls during correction, two simulated hours, determinism, bounded meters, non-overlap, and valid System 1 states. |
-| Browser fidelity verification was source-only | **Resolved within the no-browser-dependency constraint.** TestClient verifies authoritative ordered WebSocket snapshots, while static-asset contract tests verify that `world_snapshot` drives canvas rendering and exact homeostasis fields drive gauges. |
+| Browser fidelity verification was source-only | **Resolved.** Python Playwright launches the real FastAPI UI in Chromium and drives lifecycle, scenario, event, city, and character workflows through ARIA roles and labels. The suite also rejects page and console errors. |
 | Tracked generated `egg-info` and untidy `.gitignore` | **Resolved.** Generated metadata is removed, `*.egg-info/` is ignored, and `.gitignore` has a final newline. |
-| Plan described TypeScript/Vite/Vitest rather than the implementation | **Resolved.** The plan and README now describe the FastAPI-served HTML/CSS/plain-JavaScript canvas UI and pytest/Ruff/mypy toolchain. |
+| Plan described TypeScript/Vite/Vitest rather than the implementation | **Resolved.** The current UI is Python-rendered HTML/SVG with direct form routes, a clipboard-only enhancement, pytest contracts, and Playwright browser tests. |
 
 ## Implemented architecture
 

@@ -59,11 +59,12 @@ The browser simulation page loads the character catalog from the API and shows
 a selector for each character slot. Assignments are validated before Start.
 Characters may be reused in multiple slots.
 
-The separate `/ui/characters.html` page creates, duplicates, deletes, renames,
-and edits character files. It exposes every `human-v1` field, plus ordered
-relationship records and custom sections as JSON arrays. Unknown top-level and
-nested section content is preserved when known fields are edited. Saves use
-content hashes so a stale browser tab cannot silently overwrite a newer edit.
+The separate `/ui/characters/` page creates, imports, duplicates, downloads,
+deletes, renames, and edits character files. It exposes every `human-v1` field,
+plus ordered relationship records and custom sections as JSON arrays. Unknown
+top-level and nested section content is preserved when known fields are edited.
+Saves use content hashes so a stale browser tab cannot silently overwrite a
+newer edit.
 
 ## Standard sections
 

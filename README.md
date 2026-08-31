@@ -54,7 +54,7 @@ Open <http://127.0.0.1:8000/ui/>. The health endpoint is
 <http://127.0.0.1:8000/docs>.
 
 Reusable characters are stored as individual JSON files under `characters/`.
-Manage them at <http://127.0.0.1:8000/ui/characters.html>.
+Manage them at <http://127.0.0.1:8000/ui/characters/>.
 
 ## Update an existing checkout
 
@@ -143,15 +143,13 @@ environment's executable directory is not on `PATH`.
 ## Use the browser sandbox
 
 The UI is bundled under `src/stage0_sim/web/` and served at `/ui/` by FastAPI.
-It is intentionally plain HTML, CSS, and JavaScript:
+It is intentionally Python-rendered, accessible HTML and SVG:
 
-- no separate frontend server;
-- no Node.js build;
-- no duplicated simulation logic in the browser.
-
-The browser code uses native ES modules. API access, telemetry protocol parsing,
-lifecycle state, and transcript rendering are separated into focused modules;
-all `web/*.js` files are shipped as package data.
+- no separate frontend server or Node.js build;
+- no client-side application state or duplicated simulation logic;
+- lifecycle controls are ordinary forms bound directly to Python routes;
+- live runs refresh from authoritative server snapshots;
+- one tiny progressive-enhancement script provides clipboard access only.
 
 From the UI you can:
 
@@ -167,12 +165,16 @@ From the UI you can:
 - view character names, current vision, hearing pulses, speech bubbles, and a
   delivered-speech transcript;
 - follow characters between building and city views with AUTO/MANUAL scale,
-  pan, zoom, vehicle progress, and travel events;
+  scroll/pan, zoom, focus mode, vehicle progress, and travel events;
 - download the run's versioned JSONL dataset.
 
-The Characters page provides durable create, duplicate, rename, edit, and
-delete operations for the JSON character library. Character editing is
-independent from loading or running a scenario.
+The Characters page provides durable create, import, duplicate, rename, edit,
+download, and delete operations for the JSON character library. Character
+editing is independent from loading or running a scenario.
+
+The UI is tested as an actual browser application with Python Playwright and
+ARIA role locators. See [UI testing for coding agents](docs/UI_TESTING.md) for
+the required autonomous test-and-improve workflow.
 
 The empty top-level `frontend/` scaffold from the original proposed architecture
 has been removed. It had no source files and was not used by packaging or at

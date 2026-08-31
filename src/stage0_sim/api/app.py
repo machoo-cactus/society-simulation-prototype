@@ -12,6 +12,8 @@ from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.api.characters import router as characters_router
 from stage0_sim.api.simulation import router as simulation_router
+from stage0_sim.api.ui import OperatorSessionStore
+from stage0_sim.api.ui import router as ui_router
 from stage0_sim.application.manager import SimulationManager
 from stage0_sim.config import create_model_client, get_settings
 
@@ -34,6 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.simulation_manager = manager
     app.state.character_library = character_library
+    app.state.operator_sessions = OperatorSessionStore()
     try:
         yield
     finally:
@@ -56,8 +59,13 @@ app.add_middleware(
 )
 app.include_router(simulation_router)
 app.include_router(characters_router)
+app.include_router(ui_router)
 web_directory = Path(__file__).parents[1] / "web"
-app.mount("/ui", StaticFiles(directory=web_directory, html=True), name="ui")
+app.mount(
+    "/ui/assets",
+    StaticFiles(directory=web_directory),
+    name="ui-assets",
+)
 
 
 @app.get("/", include_in_schema=False)

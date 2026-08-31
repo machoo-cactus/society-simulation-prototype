@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+{% block title %}Simulation · Stage 0{% endblock %}
+{% block eyebrow %}Deterministic simulation telemetry{% endblock %}
+{% block heading %}Operator Console{% endblock %}
+{% block content %}
+<div class="dashboard">
+  <section class="panel controls-panel" aria-labelledby="simulation-controls-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="simulation-controls-heading">Simulation controls</h2>
+        <p>
+          {% if scenario %}
+            <strong>{{ scenario.name }}</strong> · {{ session.scenario_source }}
+          {% else %}
+            No scenario staged
+          {% endif %}
+        </p>
+      </div>
+      <p class="status-chip status-chip--{{ status }}">{{ status }}</p>
+    </header>
+
+    <div class="scenario-loader">
+      <form method="post" action="/ui/scenario/example">
+        <button type="submit">Load example scenario</button>
+      </form>
+      <form method="post" action="/ui/scenario/upload" enctype="multipart/form-data">
+        <label for="scenario-file">Scenario JSON</label>
+        <input id="scenario-file" name="scenario" type="file" accept=".json,application/json" required>
+        <button type="submit">Validate and stage</button>
+      </form>
+    </div>
+
+    {% if scenario %}
+      <p class="staging-note">
+        Staging validates configuration only. It never starts or advances a run.
+      </p>
+      {% if session.scenario_warnings %}
+        <ul class="warnings" aria-label="Scenario warnings">
+          {% for warning in session.scenario_warnings %}<li>{{ warning }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      {% set assignments = scenario.entities | selectattr("components.character_profile", "defined") | list %}
+      {% if assignments %}
+        <details>
+          <summary>Character assignments</summary>
+          <form class="assignment-form" method="post" action="/ui/scenario/assign">
+            {% for entity in assignments %}
+              {% set current = entity.components.character_profile.get("character_id", entity.components.character_profile.get("profile_ref", "")) %}
+              <label>
+                <span>{{ entity.id }}</span>
+                <select name="character.{{ entity.id }}" required>
+                  <option value="">Select a character</option>
+                  {% for character in characters %}
+                    <option value="{{ character.id }}" {% if current == character.id %}selected{% endif %}>
+                      {{ character.display_name }} ({{ character.id }})
+                    </option>
+                  {% endfor %}
+                </select>
+              </label>
+            {% endfor %}
+            <button type="submit">Validate assignments</button>
+          </form>
+        </details>
+      {% endif %}
+    {% endif %}
+
+    <div class="lifecycle-controls" role="group" aria-label="Run lifecycle">
+      <form method="post" action="/ui/run/start">
+        <label for="start-speed">Initial speed</label>
+        <select id="start-speed" name="speed" {% if not controls.start %}disabled{% endif %}>
+          {% for speed in (0.5, 1, 2, 4, 10) %}
+            <option value="{{ speed }}" {% if scenario and scenario.speed == speed %}selected{% endif %}>{{ speed }}x</option>
+          {% endfor %}
+        </select>
+        <button class="primary" type="submit" {% if not controls.start %}disabled{% endif %}>Start run</button>
+      </form>
+      {% for action, label in (("pause", "Pause"), ("resume", "Resume"), ("step", "Single step"), ("stop", "Stop")) %}
+        <form method="post" action="/ui/run/control/{{ action }}">
+          <button type="submit" {% if not controls[action] %}disabled{% endif %}>{{ label }}</button>
+        </form>
+      {% endfor %}
+      <form method="post" action="/ui/run/speed">
+        <label for="run-speed">Running speed</label>
+        <select id="run-speed" name="speed" {% if not controls.speed %}disabled{% endif %}>
+          {% for speed in (0.5, 1, 2, 4, 10) %}
+            <option value="{{ speed }}" {% if managed and managed.runner.speed == speed %}selected{% endif %}>{{ speed }}x</option>
+          {% endfor %}
+        </select>
+        <button type="submit" {% if not controls.speed %}disabled{% endif %}>Set speed</button>
+      </form>
+    </div>
+    {% if managed %}
+      <dl class="run-summary">
+        <div><dt>Run</dt><dd>{{ session.run_id }}</dd></div>
+        <div><dt>Tick</dt><dd>{{ managed.runner.clock.tick }}</dd></div>
+        <div><dt>Simulation time</dt><dd>{{ "%.1f"|format(managed.runner.clock.simulation_time) }}s</dd></div>
+        <div><dt>Cognition</dt><dd>{{ managed.runner.cognition_phase.value }}</dd></div>
+      </dl>
+    {% endif %}
+  </section>
+
+  <section class="panel world-panel {% if request.query_params.get('focus') == 'world' %}focused{% endif %}" aria-labelledby="world-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="world-heading">World</h2>
+        <p>{{ world_view.title if world_view else "Load a scenario to preview its world" }}</p>
+      </div>
+      <form class="view-controls" method="post" action="/ui/view">
+        <label for="view-level">Scale</label>
+        <select id="view-level" name="view_level">
+          {% for level in ("auto", "building", "neighborhood", "city") %}
+            <option value="{{ level }}" {% if session.view_level == level %}selected{% endif %}>{{ level|title }}</option>
+          {% endfor %}
+        </select>
+        <button name="zoom_action" value="out" aria-label="Zoom out">−</button>
+        <output aria-label="Zoom level">{{ (session.zoom * 100)|round|int }}%</output>
+        <button name="zoom_action" value="in" aria-label="Zoom in">+</button>
+        <button name="zoom_action" value="fit">Fit</button>
+        {% if request.query_params.get("focus") == "world" %}
+          <a class="button-link" href="/ui/#world-heading">Exit focus</a>
+        {% else %}
+          <a class="button-link" href="/ui/?focus=world#world-heading">Focus map</a>
+        {% endif %}
+        <label class="check">
+          <input type="checkbox" name="live_refresh" {% if session.live_refresh %}checked{% endif %}>
+          Live refresh
+        </label>
+        <button type="submit">Apply view</button>
+      </form>
+    </header>
+    <div class="world-scroll">
+      {% if world_view %}
+        <svg
+          class="world-map world-map--{{ world_view.kind }}"
+          viewBox="{{ world_view.view_box }}"
+          style="width: {{ world_view.display_width }}px"
+          role="img"
+          aria-label="{{ world_view.title }}"
+        >
+          <title>{{ world_view.title }}</title>
+          {% if world_view.kind == "grid" %}
+            <rect class="map-background" x="0" y="0" width="{{ world_view.width }}" height="{{ world_view.height }}"/>
+            {% for zone in world_view.zones %}
+              {% for tile in zone.tiles %}
+                <rect class="zone zone--{{ zone.type|lower }}" x="{{ tile.x }}" y="{{ tile.y }}" width="1" height="1">
+                  <title>{{ zone.name }}</title>
+                </rect>
+              {% endfor %}
+            {% endfor %}
+            {% for point in world_view.blocked %}
+              <rect class="blocked" x="{{ point.x }}" y="{{ point.y }}" width="1" height="1"><title>Blocked</title></rect>
+            {% endfor %}
+            {% for path in world_view.paths %}
+              <polyline class="path" points="{{ path }}"/>
+            {% endfor %}
+            {% for station in world_view.stations %}
+              <rect class="station" x="{{ station.position.x + 0.22 }}" y="{{ station.position.y + 0.22 }}" width=".56" height=".56">
+                <title>{{ station.name }} · {{ (station.get("actions") or station.get("supported_actions") or [])|join(", ") }}</title>
+              </rect>
+            {% endfor %}
+            {% for agent in world_view.agents %}
+              {% if agent.destination %}
+                <circle class="destination-marker" cx="{{ agent.destination.x + 0.5 }}" cy="{{ agent.destination.y + 0.5 }}" r=".16"><title>{{ agent.name }} destination</title></circle>
+              {% endif %}
+              <a href="/ui/?selected={{ agent.id }}">
+                <circle class="character-marker {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %} {% if agent.system1 and agent.system1 != 'NORMAL' %}critical{% endif %}" cx="{{ agent.x + 0.5 }}" cy="{{ agent.y + 0.5 }}" r=".25">
+                  <title>{{ agent.name }} at {{ agent.x }}, {{ agent.y }}</title>
+                </circle>
+                {% if "names" in session.overlays %}<text class="map-label" x="{{ agent.x + 0.5 }}" y="{{ agent.y + 0.12 }}">{{ agent.name }}</text>{% endif %}
+                {% if "vision" in session.overlays and agent.vision_count %}<text class="sensor-label" x="{{ agent.x + 0.78 }}" y="{{ agent.y + 0.45 }}">V{{ agent.vision_count }}</text>{% endif %}
+                {% if "hearing" in session.overlays and agent.heard %}<text class="sensor-label" x="{{ agent.x + 0.78 }}" y="{{ agent.y + 0.7 }}">H</text>{% endif %}
+                {% if "speech" in session.overlays and agent.speech %}<text class="speech-label" x="{{ agent.x + 0.5 }}" y="{{ agent.y - 0.08 }}">{{ agent.speech[:36] }}</text>{% endif %}
+              </a>
+            {% endfor %}
+            {% for x in range(world_view.width + 1) %}<line class="grid-line" x1="{{ x }}" y1="0" x2="{{ x }}" y2="{{ world_view.height }}"/>{% endfor %}
+            {% for y in range(world_view.height + 1) %}<line class="grid-line" x1="0" y1="{{ y }}" x2="{{ world_view.width }}" y2="{{ y }}"/>{% endfor %}
+          {% else %}
+            <rect class="map-background" x="0" y="0" width="1000" height="650"/>
+            {% for edge in world_view.edges %}
+              <polyline class="transport-edge" points="{{ edge.points }}"><title>{{ edge.id }}</title></polyline>
+            {% endfor %}
+            {% for building in world_view.buildings %}
+              <rect class="building" x="{{ building.px - 10 }}" y="{{ building.py - 10 }}" width="20" height="20">
+                <title>{{ building.name }}</title>
+              </rect>
+              {% if "names" in session.overlays %}<text class="city-label" x="{{ building.px + 13 }}" y="{{ building.py + 4 }}">{{ building.name }}</text>{% endif %}
+            {% endfor %}
+            {% for place in world_view.places %}
+              <circle class="outdoor-place" cx="{{ place.px }}" cy="{{ place.py }}" r="7"><title>{{ place.name }}</title></circle>
+            {% endfor %}
+            {% for agent in world_view.agents %}
+              <circle class="city-character {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %}" cx="{{ agent.px }}" cy="{{ agent.py }}" r="9">
+                <title>{{ agent.name }}</title>
+              </circle>
+              {% if "names" in session.overlays %}<text class="city-label character-label" x="{{ agent.px + 12 }}" y="{{ agent.py - 10 }}">{{ agent.name }}</text>{% endif %}
+              {% if "speech" in session.overlays and agent.speech %}<text class="city-speech-label" x="{{ agent.px }}" y="{{ agent.py - 18 }}">{{ agent.speech[:48] }}</text>{% endif %}
+            {% endfor %}
+            {% for vehicle in world_view.vehicles %}
+              <rect class="vehicle-marker" x="{{ vehicle.px - 7 }}" y="{{ vehicle.py - 4 }}" width="14" height="8"><title>{{ vehicle.name }}</title></rect>
+            {% endfor %}
+          {% endif %}
+        </svg>
+      {% else %}
+        <p class="empty-state">No world is available.</p>
+      {% endif %}
+    </div>
+    <form class="overlay-controls" method="post" action="/ui/view">
+      <input type="hidden" name="view_level" value="{{ session.view_level }}">
+      <input type="hidden" name="overlays_present" value="yes">
+      {% for overlay, label in (("names", "Names"), ("paths", "Paths"), ("speech", "Speech"), ("vision", "Vision"), ("hearing", "Hearing"), ("visibility", "Selected observer visibility"), ("destinations", "Debug destinations")) %}
+        <label class="check"><input type="checkbox" name="overlays" value="{{ overlay }}" {% if overlay in session.overlays %}checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+      <label class="check"><input type="checkbox" name="live_refresh" {% if session.live_refresh %}checked{% endif %}> Live refresh</label>
+      <button type="submit">Apply overlays</button>
+    </form>
+  </section>
+
+  <aside class="panel inspector" aria-labelledby="inspector-heading">
+    <header class="panel__header">
+      <div><h2 id="inspector-heading">Character inspector</h2><p>Omniscient operator telemetry</p></div>
+    </header>
+    <form class="agent-picker" method="post" action="/ui/view">
+      <label for="selected-agent">Character</label>
+      <select id="selected-agent" name="selected_agent" {% if not agents %}disabled{% endif %}>
+        {% for agent in agents %}
+          <option value="{{ agent.id }}" {% if agent.id == session.selected_agent_id %}selected{% endif %}>{{ agent.character_profile.display_name if agent.character_profile else agent.id }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="view_level" value="{{ session.view_level }}">
+      <label class="check"><input type="checkbox" name="live_refresh" {% if session.live_refresh %}checked{% endif %}> Live refresh</label>
+      <button type="submit" {% if not agents %}disabled{% endif %}>Inspect</button>
+    </form>
+    {% if selected_agent %}
+      {% set homeostasis = selected_agent.get("homeostasis", {}) %}
+      <div class="gauges">
+        {% for vital in ("satiety", "energy", "stress") %}
+          <label>
+            <span>{{ vital|title }} <strong>{{ "%.1f"|format(homeostasis.get(vital, 0)) }}</strong></span>
+            <progress max="100" value="{{ percent(homeostasis.get(vital, 0)) }}">{{ percent(homeostasis.get(vital, 0)) }}%</progress>
+          </label>
+        {% endfor %}
+      </div>
+      <dl class="facts">
+        <div><dt>Activity</dt><dd>{{ selected_agent.get("activity", "—") }}</dd></div>
+        <div><dt>System 1</dt><dd>{{ selected_agent.get("system1", {}).get("state", "—") }}</dd></div>
+        <div><dt>Drive</dt><dd>{{ selected_agent.get("system1", {}).get("active_drive") or "none" }}</dd></div>
+        <div><dt>Destination</dt><dd>{{ destination(selected_agent) }}</dd></div>
+        <div><dt>Memories</dt><dd>{{ selected_agent.get("memory", {}).get("count", 0) }}</dd></div>
+        <div><dt>Visible now</dt><dd>{{ selected_agent.get("perception", {}).get("visible_now", [])|join(", ") or "nobody" }}</dd></div>
+      </dl>
+      <section class="inspector-section">
+        <h3>System 2 plan</h3>
+        <ol>
+          {% for row in plan_rows(selected_agent) %}<li>{{ row }}</li>{% else %}<li>No plan available</li>{% endfor %}
+        </ol>
+      </section>
+      <details class="inspector-section">
+        <summary>Character profile</summary>
+        <pre>{{ json_pretty(selected_agent.get("character_profile", {}).get("data", {})) }}</pre>
+      </details>
+      <section class="inspector-section">
+        <h3>Recent perceptions</h3>
+        <ol>
+          {% for row in recent_perceptions %}<li>{{ row }}</li>{% else %}<li>No recent observations</li>{% endfor %}
+        </ol>
+      </section>
+      <form class="vitals-form" method="post" action="/ui/run/vitals">
+        <fieldset {% if not controls.vitals %}disabled{% endif %}>
+          <legend>Controlled vital mutation</legend>
+          {% for vital in ("satiety", "energy", "stress") %}
+            <label>{{ vital|title }} <input name="{{ vital }}" type="number" min="0" max="100" step="0.1"></label>
+          {% endfor %}
+          <button type="submit">Apply supplied values</button>
+        </fieldset>
+      </form>
+    {% else %}
+      <p class="empty-state">Start a run to inspect characters.</p>
+    {% endif %}
+  </aside>
+
+  <section class="panel events-panel {% if request.query_params.get('focus') == 'events' %}focused{% endif %}" aria-labelledby="events-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="events-heading">Event history</h2>
+        <p>{{ event_total }} events · {{ event_shown }} shown</p>
+      </div>
+      <div class="header-actions">
+        {% if request.query_params.get("focus") == "events" %}
+          <a class="button-link" href="/ui/#events-heading">Exit expanded log</a>
+        {% else %}
+          <a class="button-link" href="/ui/?focus=events#events-heading">Expand log</a>
+        {% endif %}
+        <form method="post" action="/ui/events/clear"><button type="submit">Clear view</button></form>
+      </div>
+    </header>
+    <form class="event-tools" method="get" action="/ui/">
+      <label>Search <input name="search" type="search" value="{{ event_search }}"></label>
+      <label>Category
+        <select name="filter">
+          {% for value, label in (("all", "All events"), ("system1", "System 1"), ("actions", "Plans and actions"), ("dialogue", "Speech and dialogue"), ("cognition", "Cognition and tools"), ("perception", "Perception"), ("travel", "Travel"), ("errors", "Failures"), ("ui", "Simulation lifecycle")) %}
+            <option value="{{ value }}" {% if event_filter == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Order
+        <select name="order">
+          <option value="newest" {% if event_order == "newest" %}selected{% endif %}>Newest first</option>
+          <option value="oldest" {% if event_order == "oldest" %}selected{% endif %}>Oldest first</option>
+        </select>
+      </label>
+      <button type="submit">Apply filters</button>
+    </form>
+    <ol class="event-log" aria-live="polite">
+      {% for event in events %}
+        <li class="{% if 'failed' in event.event_type or 'error' in event.event_type or 'blocked' in event.event_type or 'rejected' in event.event_type %}event-error{% elif event.event_type.startswith('system1.') %}event-system1{% endif %}">
+          <a href="?filter={{ event_filter }}&order={{ event_order }}&search={{ event_search|urlencode }}&event={{ event.event_id|urlencode }}#event-detail">
+            <span>tick {{ event.simulation_tick }}</span>
+            <strong>{{ event.event_type }}</strong>
+            <span>{{ event_summary(event) }}</span>
+          </a>
+        </li>
+      {% else %}
+        <li class="empty-state">No matching events.</li>
+      {% endfor %}
+    </ol>
+    {% if has_older_events %}
+      <p class="load-more">
+        <a class="button-link" href="?filter={{ event_filter }}&order={{ event_order }}&search={{ event_search|urlencode }}&limit={{ event_limit + 500 }}#events-heading">Load older events</a>
+      </p>
+    {% endif %}
+    {% if selected_event %}
+      <article id="event-detail" class="event-detail" aria-labelledby="event-detail-heading">
+        <header>
+          <div>
+            <h3 id="event-detail-heading">{{ selected_event.event_type }}</h3>
+            <p>tick {{ selected_event.simulation_tick }} · {{ "%.1f"|format(selected_event.simulation_time) }}s · {{ selected_event.event_id }}</p>
+          </div>
+          <a href="/ui/">Close detail</a>
+        </header>
+        <details>
+          <summary>Readable text</summary>
+          <pre id="event-detail-text">{{ selected_event.payload.get("text") or event_summary(selected_event) }}</pre>
+        </details>
+        <pre id="event-detail-json">{{ json_pretty(selected_event.to_dict()) }}</pre>
+        <div class="event-actions">
+          <button type="button" data-copy-target="#event-detail-text">Copy text</button>
+          <button type="button" data-copy-target="#event-detail-json">Copy event JSON</button>
+          <a download="{{ selected_event.event_id }}.json" href="data:application/json;charset=utf-8,{{ json_pretty(selected_event.to_dict())|urlencode }}">Download JSON</a>
+        </div>
+      </article>
+    {% endif %}
+  </section>
+
+  <section class="panel transcript-panel" aria-labelledby="transcript-heading">
+    <header class="panel__header">
+      <div><h2 id="transcript-heading">Conversation transcript</h2><p>Delivered speech and legacy dialogue</p></div>
+    </header>
+    <ol class="transcript">
+      {% for row in transcript %}
+        <li><p>{{ row.meta }}</p><strong>{{ row.speaker }}</strong><blockquote>{{ row.text }}</blockquote></li>
+      {% else %}
+        <li class="empty-state">No speech yet.</li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  {% if managed %}
+    <section class="panel dataset-panel" aria-labelledby="dataset-heading">
+      <header class="panel__header"><h2 id="dataset-heading">Research data</h2></header>
+      <p>Download the versioned JSONL dataset for this run.</p>
+      <a class="button-link" href="/simulation/runs/{{ session.run_id }}/export">Download run dataset</a>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

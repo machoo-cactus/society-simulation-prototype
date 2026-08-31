@@ -1,9 +1,15 @@
 # UI Architecture Reliability and Readability Report
 
-**Status:** Initial rework implemented  
-**Date:** 2026-08-30  
+**Status:** Superseded by the server-rendered UI rewrite
+**Date:** 2026-08-30
 **Scope:** Browser state management, simulation controls, telemetry delivery,
 event recovery, dialogue presentation, and visual sensing indicators
+
+> Historical design record. The native ES-module architecture described below
+> was removed on 2026-08-31. The implemented UI now uses Python routes,
+> server-rendered accessible HTML/SVG, direct form controls, and Playwright
+> browser verification. See `docs/UI_TESTING.md` and the README for current
+> guidance.
 
 ## 1. Executive assessment
 

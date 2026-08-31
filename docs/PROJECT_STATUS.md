@@ -20,7 +20,8 @@ and reproducible SQLite/JSONL datasets.
 - Global cognition barriers by default, with explicit background compatibility.
 - Reusable `human-v1` character files and browser/API/CLI integration.
 - Server-rendered accessible HTML/SVG operator console with direct form
-  controls and minimal clipboard-only JavaScript.
+  controls, targeted fragment refresh, preserved interaction state, and
+  progressively enhanced map panning and zoom.
 - Python Playwright browser workflows using ARIA roles and isolated temporary
   data directories.
 - Linux CI covering tests, Chromium UI behavior, Ruff, strict mypy, a CLI smoke

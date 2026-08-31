@@ -147,7 +147,13 @@ stage0-sim run scenarios/homeostasis.json --ticks 60 --realtime --speed 4
 stage0-sim run scenarios/real-llm-tool-agent.json \
   --characters-dir path/to/characters --ticks 30
 
-# Migrate an older scenario containing an inline character catalog.
+# Override a scenario slot's optional default character.
+stage0-sim run scenarios/real-llm-tool-agent.json \
+  --character agent-001=alex-chen \
+  --character agent-002=jordan-lee \
+  --ticks 30
+
+# Migrate an older embedded-profile scenario to slots and character files.
 stage0-sim characters extract scenarios/legacy.json \
   --directory characters --write
 ```
@@ -163,8 +169,11 @@ It is intentionally Python-rendered, accessible HTML and SVG:
 - no separate frontend server or Node.js build;
 - no client-side application state or duplicated simulation logic;
 - lifecycle controls are ordinary forms bound directly to Python routes;
-- live runs refresh from authoritative server snapshots;
-- one tiny progressive-enhancement script provides clipboard access only.
+- server-rendered fragments update only the panels affected by a control;
+- live runs refresh dynamic regions without reloading the document or
+  discarding focused input, map position, or open disclosures;
+- progressive enhancement provides fragment transport, clipboard access, and
+  direct map manipulation while native forms remain the no-JavaScript fallback.
 
 From the UI you can:
 
@@ -180,12 +189,26 @@ From the UI you can:
 - view character names, current vision, hearing pulses, speech bubbles, and a
   delivered-speech transcript;
 - follow characters between building and city views with AUTO/MANUAL scale,
-  scroll/pan, zoom, focus mode, vehicle progress, and travel events;
+  mouse or touch drag panning, cursor-anchored wheel zoom, accessible zoom
+  buttons, focus mode, vehicle progress, and travel events;
 - download the run's versioned JSONL dataset.
 
 The Characters page provides durable create, import, duplicate, rename, edit,
 download, and delete operations for the JSON character library. Character
 editing is independent from loading or running a scenario.
+
+The Scenarios page at `/ui/scenarios/` provides the same durable library
+operations plus a complete structured editor for grid and sparse-city
+definitions, settings, profiles, entities, and typed entity components.
+Repeated records use ordinary add, remove, and reorder form submissions, so
+the workflow remains usable without JavaScript. Resource IDs name files and
+remain separate from the portable scenario `name`.
+
+**Save scenario** writes only the hash-protected library file. **Validate and
+stage** validates the current editor draft, including unsaved changes, and
+replaces the Simulation-page preview. It does not save implicitly or start a
+run. The Simulation page can also explicitly stage a selected saved scenario;
+the bundled example and JSON upload flows remain available.
 
 The UI is tested as an actual browser application with Python Playwright and
 ARIA role locators. See [UI testing for coding agents](docs/UI_TESTING.md) for
@@ -252,8 +275,9 @@ The public API provides the programmatic workflow equivalent to the operator
 UI. The server-rendered UI calls the same application services directly rather
 than duplicating run state in the browser:
 
-1. Manage reusable files through `GET/POST /characters` and
-   `GET/PUT/DELETE /characters/{character_id}`.
+1. Manage reusable character files through `GET/POST /characters` and
+   `GET/PUT/DELETE /characters/{character_id}`, and reusable scenario files
+   through `GET/POST /scenarios` and `GET/PUT/DELETE /scenarios/{scenario_id}`.
 2. `POST /simulation/scenarios` with a scenario document. Character references
    are resolved and frozen at this boundary.
 3. `POST /simulation/runs` with the returned `scenario_id`.
@@ -338,6 +362,7 @@ Settings use `STAGE0_` environment variables and may be placed in `.env`:
 | `STAGE0_DATA_DIRECTORY` | `data/runs` | API dataset directory |
 | `STAGE0_DATASET_DATABASE` | `stage0.sqlite3` | API SQLite filename |
 | `STAGE0_CHARACTER_DIRECTORY` | `characters` | Reusable character JSON directory |
+| `STAGE0_SCENARIO_DIRECTORY` | `scenarios` | Reusable scenario JSON directory |
 | `STAGE0_LLM_PROVIDER` | unset | Set to `openai-compatible` to enable a real model |
 | `STAGE0_LLM_BASE_URL` | unset | OpenAI-compatible API root, including `/v1` |
 | `STAGE0_LLM_MODEL` | unset | Provider model identifier |

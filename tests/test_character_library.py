@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
@@ -31,7 +32,7 @@ def character(character_id: str, display_name: str) -> CharacterDefinition:
             "schema_version": 1,
             "id": character_id,
             "identity": {"display_name": display_name},
-            "motivations": {"goals": ["Finish the work"]},
+            "motivations": {"values": ["Finish commitments"]},
         }
     )
 
@@ -46,9 +47,11 @@ def external_scenario(character_id: str) -> ScenarioDefinition:
                     "id": "agent-001",
                     "components": {
                         "position": {"x": 0, "y": 0},
-                        "character_profile": {
-                            "character_id": character_id
+                        "character_slot": {
+                            "label": "Assigned character",
+                            "default_character_id": character_id,
                         },
+                        "planner": {"daily_goals": ["Finish the work"]},
                     },
                 }
             ],
@@ -110,6 +113,21 @@ def test_character_library_rejects_unsafe_or_mismatched_files(
         library.get("wrong")
 
 
+def test_character_definition_rejects_scenario_owned_state() -> None:
+    with pytest.raises(ValidationError, match="scenario-owned fields"):
+        CharacterDefinition.model_validate(
+            {
+                "schema_version": 1,
+                "id": "alex",
+                "identity": {"display_name": "Alex"},
+                "motivations": {
+                    "values": ["accuracy"],
+                    "goals": ["Finish this scenario"],
+                },
+            }
+        )
+
+
 def test_prepared_scenario_freezes_character_for_later_run(
     tmp_path: Path,
 ) -> None:
@@ -136,6 +154,9 @@ def test_prepared_scenario_freezes_character_for_later_run(
         await manager.close()
 
         assert profile.display_name == "Original Alex"
+        assert manifest["character_assignments"] == {
+            "agent-001": "alex"
+        }
         resolved = manifest["resolved_characters"]
         assert isinstance(resolved, dict)
         data = resolved["alex"]
@@ -287,10 +308,9 @@ def test_extensible_character_content_round_trips_and_freezes(
     changed = latest.model_copy(deep=True)
     changed.experimental["spatial_reasoning"]["style"] = "route-oriented"
     library.update("alex", changed, character_content_hash(latest))
-    frozen_character = prepared.characters["alex"]
     runner = create_runner(
         prepared.scenario,
-        resolved_characters={"alex": frozen_character.profile()},
+        resolved_characters=prepared.runtime_characters(),
     )
     dossier = runner.registry.get_resource(InformationStore).get(
         character_dossier_document_id("agent-001")
@@ -303,6 +323,97 @@ def test_extensible_character_content_round_trips_and_freezes(
     )
     assert "Spatial Reasoning" in profile.description
     assert len(profile.content_hash) == 64
+
+
+def test_character_slot_assignments_apply_defaults_overrides_and_constraints(
+    tmp_path: Path,
+) -> None:
+    library = FileSystemCharacterLibrary(tmp_path / "characters")
+    library.create(
+        CharacterDefinition.model_validate(
+            {
+                "schema_version": 1,
+                "id": "older-woman",
+                "identity": {
+                    "display_name": "Older Woman",
+                    "age": 42,
+                    "gender": "Woman",
+                },
+            }
+        )
+    )
+    library.create(
+        CharacterDefinition.model_validate(
+            {
+                "schema_version": 1,
+                "id": "younger-man",
+                "identity": {
+                    "display_name": "Younger Man",
+                    "age": 25,
+                    "gender": "Man",
+                },
+            }
+        )
+    )
+    scenario = ScenarioDefinition.model_validate(
+        {
+            "name": "constrained-slot",
+            "entities": [
+                {
+                    "id": "agent-001",
+                    "components": {
+                        "character_slot": {
+                            "label": "Experienced operator",
+                            "default_character_id": "older-woman",
+                            "constraints": {
+                                "minimum_age": 30,
+                                "maximum_age": 42,
+                                "allowed_genders": ["woman"],
+                                "allowed_template_ids": ["human-v1"],
+                            },
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    prepared = prepare_scenario(scenario, library)
+    assert prepared.assignments == {"agent-001": "older-woman"}
+
+    with pytest.raises(
+        CharacterLibraryError,
+        match="ineligible.*age 25 is below minimum 30.*gender 'Man' is not allowed",
+    ):
+        prepare_scenario(
+            scenario,
+            library,
+            {"agent-001": "younger-man"},
+        )
+
+
+def test_character_slot_rejects_missing_and_unknown_assignments(
+    tmp_path: Path,
+) -> None:
+    library = FileSystemCharacterLibrary(tmp_path / "characters")
+    scenario = ScenarioDefinition.model_validate(
+        {
+            "name": "unassigned-slot",
+            "entities": [
+                {
+                    "id": "agent-001",
+                    "components": {
+                        "character_slot": {"label": "Open role"}
+                    },
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(CharacterLibraryError, match="has no assignment"):
+        prepare_scenario(scenario, library)
+    with pytest.raises(CharacterLibraryError, match="unknown character slots"):
+        prepare_scenario(scenario, library, {"not-a-slot": "alex"})
 
 
 def test_character_extract_cli_is_dry_run_first(
@@ -361,7 +472,10 @@ def test_character_extract_cli_is_dry_run_first(
     ) == 0
     migrated = json.loads(output.read_text(encoding="utf-8"))
     assert "character_profiles" not in migrated
-    assert migrated["entities"][0]["components"]["character_profile"] == {
-        "character_id": "alex"
+    assert migrated["entities"][0]["components"]["character_slot"] == {
+        "label": "Alex",
+        "briefing": "",
+        "default_character_id": "alex",
+        "constraints": {},
     }
     assert (character_directory / "alex.json").is_file()

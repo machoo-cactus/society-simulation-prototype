@@ -17,6 +17,8 @@ from stage0_sim.application.characters import (
     CharacterDefinition,
     CharacterLibrary,
     CharacterLibraryError,
+    CharacterSummary,
+    character_constraint_violations,
     character_content_hash,
 )
 from stage0_sim.application.manager import (
@@ -27,10 +29,12 @@ from stage0_sim.application.manager import (
 )
 from stage0_sim.application.runner import RunnerStatus
 from stage0_sim.application.scenario import (
+    CharacterSlotDefinition,
     CityWorldDefinition,
     ScenarioDefinition,
     WorldDefinition,
 )
+from stage0_sim.application.scenarios import ScenarioLibrary, ScenarioLibraryError
 from stage0_sim.application.telemetry import (
     build_agent_snapshot,
     build_ui_bootstrap,
@@ -113,10 +117,8 @@ CHARACTER_SECTIONS: tuple[dict[str, Any], ...] = (
         "title": "Motivations",
         "fields": (
             ("values", "Values", "list", False),
-            ("goals", "Goals", "list", False),
             ("fears", "Fears", "list", False),
             ("needs", "Needs", "list", False),
-            ("current_priorities", "Current priorities", "list", False),
         ),
     },
     {
@@ -147,6 +149,7 @@ class OperatorSession:
     scenario_id: str | None = None
     scenario_source: str = ""
     scenario_warnings: tuple[str, ...] = ()
+    character_assignments: dict[str, str] = field(default_factory=dict)
     run_id: str | None = None
     selected_agent_id: str | None = None
     view_level: str = "auto"
@@ -197,6 +200,10 @@ def _library(request: Request) -> CharacterLibrary:
     return cast(CharacterLibrary, request.app.state.character_library)
 
 
+def _scenario_library(request: Request) -> ScenarioLibrary:
+    return cast(ScenarioLibrary, request.app.state.scenario_library)
+
+
 def _session(request: Request) -> tuple[str, OperatorSession]:
     store = cast(OperatorSessionStore, request.app.state.operator_sessions)
     return store.get(request.cookies.get(SESSION_COOKIE))
@@ -216,9 +223,7 @@ def _with_session(response: Response, session_id: str) -> Response:
     return response
 
 
-def _managed_run(
-    manager: SimulationManager, session: OperatorSession
-) -> ManagedRun | None:
+def _managed_run(manager: SimulationManager, session: OperatorSession) -> ManagedRun | None:
     if session.run_id is None:
         return None
     try:
@@ -241,17 +246,19 @@ def _stage_scenario(
     session: OperatorSession,
     scenario: ScenarioDefinition,
     source: str,
+    character_assignments: dict[str, str] | None = None,
 ) -> None:
-    scenario_id = manager.add_scenario(scenario)
-    prepared = manager.get_scenario(scenario_id)
     session.scenario = scenario
-    session.scenario_id = scenario_id
+    session.scenario_id = None
     session.scenario_source = source
-    session.scenario_warnings = prepared.warnings
+    session.character_assignments = {}
+    scenario_id = manager.add_scenario(scenario, character_assignments)
+    prepared = manager.get_scenario(scenario_id)
+    session.scenario_id = scenario_id
+    session.scenario_warnings = ()
+    session.character_assignments = dict(prepared.assignments)
     session.selected_agent_id = scenario.entities[0].id if scenario.entities else None
-    session.notify(
-        f"{scenario.name} is validated and staged. Starting remains a separate action."
-    )
+    session.notify(f"{scenario.name} is validated and staged. Starting remains a separate action.")
 
 
 @router.get("/", response_class=HTMLResponse, name="operator")
@@ -278,25 +285,17 @@ async def operator_page(request: Request) -> Response:
         status = managed.runner.status.value
     session.event_start_index = min(session.event_start_index, len(all_events))
     events = all_events[session.event_start_index :]
-    if agents and session.selected_agent_id not in {
-        str(agent["id"]) for agent in agents
-    }:
+    if agents and session.selected_agent_id not in {str(agent["id"]) for agent in agents}:
         session.selected_agent_id = str(agents[0]["id"])
     selected_agent = next(
-        (
-            agent
-            for agent in agents
-            if agent["id"] == session.selected_agent_id
-        ),
+        (agent for agent in agents if agent["id"] == session.selected_agent_id),
         None,
     )
     event_filter = request.query_params.get("filter", "all")
     event_search = request.query_params.get("search", "").strip().casefold()
     event_order = request.query_params.get("order", "newest")
     try:
-        event_limit = max(
-            100, min(5000, int(request.query_params.get("limit", "500")))
-        )
+        event_limit = max(100, min(5000, int(request.query_params.get("limit", "500"))))
     except ValueError:
         event_limit = 500
     selected_event_id = request.query_params.get("event")
@@ -308,6 +307,14 @@ async def operator_page(request: Request) -> Response:
         (event for event in events if event.event_id == selected_event_id),
         None,
     )
+    try:
+        saved_scenarios = _scenario_library(request).list()
+    except ScenarioLibraryError as library_error:
+        session.notify(
+            f"Could not list saved scenarios: {library_error}",
+            error=True,
+        )
+        saved_scenarios = ()
     message, error = session.consume_notice()
     response = templates.TemplateResponse(
         request,
@@ -315,7 +322,12 @@ async def operator_page(request: Request) -> Response:
         {
             "session": session,
             "scenario": session.scenario,
+            "saved_scenarios": saved_scenarios,
             "characters": _library(request).list(),
+            "slot_characters": _slot_character_options(
+                session.scenario,
+                _library(request),
+            ),
             "managed": managed,
             "snapshot": snapshot,
             "bootstrap": bootstrap,
@@ -341,9 +353,7 @@ async def operator_page(request: Request) -> Response:
             "event_order": event_order,
             "selected_event": selected_event,
             "transcript": _transcript(events, agents),
-            "recent_perceptions": _recent_perceptions(
-                events, session.selected_agent_id, agents
-            ),
+            "recent_perceptions": _recent_perceptions(events, session.selected_agent_id, agents),
             "message": message,
             "error": error,
             "refresh_url": str(request.url),
@@ -381,11 +391,7 @@ async def load_example(request: Request) -> Response:
         )
         _stage_scenario(_manager(request), session, scenario, "bundled example")
     except (OSError, ValidationError, ValueError) as error:
-        message = (
-            _validation_message(error)
-            if isinstance(error, ValidationError)
-            else str(error)
-        )
+        message = _validation_message(error) if isinstance(error, ValidationError) else str(error)
         session.notify(f"Could not load example: {message}", error=True)
     return _with_session(_redirect(), session_id)
 
@@ -393,7 +399,7 @@ async def load_example(request: Request) -> Response:
 @router.post("/scenario/upload")
 async def upload_scenario(request: Request) -> Response:
     session_id, session = _session(request)
-    form = await request.form()
+    form = await request.form(max_part_size=MAX_UPLOAD_BYTES + 1)
     upload = form.get("scenario")
     if not isinstance(upload, UploadFile) or not upload.filename:
         session.notify("Choose a scenario JSON file.", error=True)
@@ -411,9 +417,7 @@ async def upload_scenario(request: Request) -> Response:
             upload.filename,
         )
     except ValidationError as error:
-        session.notify(
-            f"Scenario is invalid: {_validation_message(error)}", error=True
-        )
+        session.notify(f"Scenario is invalid: {_validation_message(error)}", error=True)
     except ValueError as error:
         session.notify(f"Scenario is invalid: {error}", error=True)
     return _with_session(_redirect(), session_id)
@@ -426,33 +430,51 @@ async def assign_characters(request: Request) -> Response:
         session.notify("Load a scenario before assigning characters.", error=True)
         return _with_session(_redirect(), session_id)
     form = await request.form()
-    raw = session.scenario.model_dump(mode="python")
     try:
-        entities = cast(list[dict[str, Any]], raw["entities"])
-        for entity in entities:
-            components = cast(dict[str, Any], entity["components"])
-            if "character_profile" not in components:
+        assignments: dict[str, str] = {}
+        for entity in session.scenario.entities:
+            if "character_slot" not in entity.components:
                 continue
-            character_id = str(form.get(f"character.{entity['id']}", "")).strip()
+            character_id = str(form.get(f"character.{entity.id}", "")).strip()
             if not character_id:
-                raise ValueError(f"Select a character for {entity['id']}")
-            components["character_profile"] = {"character_id": character_id}
-        scenario = ScenarioDefinition.model_validate(raw)
+                raise ValueError(f"Select a character for {entity.id}")
+            assignments[entity.id] = character_id
         _stage_scenario(
             _manager(request),
             session,
-            scenario,
+            session.scenario,
             f"{session.scenario_source} with assigned characters",
+            assignments,
         )
         session.notify("Character assignments were validated and staged.")
     except (ValidationError, ValueError) as error:
-        message = (
-            _validation_message(error)
-            if isinstance(error, ValidationError)
-            else str(error)
-        )
+        message = _validation_message(error) if isinstance(error, ValidationError) else str(error)
         session.notify(f"Assignment invalid: {message}", error=True)
     return _with_session(_redirect(), session_id)
+
+
+def _slot_character_options(
+    scenario: ScenarioDefinition | None,
+    library: CharacterLibrary,
+) -> dict[str, tuple[CharacterSummary, ...]]:
+    if scenario is None:
+        return {}
+    summaries = library.list()
+    options: dict[str, tuple[CharacterSummary, ...]] = {}
+    for entity in scenario.entities:
+        raw_slot = entity.components.get("character_slot")
+        if raw_slot is None:
+            continue
+        slot = CharacterSlotDefinition.model_validate(raw_slot)
+        options[entity.id] = tuple(
+            summary
+            for summary in summaries
+            if not character_constraint_violations(
+                library.get(summary.id),
+                slot,
+            )
+        )
+    return options
 
 
 @router.post("/run/start")
@@ -549,9 +571,7 @@ async def mutate_vitals(request: Request) -> Response:
             values[name] = value
         if not values:
             raise ValueError("supply at least one vital")
-        _manager(request).mutate_vitals(
-            session.run_id, session.selected_agent_id, values
-        )
+        _manager(request).mutate_vitals(session.run_id, session.selected_agent_id, values)
         session.notify(f"Updated vitals for {session.selected_agent_id}.")
     except (
         ValueError,
@@ -586,13 +606,28 @@ async def update_view(request: Request) -> Response:
     return _with_session(_redirect(), session_id)
 
 
+@router.post("/view/zoom")
+async def update_zoom(request: Request) -> Response:
+    session_id, session = _session(request)
+    form = await request.form()
+    try:
+        zoom = float(str(form.get("zoom", "")))
+        if not math.isfinite(zoom) or not 0.5 <= zoom <= 3.0:
+            raise ValueError("zoom must be between 0.5 and 3.0")
+    except ValueError as error:
+        return _with_session(
+            Response(str(error), status_code=400, media_type="text/plain"),
+            session_id,
+        )
+    session.zoom = zoom
+    return _with_session(Response(status_code=204), session_id)
+
+
 @router.post("/events/clear")
 async def clear_events(request: Request) -> Response:
     session_id, session = _session(request)
     managed = _managed_run(_manager(request), session)
-    session.event_start_index = (
-        len(managed.runner.events.events) if managed is not None else 0
-    )
+    session.event_start_index = len(managed.runner.events.events) if managed is not None else 0
     session.notify("Cleared the browser event and transcript view.")
     return _with_session(_redirect(), session_id)
 
@@ -607,9 +642,7 @@ async def character_library_page(request: Request) -> Response:
     summaries = list(library.list())
     if search:
         summaries = [
-            item
-            for item in summaries
-            if search in f"{item.id} {item.display_name}".casefold()
+            item for item in summaries if search in f"{item.id} {item.display_name}".casefold()
         ]
     selected: CharacterDefinition | None = None
     if creating:
@@ -628,9 +661,7 @@ async def character_library_page(request: Request) -> Response:
         {
             "characters": summaries,
             "selected": selected,
-            "selected_hash": (
-                character_content_hash(selected) if selected is not None else ""
-            ),
+            "selected_hash": (character_content_hash(selected) if selected is not None else ""),
             "sections": CHARACTER_SECTIONS,
             "field_values": _character_field_values(selected),
             "search": request.query_params.get("search", ""),
@@ -651,11 +682,7 @@ async def create_character(request: Request) -> Response:
         session.notify(f"Created {_character_display_name(character)}.")
         target = f"/ui/characters/?selected={quote(character.id)}"
     except (CharacterLibraryError, ValidationError, ValueError) as error:
-        message = (
-            _validation_message(error)
-            if isinstance(error, ValidationError)
-            else str(error)
-        )
+        message = _validation_message(error) if isinstance(error, ValidationError) else str(error)
         session.notify(f"Could not create character: {message}", error=True)
         target = "/ui/characters/"
     return _with_session(_redirect(target), session_id)
@@ -681,11 +708,7 @@ async def save_character(character_id: str, request: Request) -> Response:
         session.notify(f"Saved {_character_display_name(saved)}.")
         target = f"/ui/characters/?selected={quote(saved.id)}"
     except (CharacterLibraryError, ValidationError, ValueError) as error:
-        message = (
-            _validation_message(error)
-            if isinstance(error, ValidationError)
-            else str(error)
-        )
+        message = _validation_message(error) if isinstance(error, ValidationError) else str(error)
         session.notify(f"Could not save character: {message}", error=True)
         target = f"/ui/characters/?selected={quote(character_id)}"
     return _with_session(_redirect(target), session_id)
@@ -707,11 +730,7 @@ async def duplicate_character(character_id: str, request: Request) -> Response:
         session.notify(f"Duplicated {character_id} as {next_id}.")
         target = f"/ui/characters/?selected={quote(next_id)}"
     except (CharacterLibraryError, ValidationError) as error:
-        message = (
-            _validation_message(error)
-            if isinstance(error, ValidationError)
-            else str(error)
-        )
+        message = _validation_message(error) if isinstance(error, ValidationError) else str(error)
         session.notify(f"Could not duplicate character: {message}", error=True)
         target = f"/ui/characters/?selected={quote(character_id)}"
     return _with_session(_redirect(target), session_id)
@@ -724,9 +743,7 @@ async def delete_character(character_id: str, request: Request) -> Response:
     try:
         if form.get("confirm") != "yes":
             raise ValueError("confirm deletion before continuing")
-        _library(request).delete(
-            character_id, str(form.get("expected_hash", ""))
-        )
+        _library(request).delete(character_id, str(form.get("expected_hash", "")))
         session.notify(f"Deleted {character_id}.")
         target = "/ui/characters/"
     except (CharacterLibraryError, ValueError) as error:
@@ -753,11 +770,7 @@ async def import_character(request: Request) -> Response:
         session.notify(f"Imported {_character_display_name(character)}.")
         target = f"/ui/characters/?selected={quote(character.id)}"
     except (CharacterLibraryError, ValidationError, ValueError) as error:
-        message = (
-            _validation_message(error)
-            if isinstance(error, ValidationError)
-            else str(error)
-        )
+        message = _validation_message(error) if isinstance(error, ValidationError) else str(error)
         session.notify(f"Could not import character: {message}", error=True)
     return _with_session(_redirect(target), session_id)
 
@@ -769,16 +782,14 @@ async def download_character(character_id: str, request: Request) -> Response:
     except CharacterLibraryError as error:
         return Response(str(error), status_code=404, media_type="text/plain")
     payload = json.dumps(
-        character.model_dump(mode="json", exclude={"profile_ref"}),
+        character.model_dump(mode="json"),
         ensure_ascii=False,
         indent=2,
     )
     return Response(
         f"{payload}\n",
         media_type="application/json",
-        headers={
-            "Content-Disposition": f'attachment; filename="{character_id}.json"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{character_id}.json"'},
     )
 
 
@@ -797,9 +808,7 @@ def _character_from_form(
     else:
         raw = current.model_dump(mode="python")
         raw["id"] = str(form.get("id", current.id)).strip()
-        raw["template_id"] = str(
-            form.get("template_id", current.template_id)
-        ).strip()
+        raw["template_id"] = str(form.get("template_id", current.template_id)).strip()
     for section in CHARACTER_SECTIONS:
         section_id = cast(str, section["id"])
         values = cast(dict[str, Any], raw.setdefault(section_id, {}))
@@ -808,16 +817,12 @@ def _character_from_form(
         ):
             text = str(form.get(f"{section_id}.{field_name}", "")).strip()
             if field_type == "list":
-                values[field_name] = [
-                    line.strip() for line in text.splitlines() if line.strip()
-                ]
+                values[field_name] = [line.strip() for line in text.splitlines() if line.strip()]
             elif field_type == "number":
                 values[field_name] = int(text) if text else None
             else:
                 values[field_name] = text
-    raw["relationships"] = _parse_json_array(
-        str(form.get("relationships", "[]")), "Relationships"
-    )
+    raw["relationships"] = _parse_json_array(str(form.get("relationships", "[]")), "Relationships")
     raw["custom_sections"] = _parse_json_array(
         str(form.get("custom_sections", "[]")), "Custom sections"
     )
@@ -852,9 +857,7 @@ def _character_field_values(
                 values[f"{section_id}.{field_name}"] = "\n".join(value or [])
             elif value is not None:
                 values[f"{section_id}.{field_name}"] = str(value)
-    values["relationships"] = json.dumps(
-        raw.get("relationships", []), ensure_ascii=False, indent=2
-    )
+    values["relationships"] = json.dumps(raw.get("relationships", []), ensure_ascii=False, indent=2)
     values["custom_sections"] = json.dumps(
         raw.get("custom_sections", []), ensure_ascii=False, indent=2
     )
@@ -872,20 +875,13 @@ def _unique_character_id(library: CharacterLibrary, base: str) -> str:
 
 
 def _character_display_name(character: CharacterDefinition) -> str:
-    return (
-        character.identity.display_name
-        if character.identity is not None
-        else character.id
-    )
+    return character.identity.display_name if character.identity is not None else character.id
 
 
-def _control_availability(
-    managed: ManagedRun | None, scenario_id: str | None
-) -> dict[str, bool]:
+def _control_availability(managed: ManagedRun | None, scenario_id: str | None) -> dict[str, bool]:
     status = managed.runner.status if managed is not None else None
     return {
-        "start": scenario_id is not None
-        and (status is None or status is RunnerStatus.STOPPED),
+        "start": scenario_id is not None and (status is None or status is RunnerStatus.STOPPED),
         "pause": status is RunnerStatus.RUNNING,
         "resume": status is RunnerStatus.PAUSED,
         "step": status is RunnerStatus.PAUSED,
@@ -895,17 +891,13 @@ def _control_availability(
     }
 
 
-def _filter_events(
-    events: list[DomainEvent], event_filter: str, search: str
-) -> list[DomainEvent]:
+def _filter_events(events: list[DomainEvent], event_filter: str, search: str) -> list[DomainEvent]:
     pattern = EVENT_FILTERS.get(event_filter)
     filtered = []
     for event in events:
         if pattern is not None and pattern.search(event.event_type) is None:
             continue
-        if search and search not in json.dumps(
-            event.to_dict(), ensure_ascii=False
-        ).casefold():
+        if search and search not in json.dumps(event.to_dict(), ensure_ascii=False).casefold():
             continue
         filtered.append(event)
     return filtered
@@ -994,7 +986,7 @@ def _recent_perceptions(
             if isinstance(recipients, list) and agent_id in recipients:
                 speaker = names.get(event.agent_id or "", event.agent_id or "Unknown")
                 rows.append(
-                    f'tick {event.simulation_tick}: heard {speaker}: '
+                    f"tick {event.simulation_tick}: heard {speaker}: "
                     f'"{event.payload.get("text", "")}"'
                 )
         if len(rows) >= 20:
@@ -1025,34 +1017,26 @@ def _world_view(
         level = (
             "building"
             if selected_location.get("scale") == "BUILDING"
-            else "city" if city else "building"
+            else "city"
+            if city
+            else "building"
         )
     overlays = _world_overlays(agents, events, session.selected_agent_id)
     city_world_value = scenario.world if scenario is not None else None
-    if level == "building" and isinstance(
-        city_world_value, CityWorldDefinition
-    ):
+    if level == "building" and isinstance(city_world_value, CityWorldDefinition):
         city_world = city_world_value
         place_id = selected_location.get("place_id")
         building = next(
-            (
-                item
-                for item in city_world.buildings
-                if item.id == place_id
-            ),
+            (item for item in city_world.buildings if item.id == place_id),
             None,
         )
         if building is not None:
-            local_world = city_world.local_maps[building.local_map_id].model_dump(
-                mode="json"
-            )
+            local_world = city_world.local_maps[building.local_map_id].model_dump(mode="json")
             local_agents = [
                 agent
                 for agent in agents
                 if isinstance(agent.get("spatial_location"), dict)
-                and cast(
-                    dict[str, JsonValue], agent["spatial_location"]
-                ).get("place_id")
+                and cast(dict[str, JsonValue], agent["spatial_location"]).get("place_id")
                 == building.id
             ]
             return _grid_view(
@@ -1063,17 +1047,13 @@ def _world_view(
                 overlays,
             )
     if level == "building" and isinstance(static_world, dict):
-        return _grid_view(
-            static_world, agents, session, "Building view", overlays
-        )
+        return _grid_view(static_world, agents, session, "Building view", overlays)
     if isinstance(city, dict):
-        city_payload = _neighborhood_payload(
-            city, selected_location
-        ) if level == "neighborhood" else city
-        vehicle_states = (
-            cast(dict[str, JsonValue], snapshot.get("world", {})).get(
-                "vehicle_states", []
-            )
+        city_payload = (
+            _neighborhood_payload(city, selected_location) if level == "neighborhood" else city
+        )
+        vehicle_states = cast(dict[str, JsonValue], snapshot.get("world", {})).get(
+            "vehicle_states", []
         )
         return _city_view(
             city_payload,
@@ -1107,9 +1087,7 @@ def _scenario_world_view(
                         "position": cast(dict[str, JsonValue], position),
                     }
                 )
-        return _grid_view(
-            payload, agents, session, "Staged scenario preview", {}
-        )
+        return _grid_view(payload, agents, session, "Staged scenario preview", {})
     if isinstance(scenario.world, CityWorldDefinition):
         payload = scenario.world.model_dump(mode="json")
         city = {
@@ -1166,11 +1144,7 @@ def _grid_view(
             agent_id = str(agent["id"])
             overlay = overlays.get(agent_id, {})
             movement = agent.get("movement")
-            destination_point = (
-                movement.get("destination")
-                if isinstance(movement, dict)
-                else None
-            )
+            destination_point = movement.get("destination") if isinstance(movement, dict) else None
             rendered_agents.append(
                 {
                     "id": agent["id"],
@@ -1178,9 +1152,7 @@ def _grid_view(
                     "x": position.get("x", 0),
                     "y": position.get("y", 0),
                     "selected": agent["id"] == session.selected_agent_id,
-                    "system1": cast(dict[str, JsonValue], agent.get("system1", {})).get(
-                        "state"
-                    ),
+                    "system1": cast(dict[str, JsonValue], agent.get("system1", {})).get("state"),
                     "visible": bool(overlay.get("visible")),
                     "speech": overlay.get("speech"),
                     "vision_count": overlay.get("vision_count", 0),
@@ -1202,8 +1174,7 @@ def _grid_view(
             raw_path = movement.get("path")
             points = (
                 [
-                    f"{_number(point.get('x')) + 0.5},"
-                    f"{_number(point.get('y')) + 0.5}"
+                    f"{_number(point.get('x')) + 0.5},{_number(point.get('y')) + 0.5}"
                     for point in raw_path
                     if isinstance(point, dict)
                 ]
@@ -1218,6 +1189,7 @@ def _grid_view(
         "width": width,
         "height": height,
         "view_box": f"0 0 {width} {height}",
+        "base_display_width": width * 72,
         "display_width": width * 72 * session.zoom,
         "zones": zones,
         "blocked": world.get("blocked", []),
@@ -1295,15 +1267,11 @@ def _city_view(
                 "px": point[0],
                 "py": point[1],
                 "selected": agent["id"] == session.selected_agent_id,
-                "visible": bool(
-                    overlays.get(str(agent["id"]), {}).get("visible")
-                ),
+                "visible": bool(overlays.get(str(agent["id"]), {}).get("visible")),
                 "speech": overlays.get(str(agent["id"]), {}).get("speech"),
             }
         )
-    vehicle_definitions = {
-        str(vehicle["id"]): vehicle for vehicle in city.get("vehicles", [])
-    }
+    vehicle_definitions = {str(vehicle["id"]): vehicle for vehicle in city.get("vehicles", [])}
     rendered_vehicles = []
     for state in vehicle_states:
         vehicle_id = str(state.get("id", ""))
@@ -1327,6 +1295,7 @@ def _city_view(
         "kind": "city",
         "title": f"{title} · {city.get('name', 'City')}",
         "view_box": "0 0 1000 650",
+        "base_display_width": 1000,
         "display_width": 1000 * session.zoom,
         "districts": city.get("districts", []),
         "buildings": buildings,
@@ -1394,19 +1363,11 @@ def _neighborhood_payload(
 ) -> dict[str, Any]:
     place_id = selected_location.get("place_id")
     selected_building = next(
-        (
-            item
-            for item in city.get("buildings", [])
-            if item.get("id") == place_id
-        ),
+        (item for item in city.get("buildings", []) if item.get("id") == place_id),
         None,
     )
     selected_place = next(
-        (
-            item
-            for item in city.get("outdoor_places", [])
-            if item.get("id") == place_id
-        ),
+        (item for item in city.get("outdoor_places", []) if item.get("id") == place_id),
         None,
     )
     selected_item = selected_building or selected_place
@@ -1414,29 +1375,18 @@ def _neighborhood_payload(
         return city
     district_id = selected_item.get("district_id")
     buildings = [
-        item
-        for item in city.get("buildings", [])
-        if item.get("district_id") == district_id
+        item for item in city.get("buildings", []) if item.get("district_id") == district_id
     ]
     places = [
-        item
-        for item in city.get("outdoor_places", [])
-        if item.get("district_id") == district_id
+        item for item in city.get("outdoor_places", []) if item.get("district_id") == district_id
     ]
-    place_ids = {
-        str(item["id"]) for item in [*buildings, *places] if "id" in item
-    }
-    nodes = [
-        item
-        for item in city.get("nodes", [])
-        if item.get("place_id") in place_ids
-    ]
+    place_ids = {str(item["id"]) for item in [*buildings, *places] if "id" in item}
+    nodes = [item for item in city.get("nodes", []) if item.get("place_id") in place_ids]
     node_ids = {str(item["id"]) for item in nodes}
     edges = [
         item
         for item in city.get("edges", [])
-        if item.get("from_node_id") in node_ids
-        or item.get("to_node_id") in node_ids
+        if item.get("from_node_id") in node_ids or item.get("to_node_id") in node_ids
     ]
     return {
         **city,

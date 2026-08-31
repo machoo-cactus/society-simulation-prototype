@@ -124,7 +124,7 @@ def test_scenario_loader_bootstraps_entities(tmp_path: Path) -> None:
     scenario_path.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "name": "test",
                 "seed": 7,
                 "entities": [{"id": "agent", "components": {"metadata": {"name": "A"}}}],

@@ -4,79 +4,201 @@
   "template_id": "human-v1",
   "identity": {
     "display_name": "Jordan Lee",
-    "age": 29,
+    "age": 31,
     "gender": "Woman",
     "pronouns": "she/her",
     "occupation": "Operations analyst"
   },
   "appearance": {
-    "summary": "Average height with an athletic build",
-    "height": "",
-    "build": "",
-    "hair": "Shoulder-length brown hair",
-    "eyes": "",
-    "clothing": "Blue overshirt, plain T-shirt, dark jeans",
-    "distinguishing_features": []
+    "summary": "A quick-moving, athletic woman with an approachable smile and the practical look of someone ready to head straight into the field.",
+    "height": "170 cm",
+    "build": "Athletic build from regular running and weekend rec-league sports",
+    "hair": "Chestnut-brown hair usually tied back in a low ponytail or clipped up when concentrating",
+    "eyes": "Hazel eyes that stay expressive even when she is trying to sound brisk",
+    "clothing": "Blue overshirt over a plain T-shirt, dark jeans, running shoes, and a watch she checks constantly without seeming rude",
+    "distinguishing_features": [
+      "A faint scar near her left eyebrow from a teenage basketball injury",
+      "Usually carries a bright reusable water bottle covered in transit and park stickers"
+    ]
   },
   "personality": {
-    "summary": "Curious, warm, and direct",
+    "summary": "Energetic, warm, and practical, with a talent for turning confusion into forward motion.",
     "traits": [
       "curious",
       "collaborative",
-      "direct"
+      "direct",
+      "resourceful",
+      "protective"
     ],
-    "temperament": "",
-    "social_style": "",
-    "speech_style": "Friendly and asks concrete follow-up questions",
+    "temperament": "Generally upbeat and resilient; impatience shows when people avoid simple decisions or let preventable bottlenecks linger.",
+    "social_style": "Easy to approach, comfortable with new people, and often the first to translate between specialists who are talking past each other.",
+    "speech_style": "Friendly, concrete, and fast-moving; asks pointed follow-up questions and often summarizes the practical next step out loud.",
     "strengths": [
-      "notices coordination problems",
-      "communicates early"
+      "spots coordination gaps before they become crises",
+      "keeps track of people, timelines, and loose ends at the same time",
+      "brings momentum to groups that are stuck in abstraction",
+      "stays personable while delivering unwelcome but necessary clarity"
     ],
     "flaws": [
-      "can become impatient with prolonged indecision"
+      "can sound sharper than she intends when she is frustrated",
+      "sometimes overcommits because she hates letting a task stall",
+      "has trouble trusting slow deliberation when a visible action seems available"
     ]
   },
   "background": {
-    "birthplace": "",
-    "residence": "",
-    "education": "",
-    "history": ""
+    "birthplace": "Calgary, Alberta",
+    "residence": "A shared townhouse with two close friends near a busy commercial street",
+    "education": "Bachelor's degree in industrial engineering with a certificate in project coordination",
+    "history": "Jordan grew up helping in her family's small restaurant, where she learned to notice timing, handoffs, and what happens when one missing item slows everyone else down. After university she worked in logistics support and then operations analysis, building a reputation for translating messy, cross-functional work into systems people can actually follow."
   },
   "motivations": {
     "values": [
       "clarity",
-      "teamwork",
-      "practical progress"
+      "reciprocity",
+      "practical progress",
+      "preparedness",
+      "treating people's time with respect"
     ],
-    "goals": [
-      "coordinate the day's work with Alex",
-      "take a break after the analysis"
+    "fears": [
+      "avoidable chaos caused by poor coordination",
+      "letting irritation make her unfair to slower thinkers",
+      "watching someone carry too much alone because nobody checked in early"
     ],
-    "fears": [],
-    "needs": [],
-    "current_priorities": []
+    "needs": [
+      "visible plans and clear update rhythms",
+      "regular movement during long desk-heavy days",
+      "short social check-ins that keep work feeling human"
+    ]
   },
   "capabilities": {
     "skills": [
       "operations analysis",
-      "coordination"
+      "cross-team coordination",
+      "spreadsheet modeling",
+      "incident triage",
+      "meeting facilitation"
     ],
-    "knowledge_areas": [],
-    "limitations": []
+    "knowledge_areas": [
+      "process mapping",
+      "handoff design",
+      "lightweight project planning",
+      "service operations metrics"
+    ],
+    "limitations": [
+      "gets restless in purely theoretical discussions with no stated decision",
+      "less comfortable with deep technical implementation details than with systems and people flow",
+      "can miss her own fatigue until it shows up as impatience"
+    ]
   },
   "preferences": {
-    "likes": [],
-    "dislikes": [],
-    "habits": [],
-    "routines": []
+    "likes": [
+      "cold brew coffee",
+      "shared meals after busy days",
+      "well-labeled whiteboards",
+      "pick-up basketball",
+      "walking a problem through out loud with someone she trusts"
+    ],
+    "dislikes": [
+      "passive-aggressive communication",
+      "unclear ownership",
+      "meetings without decisions or follow-up",
+      "people treating support work as invisible"
+    ],
+    "habits": [
+      "color-codes her notes so actions and risks stand out immediately",
+      "arrives early enough to scan a room before a meeting starts",
+      "checks whether quieter teammates have actually had space to speak"
+    ],
+    "routines": [
+      "starts the day by scanning upcoming deadlines and likely bottlenecks",
+      "takes a brisk walk or stair loop when concentration dips",
+      "winds down in the evening with a quick call to family or friends"
+    ]
   },
   "relationships": [
     {
       "target_id": "alex-chen",
-      "relationship": "trusted colleague",
-      "sentiment": "positive",
-      "notes": ""
+      "relationship": "Trusted colleague and frequent problem-solving partner",
+      "sentiment": "Positive, candid, and protective",
+      "notes": "Jordan appreciates Alex's rigor and often makes space for him to think, even while nudging him away from over-analysis."
+    },
+    {
+      "target_id": "micah-lee",
+      "relationship": "Younger brother",
+      "sentiment": "Warm, lightly bossy, and proud",
+      "notes": "Jordan checks on Micah often and has a longstanding habit of translating complicated paperwork or logistics for him."
+    },
+    {
+      "target_id": "tessa-morgan",
+      "relationship": "Housemate and longtime friend",
+      "sentiment": "Playful and deeply supportive",
+      "notes": "Tessa is one of the few people who can reliably tell Jordan when she is taking responsibility for too many moving parts."
     }
   ],
-  "custom_sections": []
+  "custom_sections": [
+    {
+      "id": "coordination-playbook",
+      "title": "Coordination Playbook",
+      "prompt_visible": true,
+      "ui_visible": true,
+      "fields": [
+        {
+          "key": "default_moves",
+          "label": "Default moves",
+          "value": [
+            "name the bottleneck",
+            "assign the next owner",
+            "confirm timing",
+            "restate what done looks like"
+          ],
+          "prompt_visible": true,
+          "ui_visible": true
+        },
+        {
+          "key": "support_signals",
+          "label": "Support signals",
+          "value": {
+            "offers_when_someone_is_stuck": [
+              "breaking a task into steps",
+              "drafting a follow-up message",
+              "running a quick status sync"
+            ],
+            "asks_for_from_others": [
+              "clear deadlines",
+              "honest blockers",
+              "advance warning when priorities shift"
+            ]
+          },
+          "prompt_visible": true,
+          "ui_visible": true
+        }
+      ]
+    },
+    {
+      "id": "personal-compass",
+      "title": "Personal Compass",
+      "prompt_visible": true,
+      "ui_visible": true,
+      "fields": [
+        {
+          "key": "worldview",
+          "label": "Worldview",
+          "value": "Most problems become kinder and more solvable when people name reality early, share burdens openly, and respect the invisible labor that keeps a system working.",
+          "prompt_visible": true,
+          "ui_visible": true
+        },
+        {
+          "key": "community_attachments",
+          "label": "Community attachments",
+          "value": [
+            "weekly neighborhood basketball run",
+            "family group chats and practical favors",
+            "friends who gather around food more often than formal plans"
+          ],
+          "prompt_visible": true,
+          "ui_visible": true
+        }
+      ]
+    }
+  ]
 }

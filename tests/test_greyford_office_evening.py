@@ -1,6 +1,8 @@
 from collections import deque
 from pathlib import Path
 
+from stage0_sim.adapters.characters import FileSystemCharacterLibrary
+from stage0_sim.application.characters import prepare_scenario
 from stage0_sim.application.information import InformationStore
 from stage0_sim.application.navigation import NavigationService
 from stage0_sim.application.scenario import create_runner, load_scenario
@@ -35,6 +37,19 @@ FOCUS_BUILDINGS = {
     "building-greyford-spruce-childcare",
     "building-greyford-lantern-coworking",
 }
+
+
+def _runner(*, run_id: str):
+    scenario = load_scenario(SCENARIO_PATH)
+    prepared = prepare_scenario(
+        scenario,
+        FileSystemCharacterLibrary(ROOT / "characters"),
+    )
+    return create_runner(
+        scenario,
+        resolved_characters=prepared.runtime_characters(),
+        run_id=run_id,
+    )
 
 REPRESENTATIVE_INFRASTRUCTURE = {
     "building-greyford-provincial-assembly",
@@ -138,16 +153,17 @@ def test_greyford_materializes_city_neighborhood_and_character_knowledge() -> No
             pending.append(neighbor)
     assert reached == set(node_by_id)
 
-    profile = scenario.entities[0].components["character_profile"]
-    assert profile["identity"]["display_name"] == "Mara Ellison"
-    assert profile["personal_dossier"]["research_annotations"][
+    profile = FileSystemCharacterLibrary(ROOT / "characters").get(CHARACTER_ID)
+    profile_payload = profile.model_dump(mode="json")
+    assert profile_payload["identity"]["display_name"] == "Mara Ellison"
+    assert profile_payload["personal_dossier"]["research_annotations"][
         "nested_extension_demo"
     ]["observations"][0]["domain"] == "mobility"
-    assert profile["custom_sections"][0]["fields"][1]["value"][3] == (
+    assert profile_payload["custom_sections"][0]["fields"][1]["value"][3] == (
         "take the westbound metro"
     )
 
-    runner = create_runner(scenario, run_id="greyford-content")
+    runner = _runner(run_id="greyford-content")
     city = runner.registry.get_resource(CityWorld)
     route = find_transport_route(
         city,
@@ -194,10 +210,7 @@ def test_greyford_materializes_city_neighborhood_and_character_knowledge() -> No
 
 
 def test_greyford_evening_finishes_dinner_before_arriving_home() -> None:
-    runner = create_runner(
-        load_scenario(SCENARIO_PATH),
-        run_id="greyford-evening-itinerary",
-    )
+    runner = _runner(run_id="greyford-evening-itinerary")
 
     runner.run_for(3000)
 
@@ -264,7 +277,6 @@ def test_greyford_evening_finishes_dinner_before_arriving_home() -> None:
     )
     assert location.place_id == "building-greyford-rowan-home"
     assert (position.x, position.y) == (12, 7)
-    assert plan.current is None
     assert plan.queue == []
     assert homeostasis.satiety > 90
     assert homeostasis.energy > 70

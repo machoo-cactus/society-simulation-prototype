@@ -38,7 +38,7 @@ def character_payload(
     character: CharacterDefinition,
 ) -> dict[str, JsonValue]:
     return {
-        "character": character.model_dump(mode="json", exclude={"profile_ref"}),
+        "character": character.model_dump(mode="json"),
         "content_hash": character_content_hash(character),
     }
 

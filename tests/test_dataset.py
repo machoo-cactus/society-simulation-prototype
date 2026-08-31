@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.api.app import app
 from stage0_sim.application.collection import RunDataCollector
@@ -176,7 +177,13 @@ def test_projector_ignores_new_components_without_breaking_stable_state() -> Non
 def test_telemetry_sampling_does_not_add_canonical_records(tmp_path: Path) -> None:
     async def exercise() -> None:
         store = SQLiteDatasetStore(tmp_path / "telemetry.sqlite3")
-        manager = SimulationManager(dataset_store=store, telemetry_hz=50)
+        manager = SimulationManager(
+            dataset_store=store,
+            character_library=FileSystemCharacterLibrary(
+                Path(__file__).parents[1] / "characters"
+            ),
+            telemetry_hz=50,
+        )
         scenario = load_scenario(scenario_path("system1-preemption.json"))
         scenario_id = manager.add_scenario(scenario)
         run_id = await manager.start_run(scenario_id, realtime=False)
@@ -197,7 +204,8 @@ def test_api_exposes_summary_and_versioned_jsonl_export() -> None:
     )
     with TestClient(app) as client:
         scenario_id = client.post(
-            "/simulation/scenarios", json=demo
+            "/simulation/scenarios",
+            json={"scenario": demo, "character_assignments": {}},
         ).json()["scenario_id"]
         run_id = client.post(
             "/simulation/runs",

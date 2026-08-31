@@ -4,7 +4,7 @@
 {% block heading %}Operator Console{% endblock %}
 {% block content %}
 <div class="dashboard">
-  <section class="panel controls-panel" aria-labelledby="simulation-controls-heading">
+  <section id="simulation-controls" class="panel controls-panel" aria-labelledby="simulation-controls-heading">
     <header class="panel__header">
       <div>
         <h2 id="simulation-controls-heading">Simulation controls</h2>
@@ -16,18 +16,35 @@
           {% endif %}
         </p>
       </div>
-      <p class="status-chip status-chip--{{ status }}">{{ status }}</p>
+      <p id="run-status" class="status-chip status-chip--{{ status }}">{{ status }}</p>
     </header>
 
     <div class="scenario-loader">
-      <form method="post" action="/ui/scenario/example">
+      <form method="post" action="/ui/scenario/example" data-ui-targets="#notice-region,#simulation-controls,#world-panel,#inspector-panel,#events-panel,#transcript-panel,#dataset-panel">
         <button type="submit">Load example scenario</button>
       </form>
-      <form method="post" action="/ui/scenario/upload" enctype="multipart/form-data">
+      <form method="post" action="/ui/scenario/upload" enctype="multipart/form-data" data-ui-targets="#notice-region,#simulation-controls,#world-panel,#inspector-panel,#events-panel,#transcript-panel,#dataset-panel">
         <label for="scenario-file">Scenario JSON</label>
         <input id="scenario-file" name="scenario" type="file" accept=".json,application/json" required>
         <button type="submit">Validate and stage</button>
       </form>
+      <form method="post" action="/ui/scenario/library/stage">
+        <label for="saved-scenario">Saved scenario</label>
+        <select id="saved-scenario" name="scenario_id" {% if not saved_scenarios %}disabled{% endif %} required>
+          <option value="">Select a saved scenario</option>
+          {% for saved in saved_scenarios %}
+            <option value="{{ saved.id }}">{{ saved.name }} ({{ saved.id }})</option>
+          {% endfor %}
+        </select>
+        <button type="submit" {% if not saved_scenarios %}disabled{% endif %}>Stage selected saved scenario</button>
+        <button
+          type="submit"
+          formaction="/ui/scenario/library/edit"
+          formmethod="get"
+          {% if not saved_scenarios %}disabled{% endif %}
+        >Open selected scenario in editor</button>
+      </form>
+      <a class="button-link" href="/ui/scenarios/">Browse scenario library</a>
     </div>
 
     {% if scenario %}
@@ -39,21 +56,34 @@
           {% for warning in session.scenario_warnings %}<li>{{ warning }}</li>{% endfor %}
         </ul>
       {% endif %}
-      {% set assignments = scenario.entities | selectattr("components.character_profile", "defined") | list %}
+      {% set assignments = scenario.entities | selectattr("components.character_slot", "defined") | list %}
       {% if assignments %}
         <details>
           <summary>Character assignments</summary>
-          <form class="assignment-form" method="post" action="/ui/scenario/assign">
+          <form class="assignment-form" method="post" action="/ui/scenario/assign" data-ui-targets="#notice-region,#simulation-controls,#world-panel,#inspector-panel,#events-panel,#transcript-panel,#dataset-panel">
             {% for entity in assignments %}
-              {% set current = entity.components.character_profile.get("character_id", entity.components.character_profile.get("profile_ref", "")) %}
+              {% set slot = entity.components.character_slot %}
+              {% set current = session.character_assignments.get(entity.id, slot.get("default_character_id", "")) %}
               <label>
-                <span>{{ entity.id }}</span>
+                <span>{{ slot.get("label", entity.id) }} ({{ entity.id }})</span>
+                {% if slot.get("briefing") %}<small>{{ slot.get("briefing") }}</small>{% endif %}
+                {% set constraints = slot.get("constraints", {}) %}
+                {% if constraints.get("minimum_age") is not none or constraints.get("maximum_age") is not none or constraints.get("allowed_genders") or constraints.get("allowed_template_ids") %}
+                  <small>
+                    Eligible:
+                    age {{ constraints.get("minimum_age", "any") }}–{{ constraints.get("maximum_age", "any") }};
+                    genders {{ constraints.get("allowed_genders", ["any"]) | join(", ") }};
+                    templates {{ constraints.get("allowed_template_ids", ["any"]) | join(", ") }}
+                  </small>
+                {% endif %}
                 <select name="character.{{ entity.id }}" required>
                   <option value="">Select a character</option>
-                  {% for character in characters %}
+                  {% for character in slot_characters.get(entity.id, ()) %}
                     <option value="{{ character.id }}" {% if current == character.id %}selected{% endif %}>
-                      {{ character.display_name }} ({{ character.id }})
+                      {{ character.display_name }} ({{ character.id }}, age {{ character.age if character.age is not none else "unknown" }}, {{ character.gender or "gender unspecified" }})
                     </option>
+                  {% else %}
+                    <option value="" disabled>No eligible characters</option>
                   {% endfor %}
                 </select>
               </label>
@@ -65,7 +95,7 @@
     {% endif %}
 
     <div class="lifecycle-controls" role="group" aria-label="Run lifecycle">
-      <form method="post" action="/ui/run/start">
+      <form method="post" action="/ui/run/start" data-ui-targets="#notice-region,#simulation-controls,#world-panel,#inspector-panel,#events-panel,#transcript-panel,#dataset-panel">
         <label for="start-speed">Initial speed</label>
         <select id="start-speed" name="speed" {% if not controls.start %}disabled{% endif %}>
           {% for speed in (0.5, 1, 2, 4, 10) %}
@@ -75,11 +105,11 @@
         <button class="primary" type="submit" {% if not controls.start %}disabled{% endif %}>Start run</button>
       </form>
       {% for action, label in (("pause", "Pause"), ("resume", "Resume"), ("step", "Single step"), ("stop", "Stop")) %}
-        <form method="post" action="/ui/run/control/{{ action }}">
+        <form method="post" action="/ui/run/control/{{ action }}" data-ui-targets="#notice-region,#simulation-controls,#world-panel,#inspector-panel,#events-panel,#transcript-panel,#dataset-panel">
           <button type="submit" {% if not controls[action] %}disabled{% endif %}>{{ label }}</button>
         </form>
       {% endfor %}
-      <form method="post" action="/ui/run/speed">
+      <form method="post" action="/ui/run/speed" data-ui-targets="#notice-region,#simulation-controls">
         <label for="run-speed">Running speed</label>
         <select id="run-speed" name="speed" {% if not controls.speed %}disabled{% endif %}>
           {% for speed in (0.5, 1, 2, 4, 10) %}
@@ -89,23 +119,25 @@
         <button type="submit" {% if not controls.speed %}disabled{% endif %}>Set speed</button>
       </form>
     </div>
-    {% if managed %}
-      <dl class="run-summary">
-        <div><dt>Run</dt><dd>{{ session.run_id }}</dd></div>
-        <div><dt>Tick</dt><dd>{{ managed.runner.clock.tick }}</dd></div>
-        <div><dt>Simulation time</dt><dd>{{ "%.1f"|format(managed.runner.clock.simulation_time) }}s</dd></div>
-        <div><dt>Cognition</dt><dd>{{ managed.runner.cognition_phase.value }}</dd></div>
-      </dl>
-    {% endif %}
+    <div id="run-summary-region">
+      {% if managed %}
+        <dl class="run-summary">
+          <div><dt>Run</dt><dd>{{ session.run_id }}</dd></div>
+          <div><dt>Tick</dt><dd>{{ managed.runner.clock.tick }}</dd></div>
+          <div><dt>Simulation time</dt><dd>{{ "%.1f"|format(managed.runner.clock.simulation_time) }}s</dd></div>
+          <div><dt>Cognition</dt><dd>{{ managed.runner.cognition_phase.value }}</dd></div>
+        </dl>
+      {% endif %}
+    </div>
   </section>
 
-  <section class="panel world-panel {% if request.query_params.get('focus') == 'world' %}focused{% endif %}" aria-labelledby="world-heading">
+  <section id="world-panel" class="panel world-panel {% if request.query_params.get('focus') == 'world' %}focused{% endif %}" aria-labelledby="world-heading">
     <header class="panel__header">
       <div>
         <h2 id="world-heading">World</h2>
-        <p>{{ world_view.title if world_view else "Load a scenario to preview its world" }}</p>
+        <p id="world-heading-detail">{{ world_view.title if world_view else "Load a scenario to preview its world" }}</p>
       </div>
-      <form class="view-controls" method="post" action="/ui/view">
+      <form class="view-controls" method="post" action="/ui/view" data-ui-targets="#world-panel">
         <label for="view-level">Scale</label>
         <select id="view-level" name="view_level">
           {% for level in ("auto", "building", "neighborhood", "city") %}
@@ -113,13 +145,13 @@
           {% endfor %}
         </select>
         <button name="zoom_action" value="out" aria-label="Zoom out">−</button>
-        <output aria-label="Zoom level">{{ (session.zoom * 100)|round|int }}%</output>
+        <output data-map-zoom-output aria-label="Zoom level" aria-live="polite">{{ (session.zoom * 100)|round|int }}%</output>
         <button name="zoom_action" value="in" aria-label="Zoom in">+</button>
         <button name="zoom_action" value="fit">Fit</button>
         {% if request.query_params.get("focus") == "world" %}
-          <a class="button-link" href="/ui/#world-heading">Exit focus</a>
+          <a class="button-link" href="/ui/#world-heading" data-ui-link-targets="#world-panel" data-ui-remove-query="focus">Exit focus</a>
         {% else %}
-          <a class="button-link" href="/ui/?focus=world#world-heading">Focus map</a>
+          <a class="button-link" href="/ui/?focus=world#world-heading" data-ui-link-targets="#world-panel">Focus map</a>
         {% endif %}
         <label class="check">
           <input type="checkbox" name="live_refresh" {% if session.live_refresh %}checked{% endif %}>
@@ -128,12 +160,14 @@
         <button type="submit">Apply view</button>
       </form>
     </header>
-    <div class="world-scroll">
+    <div id="world-render" class="world-scroll" data-preserve-scroll tabindex="0" aria-label="Pannable world map">
       {% if world_view %}
         <svg
           class="world-map world-map--{{ world_view.kind }}"
           viewBox="{{ world_view.view_box }}"
           style="width: {{ world_view.display_width }}px"
+          data-base-width="{{ world_view.base_display_width }}"
+          data-map-zoom="{{ session.zoom }}"
           role="img"
           aria-label="{{ world_view.title }}"
         >
@@ -162,7 +196,7 @@
               {% if agent.destination %}
                 <circle class="destination-marker" cx="{{ agent.destination.x + 0.5 }}" cy="{{ agent.destination.y + 0.5 }}" r=".16"><title>{{ agent.name }} destination</title></circle>
               {% endif %}
-              <a href="/ui/?selected={{ agent.id }}">
+              <a href="/ui/?selected={{ agent.id }}" data-ui-link-targets="#world-panel,#inspector-panel">
                 <circle class="character-marker {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %} {% if agent.system1 and agent.system1 != 'NORMAL' %}critical{% endif %}" cx="{{ agent.x + 0.5 }}" cy="{{ agent.y + 0.5 }}" r=".25">
                   <title>{{ agent.name }} at {{ agent.x }}, {{ agent.y }}</title>
                 </circle>
@@ -204,7 +238,7 @@
         <p class="empty-state">No world is available.</p>
       {% endif %}
     </div>
-    <form class="overlay-controls" method="post" action="/ui/view">
+    <form class="overlay-controls" method="post" action="/ui/view" data-ui-targets="#world-panel">
       <input type="hidden" name="view_level" value="{{ session.view_level }}">
       <input type="hidden" name="overlays_present" value="yes">
       {% for overlay, label in (("names", "Names"), ("paths", "Paths"), ("speech", "Speech"), ("vision", "Vision"), ("hearing", "Hearing"), ("visibility", "Selected observer visibility"), ("destinations", "Debug destinations")) %}
@@ -215,11 +249,11 @@
     </form>
   </section>
 
-  <aside class="panel inspector" aria-labelledby="inspector-heading">
+  <aside id="inspector-panel" class="panel inspector" aria-labelledby="inspector-heading">
     <header class="panel__header">
       <div><h2 id="inspector-heading">Character inspector</h2><p>Omniscient operator telemetry</p></div>
     </header>
-    <form class="agent-picker" method="post" action="/ui/view">
+    <form class="agent-picker" method="post" action="/ui/view" data-ui-targets="#world-panel,#inspector-panel">
       <label for="selected-agent">Character</label>
       <select id="selected-agent" name="selected_agent" {% if not agents %}disabled{% endif %}>
         {% for agent in agents %}
@@ -230,41 +264,42 @@
       <label class="check"><input type="checkbox" name="live_refresh" {% if session.live_refresh %}checked{% endif %}> Live refresh</label>
       <button type="submit" {% if not agents %}disabled{% endif %}>Inspect</button>
     </form>
-    {% if selected_agent %}
-      {% set homeostasis = selected_agent.get("homeostasis", {}) %}
-      <div class="gauges">
+    <div id="inspector-live">
+      {% if selected_agent %}
+        {% set homeostasis = selected_agent.get("homeostasis", {}) %}
+        <div class="gauges">
         {% for vital in ("satiety", "energy", "stress") %}
           <label>
             <span>{{ vital|title }} <strong>{{ "%.1f"|format(homeostasis.get(vital, 0)) }}</strong></span>
             <progress max="100" value="{{ percent(homeostasis.get(vital, 0)) }}">{{ percent(homeostasis.get(vital, 0)) }}%</progress>
           </label>
         {% endfor %}
-      </div>
-      <dl class="facts">
+        </div>
+        <dl class="facts">
         <div><dt>Activity</dt><dd>{{ selected_agent.get("activity", "—") }}</dd></div>
         <div><dt>System 1</dt><dd>{{ selected_agent.get("system1", {}).get("state", "—") }}</dd></div>
         <div><dt>Drive</dt><dd>{{ selected_agent.get("system1", {}).get("active_drive") or "none" }}</dd></div>
         <div><dt>Destination</dt><dd>{{ destination(selected_agent) }}</dd></div>
         <div><dt>Memories</dt><dd>{{ selected_agent.get("memory", {}).get("count", 0) }}</dd></div>
         <div><dt>Visible now</dt><dd>{{ selected_agent.get("perception", {}).get("visible_now", [])|join(", ") or "nobody" }}</dd></div>
-      </dl>
-      <section class="inspector-section">
+        </dl>
+        <section class="inspector-section">
         <h3>System 2 plan</h3>
         <ol>
           {% for row in plan_rows(selected_agent) %}<li>{{ row }}</li>{% else %}<li>No plan available</li>{% endfor %}
         </ol>
-      </section>
-      <details class="inspector-section">
+        </section>
+        <details class="inspector-section">
         <summary>Character profile</summary>
         <pre>{{ json_pretty(selected_agent.get("character_profile", {}).get("data", {})) }}</pre>
-      </details>
-      <section class="inspector-section">
+        </details>
+        <section class="inspector-section">
         <h3>Recent perceptions</h3>
         <ol>
           {% for row in recent_perceptions %}<li>{{ row }}</li>{% else %}<li>No recent observations</li>{% endfor %}
         </ol>
-      </section>
-      <form class="vitals-form" method="post" action="/ui/run/vitals">
+        </section>
+        <form class="vitals-form" method="post" action="/ui/run/vitals" data-ui-targets="#notice-region,#inspector-live,#event-live,#event-summary">
         <fieldset {% if not controls.vitals %}disabled{% endif %}>
           <legend>Controlled vital mutation</legend>
           {% for vital in ("satiety", "energy", "stress") %}
@@ -272,28 +307,29 @@
           {% endfor %}
           <button type="submit">Apply supplied values</button>
         </fieldset>
-      </form>
-    {% else %}
-      <p class="empty-state">Start a run to inspect characters.</p>
-    {% endif %}
+        </form>
+      {% else %}
+        <p class="empty-state">Start a run to inspect characters.</p>
+      {% endif %}
+    </div>
   </aside>
 
-  <section class="panel events-panel {% if request.query_params.get('focus') == 'events' %}focused{% endif %}" aria-labelledby="events-heading">
+  <section id="events-panel" class="panel events-panel {% if request.query_params.get('focus') == 'events' %}focused{% endif %}" aria-labelledby="events-heading">
     <header class="panel__header">
       <div>
         <h2 id="events-heading">Event history</h2>
-        <p>{{ event_total }} events · {{ event_shown }} shown</p>
+        <p id="event-summary">{{ event_total }} events · {{ event_shown }} shown</p>
       </div>
       <div class="header-actions">
         {% if request.query_params.get("focus") == "events" %}
-          <a class="button-link" href="/ui/#events-heading">Exit expanded log</a>
+          <a class="button-link" href="/ui/#events-heading" data-ui-link-targets="#events-panel" data-ui-remove-query="focus">Exit expanded log</a>
         {% else %}
-          <a class="button-link" href="/ui/?focus=events#events-heading">Expand log</a>
+          <a class="button-link" href="/ui/?focus=events#events-heading" data-ui-link-targets="#events-panel">Expand log</a>
         {% endif %}
-        <form method="post" action="/ui/events/clear"><button type="submit">Clear view</button></form>
+        <form method="post" action="/ui/events/clear" data-ui-targets="#notice-region,#events-panel,#transcript-panel"><button type="submit">Clear view</button></form>
       </div>
     </header>
-    <form class="event-tools" method="get" action="/ui/">
+    <form class="event-tools" method="get" action="/ui/" data-ui-targets="#events-panel" data-ui-remove-query="event,limit">
       <label>Search <input name="search" type="search" value="{{ event_search }}"></label>
       <label>Category
         <select name="filter">
@@ -310,32 +346,33 @@
       </label>
       <button type="submit">Apply filters</button>
     </form>
-    <ol class="event-log" aria-live="polite">
-      {% for event in events %}
-        <li class="{% if 'failed' in event.event_type or 'error' in event.event_type or 'blocked' in event.event_type or 'rejected' in event.event_type %}event-error{% elif event.event_type.startswith('system1.') %}event-system1{% endif %}">
-          <a href="?filter={{ event_filter }}&order={{ event_order }}&search={{ event_search|urlencode }}&event={{ event.event_id|urlencode }}#event-detail">
-            <span>tick {{ event.simulation_tick }}</span>
-            <strong>{{ event.event_type }}</strong>
-            <span>{{ event_summary(event) }}</span>
-          </a>
-        </li>
-      {% else %}
-        <li class="empty-state">No matching events.</li>
-      {% endfor %}
-    </ol>
-    {% if has_older_events %}
-      <p class="load-more">
-        <a class="button-link" href="?filter={{ event_filter }}&order={{ event_order }}&search={{ event_search|urlencode }}&limit={{ event_limit + 500 }}#events-heading">Load older events</a>
-      </p>
-    {% endif %}
-    {% if selected_event %}
-      <article id="event-detail" class="event-detail" aria-labelledby="event-detail-heading">
+    <div id="event-live">
+      <ol id="event-log" class="event-log" data-preserve-scroll aria-live="polite" aria-relevant="additions">
+        {% for event in events %}
+          <li class="{% if 'failed' in event.event_type or 'error' in event.event_type or 'blocked' in event.event_type or 'rejected' in event.event_type %}event-error{% elif event.event_type.startswith('system1.') %}event-system1{% endif %}">
+            <a href="?filter={{ event_filter }}&order={{ event_order }}&search={{ event_search|urlencode }}&event={{ event.event_id|urlencode }}#event-detail" data-ui-link-targets="#world-panel,#events-panel" data-ui-remove-query="focus">
+              <span>tick {{ event.simulation_tick }}</span>
+              <strong>{{ event.event_type }}</strong>
+              <span>{{ event_summary(event) }}</span>
+            </a>
+          </li>
+        {% else %}
+          <li class="empty-state">No matching events.</li>
+        {% endfor %}
+      </ol>
+      {% if has_older_events %}
+        <p class="load-more">
+          <a class="button-link" href="?filter={{ event_filter }}&order={{ event_order }}&search={{ event_search|urlencode }}&limit={{ event_limit + 500 }}#events-heading" data-ui-link-targets="#events-panel">Load older events</a>
+        </p>
+      {% endif %}
+      {% if selected_event %}
+        <article id="event-detail" class="event-detail" aria-labelledby="event-detail-heading">
         <header>
           <div>
             <h3 id="event-detail-heading">{{ selected_event.event_type }}</h3>
             <p>tick {{ selected_event.simulation_tick }} · {{ "%.1f"|format(selected_event.simulation_time) }}s · {{ selected_event.event_id }}</p>
           </div>
-          <a href="/ui/">Close detail</a>
+          <a href="/ui/" data-ui-link-targets="#events-panel" data-ui-remove-query="event">Close detail</a>
         </header>
         <details>
           <summary>Readable text</summary>
@@ -347,29 +384,34 @@
           <button type="button" data-copy-target="#event-detail-json">Copy event JSON</button>
           <a download="{{ selected_event.event_id }}.json" href="data:application/json;charset=utf-8,{{ json_pretty(selected_event.to_dict())|urlencode }}">Download JSON</a>
         </div>
-      </article>
-    {% endif %}
+        </article>
+      {% endif %}
+    </div>
   </section>
 
-  <section class="panel transcript-panel" aria-labelledby="transcript-heading">
+  <section id="transcript-panel" class="panel transcript-panel" aria-labelledby="transcript-heading">
     <header class="panel__header">
       <div><h2 id="transcript-heading">Conversation transcript</h2><p>Delivered speech and legacy dialogue</p></div>
     </header>
-    <ol class="transcript">
-      {% for row in transcript %}
-        <li><p>{{ row.meta }}</p><strong>{{ row.speaker }}</strong><blockquote>{{ row.text }}</blockquote></li>
-      {% else %}
-        <li class="empty-state">No speech yet.</li>
-      {% endfor %}
-    </ol>
+    <div id="transcript-live">
+      <ol id="transcript-log" class="transcript" data-preserve-scroll>
+        {% for row in transcript %}
+          <li><p>{{ row.meta }}</p><strong>{{ row.speaker }}</strong><blockquote>{{ row.text }}</blockquote></li>
+        {% else %}
+          <li class="empty-state">No speech yet.</li>
+        {% endfor %}
+      </ol>
+    </div>
   </section>
 
   {% if managed %}
-    <section class="panel dataset-panel" aria-labelledby="dataset-heading">
+    <section id="dataset-panel" class="panel dataset-panel" aria-labelledby="dataset-heading">
       <header class="panel__header"><h2 id="dataset-heading">Research data</h2></header>
       <p>Download the versioned JSONL dataset for this run.</p>
       <a class="button-link" href="/simulation/runs/{{ session.run_id }}/export">Download run dataset</a>
     </section>
+  {% else %}
+    <div id="dataset-panel" hidden></div>
   {% endif %}
 </div>
 {% endblock %}

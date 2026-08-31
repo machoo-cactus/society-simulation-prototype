@@ -42,10 +42,7 @@ def _city_runner(scenario: ScenarioDefinition | None = None):
     )
     return create_runner(
         scenario,
-        resolved_characters={
-            character_id: character.profile()
-            for character_id, character in prepared.characters.items()
-        },
+        resolved_characters=prepared.runtime_characters(),
     )
 
 

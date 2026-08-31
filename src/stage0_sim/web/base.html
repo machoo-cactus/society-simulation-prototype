@@ -4,11 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
-    {% if auto_refresh %}<meta http-equiv="refresh" content="1;url={{ refresh_url }}">{% endif %}
+    {% if auto_refresh %}
+      <noscript><meta http-equiv="refresh" content="1;url={{ refresh_url }}"></noscript>
+    {% endif %}
     <title>{% block title %}Stage 0 Simulation{% endblock %}</title>
     <link rel="stylesheet" href="/ui/assets/styles.css">
   </head>
-  <body>
+  <body data-live-refresh="{{ 'true' if auto_refresh else 'false' }}">
     <a class="skip-link" href="#main">Skip to main content</a>
     <header class="topbar">
       <div>
@@ -17,15 +19,18 @@
       </div>
       <nav class="page-nav" aria-label="Application">
         <a href="/ui/" {% if request.url.path == "/ui/" %}aria-current="page"{% endif %}>Simulation</a>
+        <a href="/ui/scenarios/" {% if request.url.path.startswith("/ui/scenarios") %}aria-current="page"{% endif %}>Scenarios</a>
         <a href="/ui/characters/" {% if request.url.path.startswith("/ui/characters") %}aria-current="page"{% endif %}>Characters</a>
         <a href="/docs">API</a>
       </nav>
     </header>
-    {% if message or error %}
-      <div class="notice {{ 'notice--error' if error else '' }}" role="{{ 'alert' if error else 'status' }}">
-        {{ error or message }}
-      </div>
-    {% endif %}
+    <div id="notice-region" aria-live="polite" aria-atomic="true">
+      {% if message or error %}
+        <div class="notice {{ 'notice--error' if error else '' }}" role="{{ 'alert' if error else 'status' }}">
+          {{ error or message }}
+        </div>
+      {% endif %}
+    </div>
     <main id="main">{% block content %}{% endblock %}</main>
     <script src="/ui/assets/enhancements.js" defer></script>
   </body>

@@ -124,7 +124,7 @@ class FileSystemCharacterLibrary:
         path = self._path(character.id)
         temporary = self.root / f".{character.id}.{uuid4().hex}.tmp"
         payload = json.dumps(
-            character.model_dump(mode="json", exclude={"profile_ref"}),
+            character.model_dump(mode="json"),
             ensure_ascii=False,
             indent=2,
         )

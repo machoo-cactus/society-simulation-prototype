@@ -103,6 +103,7 @@ class CharacterObservation:
     targets: tuple[ObservedTarget, ...]
     facts: tuple[ObservationFact, ...]
     recent_outcome: str | None
+    current_priorities: tuple[str, ...] = ()
     spatial_location: dict[str, JsonValue] | None = None
     available_travel_modes: tuple[str, ...] = ()
     calendar_time: CalendarTimeObservation | None = None
@@ -123,6 +124,7 @@ class CharacterDecisionRequest:
     observation: CharacterObservation
     memories: tuple[str, ...]
     allowed_tools: tuple[str, ...]
+    situation_description: str = ""
     retrieved_information: tuple[InformationContextCapsule, ...] = ()
     information_retrieval_performed: bool = False
     information_query: str = ""

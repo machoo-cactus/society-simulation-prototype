@@ -36,7 +36,12 @@ from stage0_sim.application.manager import (
 )
 from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import CognitionPhase, RunnerStatus
-from stage0_sim.application.scenario import ScenarioDefinition, create_runner
+from stage0_sim.application.scenario import (
+    CharacterProfileDefinition,
+    ResolvedCharacterProfile,
+    ScenarioDefinition,
+    create_runner,
+)
 from stage0_sim.application.telemetry import build_runtime_snapshot
 from stage0_sim.config import Settings, create_model_client
 from stage0_sim.domain.components import (
@@ -140,11 +145,12 @@ def _tool_scenario() -> ScenarioDefinition:
                             "energy": 80,
                             "stress": 20,
                         },
-                        "character_profile": {
-                            "display_name": "Alex",
-                            "role": "researcher",
-                            "goals": ["Take a break"],
+                        "character_slot": {
+                            "label": "Researcher",
+                            "briefing": "Take a break when the work allows.",
                         },
+                        "planner": {"daily_goals": ["Take a break"]},
+                        "metadata": {"display_name": "Alex"},
                         "controller": {"enabled": True},
                     },
                 }
@@ -172,10 +178,17 @@ def test_scripted_controller_moves_only_through_tool_commit() -> None:
 
 def test_controller_retrieves_dossier_and_episode_capsules() -> None:
     payload = _tool_scenario().model_dump(mode="json")
-    profile = payload["entities"][0]["components"]["character_profile"]
-    profile["private_archive"] = {
-        "unrelated": "FULL DOSSIER SECRET " * 200
-    }
+    character = CharacterProfileDefinition.model_validate(
+        {
+            "identity": {
+                "display_name": "Alex",
+                "occupation": "Researcher",
+            },
+            "private_archive": {
+                "unrelated": "FULL DOSSIER SECRET " * 200
+            },
+        }
+    )
     payload["entities"][0]["components"]["memory"] = {
         "initial_episodes": [
             {
@@ -189,6 +202,12 @@ def test_controller_retrieves_dossier_and_episode_capsules() -> None:
     provider = _ZeroEmbeddingProvider()
     runner = create_runner(
         ScenarioDefinition.model_validate(payload),
+        resolved_characters={
+            "alex": ResolvedCharacterProfile(
+                character_id="alex-profile",
+                profile=character,
+            )
+        },
         model_client=client,
         embedding_provider=provider,
     )
@@ -198,7 +217,7 @@ def test_controller_retrieves_dossier_and_episode_capsules() -> None:
     assert len(client.requests) == 1
     model_request = client.requests[0]
     prompt = "\n".join(message.content for message in model_request.messages)
-    dynamic = json.loads(model_request.messages[2].content)
+    dynamic = json.loads(model_request.messages[3].content)
     retrieved = next(
         event
         for event in runner.events.events
@@ -650,7 +669,8 @@ def _two_character_tool_scenario() -> ScenarioDefinition:
     second = json.loads(json.dumps(payload["entities"][0]))
     second["id"] = "blair"
     second["components"]["position"] = {"x": 2, "y": 0}
-    second["components"]["character_profile"]["display_name"] = "Blair"
+    second["components"]["character_slot"]["label"] = "Coordinator"
+    second["components"]["metadata"]["display_name"] = "Blair"
     payload["entities"].append(second)
     return ScenarioDefinition.model_validate(payload)
 

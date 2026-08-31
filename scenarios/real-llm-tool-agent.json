@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "real-llm-tool-agent",
   "seed": 20260827,
   "dt": 1.0,
@@ -23,50 +23,91 @@
     "max_read_tool_rounds": 0,
     "max_state_changing_tools": 1,
     "max_concurrency": 4,
-    "tool_allowlist": ["go_to", "perform", "say", "wait", "skip"]
+    "tool_allowlist": [
+      "go_to",
+      "perform",
+      "say",
+      "wait",
+      "skip"
+    ]
   },
   "world": {
     "width": 7,
     "height": 3,
-    "blocked": [{"x": 3, "y": 0}],
+    "blocked": [
+      {
+        "x": 3,
+        "y": 0
+      }
+    ],
     "zones": [
       {
         "id": "office",
         "name": "Office",
         "type": "OFFICE",
-        "bounds": {"x": 0, "y": 0, "width": 3, "height": 3}
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 3,
+          "height": 3
+        }
       },
       {
         "id": "lounge",
         "name": "Lounge",
         "type": "LOUNGE",
-        "bounds": {"x": 4, "y": 0, "width": 3, "height": 3}
+        "bounds": {
+          "x": 4,
+          "y": 0,
+          "width": 3,
+          "height": 3
+        }
       }
     ],
     "stations": [
       {
         "id": "desk-1",
         "name": "Office Desk",
-        "position": {"x": 1, "y": 1},
-        "supported_actions": ["WORK"]
+        "position": {
+          "x": 1,
+          "y": 1
+        },
+        "supported_actions": [
+          "WORK"
+        ]
       },
       {
         "id": "sofa-1",
         "name": "Lounge Sofa",
-        "position": {"x": 5, "y": 1},
-        "supported_actions": ["RELAX"]
+        "position": {
+          "x": 5,
+          "y": 1
+        },
+        "supported_actions": [
+          "RELAX"
+        ]
       },
       {
         "id": "fridge-1",
         "name": "Lounge Fridge",
-        "position": {"x": 6, "y": 1},
-        "supported_actions": ["EAT"]
+        "position": {
+          "x": 6,
+          "y": 1
+        },
+        "supported_actions": [
+          "EAT"
+        ]
       },
       {
         "id": "bed-1",
         "name": "Rest Bed",
-        "position": {"x": 6, "y": 2},
-        "supported_actions": ["SLEEP"]
+        "position": {
+          "x": 6,
+          "y": 2
+        },
+        "supported_actions": [
+          "SLEEP"
+        ]
       }
     ]
   },
@@ -74,27 +115,101 @@
     {
       "id": "agent-001",
       "components": {
-        "position": {"x": 0, "y": 1},
-        "homeostasis": {"satiety": 80, "energy": 80, "stress": 20},
-        "character_profile": {"character_id": "alex-chen"},
+        "position": {
+          "x": 0,
+          "y": 1
+        },
+        "homeostasis": {
+          "satiety": 80,
+          "energy": 80,
+          "stress": 20
+        },
         "controller": {
           "enabled": true,
-          "tool_allowlist": ["go_to", "perform", "say", "wait", "skip"]
+          "tool_allowlist": [
+            "go_to",
+            "perform",
+            "say",
+            "wait",
+            "skip"
+          ]
         },
-        "memory": {"top_k": 3}
+        "memory": {
+          "top_k": 3
+        },
+        "planner": {
+          "daily_goals": [
+            "Complete the shared analysis before the end of the work session",
+            "Coordinate with the other analyst when useful"
+          ],
+          "current_priorities": [
+            "Review the work area and choose a concrete next action"
+          ]
+        },
+        "character_slot": {
+          "label": "Lead research analyst",
+          "briefing": "You are midway through a joint analysis session. The report still needs a clear conclusion, and your colleague may need coordination before either of you takes a break.",
+          "default_character_id": "alex-chen",
+          "constraints": {
+            "minimum_age": 30,
+            "allowed_genders": [
+              "Man"
+            ],
+            "allowed_template_ids": [
+              "human-v1"
+            ]
+          }
+        }
       }
     },
     {
       "id": "agent-002",
       "components": {
-        "position": {"x": 2, "y": 1},
-        "homeostasis": {"satiety": 75, "energy": 85, "stress": 15},
-        "character_profile": {"character_id": "jordan-lee"},
+        "position": {
+          "x": 2,
+          "y": 1
+        },
+        "homeostasis": {
+          "satiety": 75,
+          "energy": 85,
+          "stress": 15
+        },
         "controller": {
           "enabled": true,
-          "tool_allowlist": ["go_to", "perform", "say", "wait", "skip"]
+          "tool_allowlist": [
+            "go_to",
+            "perform",
+            "say",
+            "wait",
+            "skip"
+          ]
         },
-        "memory": {"top_k": 3}
+        "memory": {
+          "top_k": 3
+        },
+        "planner": {
+          "daily_goals": [
+            "Coordinate the remaining analysis work",
+            "Take a restorative break after the urgent work is settled"
+          ],
+          "current_priorities": [
+            "Check whether the lead analyst needs information or assistance"
+          ]
+        },
+        "character_slot": {
+          "label": "Operations coordinator",
+          "briefing": "You are supporting a shared analysis session. The team needs practical coordination, but the lounge is available once the immediate work is under control.",
+          "default_character_id": "jordan-lee",
+          "constraints": {
+            "minimum_age": 21,
+            "allowed_genders": [
+              "Woman"
+            ],
+            "allowed_template_ids": [
+              "human-v1"
+            ]
+          }
+        }
       }
     }
   ]

@@ -138,12 +138,14 @@ A character may have:
 - conversation state;
 - a structured profile, senses, knowledge, and an optional LLM controller.
 
-Character profiles are now reusable, structured scenario records. The built-in
+Character profiles are reusable, structured library records. The built-in
 `human-v1` template covers identity, appearance, personality, background,
-motivations, capabilities, preferences, relationships, and ordered custom
-experimental sections. Reusable profiles live in independent character JSON
-files; browser operators may assign library characters to each scenario entity
-slot before starting a run.
+stable motivations, capabilities, preferences, relationships, and ordered
+custom experimental sections. Reusable profiles live in independent character
+JSON files. Scenarios own abstract character slots, temporary role briefings,
+goals, priorities, and initial episodic memory; browser operators compose a
+simulation situation by assigning eligible library characters to those slots
+before starting a run.
 
 The code currently uses ECS entity IDs such as `agent-001`. The conceptual term
 for a simulated person is **character**, not "LLM agent." This distinction avoids
@@ -423,6 +425,16 @@ specifies initial world, characters, coefficients, thresholds, memory settings,
 and other configuration.
 
 Provider credentials never belong in scenarios.
+
+The scenario library stores portable `ScenarioDefinition` JSON files. Its
+resource ID is the filename stem and is deliberately separate from the
+scenario's `name`. Editing or saving a library file does not mutate the
+operator's currently staged scenario or an active run.
+
+Staging is an explicit application boundary. It resolves character references
+and freezes a separate process-local prepared scenario snapshot. Starting a run
+is another explicit operation after staging; neither library browsing nor
+staging advances simulation time.
 
 ### 6.32 Run
 
@@ -927,8 +939,10 @@ client whose replay cursor expires must recover the latest snapshot and backfill
 domain events before resuming live display.
 
 The bundled browser UI is server-rendered instead. It renders authoritative
-snapshots on each request or timed document refresh and does not maintain a
-client-side telemetry model. The browser does not own simulation behavior.
+HTML snapshots on each request and progressively replaces only named live
+regions. JavaScript-disabled clients retain ordinary form navigation and timed
+document refresh. Neither path maintains a client-side telemetry model. The
+browser does not own simulation behavior.
 
 Telemetry snapshots may reveal more than any character could know. Never pass a
 telemetry snapshot directly into an LLM character controller.
@@ -1093,7 +1107,10 @@ Controller and perception additions belong in focused `application/agents` and
 monolithic cognition module. The browser is a server-rendered operator client:
 Python routes own UI orchestration, templates render authoritative snapshots as
 accessible HTML/SVG, and ordinary forms map directly to lifecycle functions.
-Client-side JavaScript is limited to browser-only progressive enhancement.
+Client-side JavaScript is limited to browser-only progressive enhancement:
+targeted HTML replacement, interaction-state preservation, clipboard access,
+and pointer map controls. It must not independently interpret or predict
+simulation state.
 
 ## 26. Rules for extending the project
 

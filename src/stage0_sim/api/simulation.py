@@ -34,6 +34,13 @@ class StartRunRequest(BaseModel):
     speed: float | None = Field(default=None, gt=0)
 
 
+class ScenarioCompositionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario: ScenarioDefinition
+    character_assignments: dict[str, str] = Field(default_factory=dict)
+
+
 class SpeedRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -60,20 +67,23 @@ def get_manager(request: Request) -> SimulationManager:
 
 @router.post("/scenarios", status_code=201)
 async def create_scenario(
-    scenario: ScenarioDefinition,
+    body: ScenarioCompositionRequest,
     request: Request,
 ) -> dict[str, object]:
     manager = get_manager(request)
     try:
-        scenario_id = manager.add_scenario(scenario)
+        scenario_id = manager.add_scenario(
+            body.scenario,
+            body.character_assignments,
+        )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     prepared = manager.get_scenario(scenario_id)
     return {
         "scenario_id": scenario_id,
-        "name": scenario.name,
+        "name": body.scenario.name,
         "characters": list(prepared.entity_summaries()),
-        "warnings": list(prepared.warnings),
+        "character_assignments": dict(prepared.assignments),
     }
 
 

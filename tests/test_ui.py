@@ -12,6 +12,8 @@ def test_ui_assets_are_installed_as_package_data() -> None:
     assert web.joinpath("base.html").is_file()
     assert web.joinpath("simulation.html").is_file()
     assert web.joinpath("characters.html").is_file()
+    assert web.joinpath("scenarios.html").is_file()
+    assert web.joinpath("scenario_fields.html").is_file()
     assert web.joinpath("styles.css").is_file()
     assert web.joinpath("enhancements.js").is_file()
     assert web.joinpath("demo.json").is_file()
@@ -37,6 +39,7 @@ def test_root_redirects_to_accessible_server_rendered_ui() -> None:
     assert 'aria-labelledby="inspector-heading"' in page.text
     assert 'aria-labelledby="events-heading"' in page.text
     assert 'href="/ui/characters/"' in page.text
+    assert 'href="/ui/scenarios/"' in page.text
     assert 'action="/ui/scenario/example"' in page.text
     assert 'action="/ui/run/start"' in page.text
     assert 'src="/ui/assets/enhancements.js"' in page.text
@@ -70,6 +73,9 @@ def test_server_rendered_ui_stages_then_controls_a_run() -> None:
             data={"satiety": "7", "energy": "", "stress": ""},
             follow_redirects=True,
         )
+        zoomed = client.post("/ui/view/zoom", data={"zoom": "1.75"})
+        invalid_zoom = client.post("/ui/view/zoom", data={"zoom": "4"})
+        zoomed_page = client.get("/ui/")
         stopped = client.post("/ui/run/control/stop", follow_redirects=True)
 
     assert 'disabled>Start run</button>' in initial.text
@@ -83,6 +89,9 @@ def test_server_rendered_ui_stages_then_controls_a_run() -> None:
     assert "Advanced one deterministic tick." in stepped.text
     assert "Updated vitals for agent-001." in mutated.text
     assert "homeostasis.mutated" in mutated.text
+    assert zoomed.status_code == 204
+    assert invalid_zoom.status_code == 400
+    assert 'data-map-zoom="1.75"' in zoomed_page.text
     assert "Simulation stopped." in stopped.text
     assert ">Start run</button>" in stopped.text
 
@@ -110,7 +119,10 @@ def test_bundled_demo_is_a_valid_runnable_scenario() -> None:
         demo_response = client.get("/ui/demo.json")
         characters_response = client.get("/characters")
         demo = demo_response.json()
-        scenario_response = client.post("/simulation/scenarios", json=demo)
+        scenario_response = client.post(
+            "/simulation/scenarios",
+            json={"scenario": demo, "character_assignments": {}},
+        )
         run_response = client.post(
             "/simulation/runs",
             json={

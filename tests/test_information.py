@@ -12,7 +12,12 @@ from stage0_sim.application.information import (
     InformationStore,
 )
 from stage0_sim.application.memory import EpisodicMemoryStore, MemoryRecord
-from stage0_sim.application.scenario import ScenarioDefinition, create_runner
+from stage0_sim.application.scenario import (
+    CharacterProfileDefinition,
+    ResolvedCharacterProfile,
+    ScenarioDefinition,
+    create_runner,
+)
 from stage0_sim.domain.components import (
     CharacterProfileComponent,
     InformationNamespaceComponent,
@@ -177,48 +182,58 @@ def test_information_store_retains_revision_history() -> None:
 
 def test_runner_creates_dossier_without_embedding_or_profile_regression() -> None:
     provider = CountingEmbeddingProvider()
-    scenario = ScenarioDefinition.model_validate(
+    character = CharacterProfileDefinition.model_validate(
         {
-            "name": "information-dossier",
-            "character_profiles": {
-                "alex": {
-                    "identity": {
-                        "display_name": "Alex Chen",
-                        "occupation": "Research engineer",
-                    },
-                    "motivations": {"goals": ["Finish the report"]},
-                    "custom_sections": [
+            "identity": {
+                "display_name": "Alex Chen",
+                "occupation": "Research engineer",
+            },
+            "motivations": {"values": ["accuracy"]},
+            "custom_sections": [
+                {
+                    "id": "experiment",
+                    "title": "Experiment",
+                    "fields": [
                         {
-                            "id": "experiment",
-                            "title": "Experiment",
-                            "fields": [
-                                {
-                                    "key": "nested_data",
-                                    "label": "Nested data",
-                                    "value": {
-                                        "strategy": "landmarks",
-                                        "weights": [1, 2, {"future": True}],
-                                    },
-                                }
-                            ],
+                            "key": "nested_data",
+                            "label": "Nested data",
+                            "value": {
+                                "strategy": "landmarks",
+                                "weights": [1, 2, {"future": True}],
+                            },
                         }
                     ],
                 }
-            },
+            ],
+        }
+    )
+    scenario = ScenarioDefinition.model_validate(
+        {
+            "name": "information-dossier",
             "world": {"width": 1, "height": 1},
             "entities": [
                 {
                     "id": "agent-001",
                     "components": {
                         "position": {"x": 0, "y": 0},
-                        "character_profile": {"profile_ref": "alex"},
+                        "character_slot": {"label": "Report author"},
+                        "planner": {"daily_goals": ["Finish the report"]},
                     },
                 }
             ],
         }
     )
 
-    runner = create_runner(scenario, embedding_provider=provider)
+    runner = create_runner(
+        scenario,
+        resolved_characters={
+            "agent-001": ResolvedCharacterProfile(
+                character_id="alex",
+                profile=character,
+            )
+        },
+        embedding_provider=provider,
+    )
     profile = runner.registry.get_component(
         "agent-001", CharacterProfileComponent
     )
@@ -231,12 +246,14 @@ def test_runner_creates_dossier_without_embedding_or_profile_regression() -> Non
     assert provider.call_count == 0
     assert profile.profile_id == "alex"
     assert profile.display_name == "Alex Chen"
-    assert profile.goals == ("Finish the report",)
     assert profile.content_hash
     assert namespace.namespace_id == character_information_namespace_id(
         "agent-001"
     )
-    assert namespace.document_ids == (dossier.id,)
+    assert namespace.document_ids == (
+        dossier.id,
+        "character-situation:agent-001",
+    )
     assert dossier.kind == "character.dossier"
     assert dossier.content["custom_sections"][0]["fields"][0]["value"] == {
         "strategy": "landmarks",

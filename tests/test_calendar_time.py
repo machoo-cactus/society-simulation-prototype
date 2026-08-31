@@ -54,10 +54,8 @@ def _scenario() -> ScenarioDefinition:
                             "energy": 80,
                             "stress": 20,
                         },
-                        "character_profile": {
-                            "display_name": "Alex",
-                            "role": "tester",
-                        },
+                        "character_slot": {"label": "Tester"},
+                        "metadata": {"display_name": "Alex"},
                         "controller": {"enabled": True},
                     },
                 }

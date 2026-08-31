@@ -2,7 +2,8 @@
 
 Character profiles are reusable JSON resources that describe who a simulated
 character is. They are stored separately from scenarios and from current
-physiology, perception, memory, and plans.
+physiology, perception, memory, plans, goals, priorities, and temporary role
+briefings.
 
 Each controller request has three prompt layers:
 
@@ -38,26 +39,50 @@ Store one character per file in `characters\`:
   },
   "motivations": {
     "values": ["accuracy", "helping colleagues"],
-    "goals": ["complete the report"]
+    "fears": ["letting collaborators down"],
+    "needs": ["time to verify important claims"]
   }
 }
 ```
 
 The filename must match the character ID, for example
-`characters\alex-chen.json`. Assign it to a scenario entity slot:
+`characters\alex-chen.json`. Scenarios declare abstract character slots:
 
 ```json
 {
   "id": "agent-001",
   "components": {
-    "character_profile": {"character_id": "alex-chen"}
+    "character_slot": {
+      "label": "Lead analyst",
+      "briefing": "Complete the report before leaving.",
+      "default_character_id": "alex-chen",
+      "constraints": {
+        "minimum_age": 30,
+        "allowed_genders": ["Man"],
+        "allowed_template_ids": ["human-v1"]
+      }
+    },
+    "planner": {
+      "daily_goals": ["Complete the report"],
+      "current_priorities": ["Verify the latest evidence"]
+    },
+    "memory": {
+      "initial_episodes": [
+        {"text": "The report is due this evening."}
+      ]
+    }
   }
 }
 ```
 
 The browser simulation page loads the character catalog from the API and shows
-a selector for each character slot. Assignments are validated before Start.
-Characters may be reused in multiple slots.
+only eligible characters for each slot. Explicit assignments override optional
+defaults. Assignments are validated before Start, and the same reusable
+character may be selected for multiple slots.
+
+Age bounds are inclusive. Gender allowlists use trimmed, case-insensitive exact
+matching. Template IDs use exact matching. If a constrained identity field is
+missing, the character is ineligible.
 
 The separate `/ui/characters/` page creates, imports, duplicates, downloads,
 deletes, renames, and edits character files. It exposes every `human-v1` field,
@@ -76,7 +101,7 @@ The built-in `human-v1` template supports:
 | `appearance` | `summary`, `height`, `build`, `hair`, `eyes`, `clothing`, `distinguishing_features` |
 | `personality` | `summary`, `traits`, `temperament`, `social_style`, `speech_style`, `strengths`, `flaws` |
 | `background` | `birthplace`, `residence`, `education`, `history` |
-| `motivations` | `values`, `goals`, `fears`, `needs`, `current_priorities` |
+| `motivations` | `values`, `fears`, `needs` |
 | `capabilities` | `skills`, `knowledge_areas`, `limitations` |
 | `preferences` | `likes`, `dislikes`, `habits`, `routines` |
 | `relationships` | ordered records containing `target_id`, `relationship`, `sentiment`, and `notes` |
@@ -121,34 +146,32 @@ permissions or add simulation mechanics.
 
 ## Templates and compatibility
 
-`character_profile_templates` can change section order:
+The built-in `human-v1` template uses this section order:
 
 ```json
 {
-  "character_profile_templates": {
-    "human-v1": {
-      "schema_version": 1,
-      "sections": [
-        "identity",
-        "personality",
-        "motivations",
-        "appearance",
-        "background",
-        "capabilities",
-        "preferences",
-        "relationships"
-      ]
-    }
-  }
+  "schema_version": 1,
+  "sections": [
+    "identity",
+    "appearance",
+    "personality",
+    "background",
+    "motivations",
+    "capabilities",
+    "preferences",
+    "relationships"
+  ]
 }
 ```
 
-Scenario-level `character_profiles`, `profile_ref`, inline profiles, and the
-previous flat fields remain accepted for compatibility. They are deprecated
-and are never emitted by the character editor or migration command. Use
-`stage0-sim characters extract <scenario> --write` to create character files
-and a migrated scenario.
+Scenario-level `character_profiles`, entity `character_profile`, `profile_ref`,
+inline profiles, and the previous flat profile fields are rejected by scenario
+schema version 2. Use
+`stage0-sim characters extract <scenario> --write` to create character files,
+move legacy goals and priorities into planner data, and emit `character_slot`
+components.
 
-Characters are resolved and frozen when a scenario is staged. Editing a source
-file does not alter an already staged scenario or active run. The complete
-resolved character snapshot and content hash are stored in the run dataset.
+Characters and assignments are resolved and frozen when a composed situation
+is staged. Editing a scenario or character source file does not alter an
+already staged situation or active run. The effective slot assignment, complete
+resolved character snapshot, and content hash are stored in the run dataset.

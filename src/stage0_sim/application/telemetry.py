@@ -6,6 +6,7 @@ from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
     ActivityComponent,
     CharacterProfileComponent,
+    CharacterSituationComponent,
     ControllerComponent,
     ConversationComponent,
     DriveComponent,
@@ -493,6 +494,8 @@ def build_agent_snapshot(
     if registry.has_component(agent_id, PlannerComponent):
         planner = registry.get_component(agent_id, PlannerComponent)
         payload["planner"] = {
+            "daily_goals": list(planner.daily_goals),
+            "current_priorities": list(planner.current_priorities),
             "needs_plan": planner.needs_plan,
             "request_count": planner.request_count,
             "failure_count": planner.failure_count,
@@ -506,6 +509,15 @@ def build_agent_snapshot(
             "current_decision_id": controller.current_decision_id,
             "last_outcome": controller.last_outcome,
             "next_decision_time": controller.next_decision_time,
+        }
+    if registry.has_component(agent_id, CharacterSituationComponent):
+        situation = registry.get_component(
+            agent_id, CharacterSituationComponent
+        )
+        payload["character_situation"] = {
+            "slot_id": situation.slot_id,
+            "label": situation.label,
+            "briefing": situation.briefing,
         }
     if registry.has_component(agent_id, PerceptionComponent):
         perception = registry.get_component(agent_id, PerceptionComponent)

@@ -1,84 +1,130 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "phase-4-system1-preemption",
   "seed": 20260824,
   "dt": 1.0,
   "speed": 1.0,
   "system1": {
     "thresholds": {
-      "SATIETY": {"critical": 15.0, "recovery": 30.0},
-      "ENERGY": {"critical": 15.0, "recovery": 30.0},
+      "SATIETY": {
+        "critical": 15.0,
+        "recovery": 30.0
+      },
+      "ENERGY": {
+        "critical": 15.0,
+        "recovery": 30.0
+      },
       "STRESS": {
         "critical": 85.0,
         "recovery": 70.0,
         "critical_when_high": true
       }
     },
-    "tie_break_order": ["SATIETY", "ENERGY", "STRESS"]
+    "tie_break_order": [
+      "SATIETY",
+      "ENERGY",
+      "STRESS"
+    ]
   },
   "world": {
     "width": 8,
     "height": 3,
     "blocked": [
-      {"x": 3, "y": 0},
-      {"x": 3, "y": 2}
+      {
+        "x": 3,
+        "y": 0
+      },
+      {
+        "x": 3,
+        "y": 2
+      }
     ],
     "zones": [
       {
         "id": "kitchen",
         "name": "Kitchen",
         "type": "KITCHEN",
-        "bounds": {"x": 0, "y": 0, "width": 3, "height": 3}
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 3,
+          "height": 3
+        }
       },
       {
         "id": "office",
         "name": "Office",
         "type": "OFFICE",
-        "bounds": {"x": 4, "y": 0, "width": 4, "height": 3}
+        "bounds": {
+          "x": 4,
+          "y": 0,
+          "width": 4,
+          "height": 3
+        }
       }
     ],
     "stations": [
       {
         "id": "fridge-near",
         "name": "Kitchen Fridge",
-        "position": {"x": 1, "y": 1},
+        "position": {
+          "x": 1,
+          "y": 1
+        },
         "actions": [
           {
             "action": "EAT",
             "duration": 5,
-            "effect": {"satiety_delta": 60}
+            "effect": {
+              "satiety_delta": 60
+            }
           }
         ]
       },
       {
         "id": "bed-1",
         "name": "Recovery Bed",
-        "position": {"x": 0, "y": 2},
+        "position": {
+          "x": 0,
+          "y": 2
+        },
         "actions": [
           {
             "action": "SLEEP",
             "duration": 10,
-            "effect": {"energy_target": 100}
+            "effect": {
+              "energy_target": 100
+            }
           }
         ]
       },
       {
         "id": "sofa-1",
         "name": "Quiet Sofa",
-        "position": {"x": 0, "y": 0},
+        "position": {
+          "x": 0,
+          "y": 0
+        },
         "actions": [
           {
             "action": "RELAX",
             "duration": 10,
-            "effect": {"stress_delta": -40}
+            "effect": {
+              "stress_delta": -40
+            }
           }
         ]
       },
       {
         "id": "desk-1",
         "name": "Office Desk",
-        "position": {"x": 7, "y": 1},
-        "supported_actions": ["WORK"]
+        "position": {
+          "x": 7,
+          "y": 1
+        },
+        "supported_actions": [
+          "WORK"
+        ]
       }
     ]
   },
@@ -86,18 +132,48 @@
     {
       "id": "agent-001",
       "components": {
-        "position": {"x": 5, "y": 1},
-        "movement": {"destination": {"x": 7, "y": 1}},
-        "homeostasis": {"satiety": 10.0, "energy": 80.0, "stress": 20.0},
-        "activity": {"type": "WORKING"},
+        "position": {
+          "x": 5,
+          "y": 1
+        },
+        "movement": {
+          "destination": {
+            "x": 7,
+            "y": 1
+          }
+        },
+        "homeostasis": {
+          "satiety": 10.0,
+          "energy": 80.0,
+          "stress": 20.0
+        },
+        "activity": {
+          "type": "WORKING"
+        },
         "plan": {
-          "current": {"action": "WORK", "duration": 3600},
+          "current": {
+            "action": "WORK",
+            "duration": 3600
+          },
           "queue": [
-            {"action": "READ", "duration": 1800}
+            {
+              "action": "READ",
+              "duration": 1800
+            }
           ]
         },
-        "memory": {"top_k": 3},
-        "metadata": {"display_name": "Alex"}
+        "memory": {
+          "top_k": 3
+        },
+        "metadata": {
+          "display_name": "Alex"
+        },
+        "character_slot": {
+          "label": "Alex",
+          "briefing": "",
+          "default_character_id": "alex-chen",
+          "constraints": {}
+        }
       }
     }
   ]

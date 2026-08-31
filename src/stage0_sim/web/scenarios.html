@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% from "scenario_fields.html" import render_node %}
+{% block title %}Scenarios · Stage 0{% endblock %}
+{% block eyebrow %}Portable world and run configuration{% endblock %}
+{% block heading %}Scenario Library{% endblock %}
+{% block content %}
+<div class="scenario-library-layout">
+  <aside class="panel scenario-list" aria-labelledby="scenario-list-heading">
+    <header class="panel__header">
+      <h2 id="scenario-list-heading">Saved scenarios</h2>
+      <a class="button-link" href="/ui/scenarios/?new=1">New scenario</a>
+    </header>
+    <form class="search-form" method="get">
+      <label for="scenario-search">Search scenarios</label>
+      <input id="scenario-search" name="search" type="search" value="{{ search }}">
+      <button type="submit">Search</button>
+    </form>
+    <nav aria-label="Scenarios">
+      {% for scenario in scenarios %}
+        <a href="?selected={{ scenario.id|urlencode }}" {% if draft.original_id == scenario.id %}aria-current="page"{% endif %}>
+          <strong>{{ scenario.name }}</strong>
+          <span>{{ scenario.id }} · {{ scenario.world_kind }} · v{{ scenario.schema_version }} · {{ scenario.entity_count }} entities</span>
+        </a>
+      {% else %}
+        <p class="empty-state">No matching scenarios.</p>
+      {% endfor %}
+    </nav>
+    <details>
+      <summary>Import scenario JSON</summary>
+      <form method="post" action="/ui/scenarios/import" enctype="multipart/form-data">
+        <label for="scenario-import-file">Scenario JSON</label>
+        <input id="scenario-import-file" name="scenario" type="file" accept=".json,application/json" required>
+        <button type="submit">Import</button>
+      </form>
+    </details>
+  </aside>
+
+  <section class="panel scenario-editor" aria-labelledby="scenario-editor-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="scenario-editor-heading">{{ draft.resource_id or "New scenario" }}</h2>
+        <p>
+          Resource IDs name library files. The Scenario name field remains part
+          of the portable document.
+        </p>
+      </div>
+      {% if draft.original_id %}
+        <div class="header-actions">
+          <a class="button-link" href="/ui/scenarios/{{ draft.original_id }}/download">Download JSON</a>
+          <form method="post" action="/ui/scenarios/{{ draft.original_id }}/duplicate">
+            <input type="hidden" name="expected_hash" value="{{ draft.original_hash }}">
+            <button type="submit">Duplicate</button>
+          </form>
+        </div>
+      {% endif %}
+    </header>
+
+    {% if draft.errors %}
+      <section class="editor-error-summary" role="alert" aria-labelledby="scenario-error-heading">
+        <h3 id="scenario-error-heading">Scenario validation failed</h3>
+        <p>Correct the following fields. Your submitted values are retained.</p>
+        <ul>
+          {% for problem in draft.errors %}
+            <li><a href="#{{ problem.control_id }}">{{ problem.message }}</a></li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    <form class="scenario-form" method="post" action="/ui/scenarios/drafts/{{ draft.token }}">
+      <fieldset class="scenario-resource">
+        <legend>Library resource</legend>
+        <label for="scenario-resource-id">
+          Scenario resource ID
+          <input
+            id="scenario-resource-id"
+            name="resource_id"
+            value="{{ draft.resource_id }}"
+            pattern="[a-z0-9][a-z0-9._\-]*"
+            required
+          >
+        </label>
+        {% if draft.original_id %}
+          <p>Original resource: <code>{{ draft.original_id }}</code>. Renames remain hash protected.</p>
+        {% endif %}
+      </fieldset>
+
+      {{ render_node(draft.root) }}
+
+      <div class="scenario-form-actions">
+        <button type="submit" name="intent" value="refresh" formnovalidate>
+          Apply field choices
+        </button>
+        <button class="primary" type="submit" name="intent" value="save">
+          {{ "Save scenario" if draft.original_id else "Create scenario" }}
+        </button>
+        <button type="submit" name="intent" value="stage">Validate and stage</button>
+        <button type="submit" name="intent" value="discard" formnovalidate>Discard unsaved changes</button>
+      </div>
+      <p class="staging-note">
+        Saving changes only the library file. Staging validates this draft and
+        replaces the Simulation preview, but never saves or starts a run.
+      </p>
+    </form>
+
+    {% if draft.original_id %}
+      <details class="danger-zone">
+        <summary>Delete {{ draft.original_id }}</summary>
+        <form method="post" action="/ui/scenarios/{{ draft.original_id }}/delete">
+          <input type="hidden" name="expected_hash" value="{{ draft.original_hash }}">
+          <label>
+            <input type="checkbox" name="confirm" value="yes" required>
+            I understand this permanently deletes the scenario file.
+          </label>
+          <button class="danger" type="submit">Delete scenario</button>
+        </form>
+      </details>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

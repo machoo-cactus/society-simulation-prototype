@@ -46,10 +46,7 @@ def create_city_runner(
     return create_runner(
         scenario,
         run_id=run_id,
-        resolved_characters={
-            character_id: character.profile()
-            for character_id, character in prepared.characters.items()
-        },
+        resolved_characters=prepared.runtime_characters(),
     )
 
 
@@ -210,7 +207,8 @@ def test_city_and_building_read_apis() -> None:
     scenario = load_scenario(SCENARIO_PATH).model_dump(mode="json")
     with TestClient(app) as client:
         scenario_id = client.post(
-            "/simulation/scenarios", json=scenario
+            "/simulation/scenarios",
+            json={"scenario": scenario, "character_assignments": {}},
         ).json()["scenario_id"]
         run_id = client.post(
             "/simulation/runs",

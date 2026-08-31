@@ -6,7 +6,7 @@ from stage0_sim.application.agents.contracts import (
     ModelMessage,
 )
 
-PROMPT_VERSION = "tool-controller-v4"
+PROMPT_VERSION = "tool-controller-v5"
 
 GENERAL_CHARACTER_CONTROLLER_PROMPT = (
     "You are the executive controller for one embodied character in a "
@@ -56,6 +56,13 @@ def build_messages(request: CharacterDecisionRequest) -> tuple[ModelMessage, ...
         ModelMessage(
             role="user",
             content=information_context,
+        ),
+        ModelMessage(
+            role="user",
+            content=(
+                "Scenario situation (temporary context, not stable identity):\n\n"
+                f"{request.situation_description or '(no additional briefing)'}"
+            ),
         ),
         ModelMessage(
             role="user",

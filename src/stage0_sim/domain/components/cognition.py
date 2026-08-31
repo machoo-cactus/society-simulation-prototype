@@ -6,6 +6,7 @@ from stage0_sim.domain.events import JsonValue
 @dataclass(slots=True)
 class PlannerComponent:
     daily_goals: tuple[str, ...] = ()
+    current_priorities: tuple[str, ...] = ()
     needs_plan: bool = True
     request_count: int = 0
     failure_count: int = 0
@@ -28,13 +29,23 @@ class CharacterProfileComponent:
     display_name: str
     description: str
     ui_data: dict[str, JsonValue]
-    goals: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.profile_id or not self.template_id or not self.display_name:
             raise ValueError("character profile identity must not be empty")
         if self.template_version <= 0:
             raise ValueError("character template_version must be greater than zero")
+
+
+@dataclass(frozen=True, slots=True)
+class CharacterSituationComponent:
+    slot_id: str
+    label: str
+    briefing: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.slot_id or not self.label:
+            raise ValueError("character situation identity must not be empty")
 
 
 @dataclass(slots=True)

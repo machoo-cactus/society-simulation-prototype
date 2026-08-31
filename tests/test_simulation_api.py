@@ -19,7 +19,10 @@ def create_run(
 ) -> str:
     scenario_response = client.post(
         "/simulation/scenarios",
-        json=load_scenario_payload(scenario_name),
+        json={
+            "scenario": load_scenario_payload(scenario_name),
+            "character_assignments": {},
+        },
     )
     assert scenario_response.status_code == 201
     scenario_id = scenario_response.json()["scenario_id"]

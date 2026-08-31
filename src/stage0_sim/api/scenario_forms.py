@@ -1,0 +1,1235 @@
+from __future__ import annotations
+
+import json
+import types
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Any, ForwardRef, Literal, Union, get_args, get_origin
+from uuid import uuid4
+
+from pydantic import BaseModel, ValidationError
+from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
+
+from stage0_sim.application import scenario as scenario_models
+from stage0_sim.application.scenario import ScenarioDefinition
+
+type PathPart = str | int
+type FieldPath = tuple[PathPart, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioFieldSchema:
+    kind: str
+    label: str
+    field_name: str = ""
+    annotation: Any = Any
+    model: type[BaseModel] | None = None
+    children: tuple[ScenarioFieldSchema, ...] = ()
+    item: ScenarioFieldSchema | None = None
+    value: ScenarioFieldSchema | None = None
+    variants: tuple[tuple[str, str, ScenarioFieldSchema | None], ...] = ()
+    options: tuple[tuple[str, str], ...] = ()
+    input_type: str = "text"
+    required: bool = False
+    minimum: float | int | None = None
+    maximum: float | int | None = None
+    minimum_exclusive: bool = False
+    maximum_exclusive: bool = False
+    arbitrary_json: bool = False
+    extensible: bool = False
+
+
+@dataclass(slots=True)
+class ScenarioEditorNode:
+    schema: ScenarioFieldSchema
+    id: str = field(default_factory=lambda: uuid4().hex)
+    value: str = ""
+    choice: str = ""
+    key: str = ""
+    children: list[ScenarioEditorNode] = field(default_factory=list)
+    items: list[ScenarioEditorNode] = field(default_factory=list)
+    variants: dict[str, ScenarioEditorNode | None] = field(default_factory=dict)
+    path: FieldPath = ()
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def control_id(self) -> str:
+        return f"scenario-field-{self.id}"
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioEditorError:
+    message: str
+    control_id: str
+
+
+@dataclass(slots=True)
+class ScenarioEditorDraft:
+    token: str
+    session_id: str
+    resource_id: str
+    original_id: str | None
+    original_hash: str
+    root: ScenarioEditorNode
+    errors: list[ScenarioEditorError] = field(default_factory=list)
+
+
+class ScenarioEditorDraftStore:
+    def __init__(
+        self,
+        *,
+        maximum_drafts: int = 128,
+        maximum_session_drafts: int = 16,
+    ) -> None:
+        self._drafts: OrderedDict[str, ScenarioEditorDraft] = OrderedDict()
+        self.maximum_drafts = maximum_drafts
+        self.maximum_session_drafts = maximum_session_drafts
+
+    def create(
+        self,
+        session_id: str,
+        scenario: ScenarioDefinition,
+        *,
+        resource_id: str = "",
+        original_id: str | None = None,
+        original_hash: str = "",
+    ) -> ScenarioEditorDraft:
+        token = uuid4().hex
+        draft = ScenarioEditorDraft(
+            token=token,
+            session_id=session_id,
+            resource_id=resource_id,
+            original_id=original_id,
+            original_hash=original_hash,
+            root=node_from_value(
+                SCENARIO_EDITOR_SCHEMA,
+                scenario.model_dump(mode="json"),
+            ),
+        )
+        self._drafts[token] = draft
+        self._trim(session_id)
+        return draft
+
+    def get(self, session_id: str, token: str) -> ScenarioEditorDraft | None:
+        draft = self._drafts.get(token)
+        if draft is None or draft.session_id != session_id:
+            return None
+        self._drafts.move_to_end(token)
+        return draft
+
+    def delete(self, session_id: str, token: str) -> None:
+        draft = self._drafts.get(token)
+        if draft is not None and draft.session_id == session_id:
+            del self._drafts[token]
+
+    def _trim(self, session_id: str) -> None:
+        session_tokens = [
+            token for token, draft in self._drafts.items() if draft.session_id == session_id
+        ]
+        while len(session_tokens) > self.maximum_session_drafts:
+            del self._drafts[session_tokens.pop(0)]
+        while len(self._drafts) > self.maximum_drafts:
+            self._drafts.popitem(last=False)
+
+
+KNOWN_ENTITY_COMPONENT_MODELS: dict[str, type[BaseModel] | None] = {
+    "position": scenario_models.PositionDefinition,
+    "spatial_location": scenario_models.SpatialLocationDefinition,
+    "movement": scenario_models.MovementDefinition,
+    "homeostasis": scenario_models.HomeostasisComponentDefinition,
+    "activity": scenario_models.ActivityDefinition,
+    "character_slot": scenario_models.CharacterSlotDefinition,
+    "plan": scenario_models.PlanComponentDefinition,
+    "planner": scenario_models.PlannerComponentDefinition,
+    "information": scenario_models.InformationComponentDefinition,
+    "controller": scenario_models.ControllerDefinition,
+    "senses": scenario_models.SensesDefinition,
+    "memory": scenario_models.MemoryComponentDefinition,
+    "conversation": scenario_models.ConversationComponentDefinition,
+    "metadata": None,
+}
+
+ARBITRARY_JSON_FIELDS: frozenset[tuple[type[BaseModel], str]] = frozenset(
+    {
+        (
+            scenario_models.InitialInformationDocumentDefinition,
+            "content",
+        ),
+        (
+            scenario_models.InitialInformationSourceDefinition,
+            "metadata",
+        ),
+        (scenario_models.TransportDefinition, "metro_lines"),
+        (scenario_models.CharacterCustomFieldDefinition, "value"),
+    }
+)
+
+EXTENSIBLE_PROFILE_MODELS: frozenset[type[BaseModel]] = frozenset(
+    {
+        scenario_models.CharacterIdentityDefinition,
+        scenario_models.CharacterAppearanceDefinition,
+        scenario_models.CharacterPersonalityDefinition,
+        scenario_models.CharacterBackgroundDefinition,
+        scenario_models.CharacterMotivationsDefinition,
+        scenario_models.CharacterCapabilitiesDefinition,
+        scenario_models.CharacterPreferencesDefinition,
+        scenario_models.CharacterRelationshipDefinition,
+        scenario_models.CharacterCustomFieldDefinition,
+        scenario_models.CharacterCustomSectionDefinition,
+        scenario_models.CharacterProfileDefinition,
+    }
+)
+
+# This registry is deliberately explicit. The coverage test fails when a
+# scenario model gains a field until the editor classification is reviewed.
+SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
+    scenario_models.CoordinateDefinition: frozenset(["x", "y"]),
+    scenario_models.BoundsDefinition: frozenset(["x", "y", "width", "height"]),
+    scenario_models.ZoneDefinition: frozenset(["id", "name", "type", "bounds", "tiles"]),
+    scenario_models.StationDefinition: frozenset(
+        ["id", "name", "position", "supported_actions", "actions", "available", "capacity"]
+    ),
+    scenario_models.HomeostasisEffectDefinition: frozenset(
+        [
+            "satiety_delta",
+            "energy_delta",
+            "stress_delta",
+            "satiety_target",
+            "energy_target",
+            "stress_target",
+        ]
+    ),
+    scenario_models.StationActionDefinition: frozenset(["action", "duration", "effect"]),
+    scenario_models.WorldDefinition: frozenset(["width", "height", "blocked", "zones", "stations"]),
+    scenario_models.MapPointDefinition: frozenset(["x", "y"]),
+    scenario_models.CityBoundsDefinition: frozenset(["min_x", "min_y", "max_x", "max_y"]),
+    scenario_models.CityDefinition: frozenset(["id", "name", "bounds_meters"]),
+    scenario_models.DistrictDefinition: frozenset(["id", "name", "center"]),
+    scenario_models.BuildingEntranceDefinition: frozenset(
+        ["id", "local_coordinate", "neighborhood_node_id"]
+    ),
+    scenario_models.BuildingDefinition: frozenset(
+        ["id", "name", "district_id", "city_position", "local_map_id", "entrances"]
+    ),
+    scenario_models.OutdoorPlaceDefinition: frozenset(
+        ["id", "name", "district_id", "city_position", "network_node_id"]
+    ),
+    scenario_models.TransportNodeDefinition: frozenset(["id", "kind", "position", "place_id"]),
+    scenario_models.TransportEdgeDefinition: frozenset(
+        [
+            "id",
+            "from_node_id",
+            "to_node_id",
+            "allowed_modes",
+            "distance_meters",
+            "geometry",
+            "speed_limit_mps",
+            "bidirectional",
+        ]
+    ),
+    scenario_models.VehicleLocationDefinition: frozenset(["scale", "place_id", "network_node_id"]),
+    scenario_models.VehicleDefinition: frozenset(["id", "type", "name", "capacity", "location"]),
+    scenario_models.TransportDefinition: frozenset(
+        [
+            "nodes",
+            "edges",
+            "metro_lines",
+            "vehicles",
+            "walking_speed_mps",
+            "cycling_speed_mps",
+            "car_speed_mps",
+            "metro_speed_mps",
+        ]
+    ),
+    scenario_models.CityWorldDefinition: frozenset(
+        ["type", "city", "districts", "buildings", "outdoor_places", "local_maps", "transport"]
+    ),
+    scenario_models.ActivityRatesDefinition: frozenset(["satiety", "energy", "stress"]),
+    scenario_models.HomeostasisSettingsDefinition: frozenset({"activity_coefficients"}),
+    scenario_models.DriveThresholdDefinition: frozenset(
+        ["critical", "recovery", "critical_when_high"]
+    ),
+    scenario_models.System1SettingsDefinition: frozenset(["thresholds", "tie_break_order"]),
+    scenario_models.MemorySettingsDefinition: frozenset(
+        ["semantic_weight", "recency_weight", "importance_weight", "recency_half_life"]
+    ),
+    scenario_models.PerceptionSettingsDefinition: frozenset(
+        [
+            "vision_range",
+            "recognition_range",
+            "hearing_range",
+            "whisper_range",
+            "blocked_tiles_are_opaque",
+            "inbox_limit",
+            "fact_max_age_seconds",
+            "renderer",
+        ]
+    ),
+    scenario_models.CognitionSettingsDefinition: frozenset(
+        [
+            "controller",
+            "execution_mode",
+            "model_profile",
+            "decision_timeout_seconds",
+            "max_output_tokens",
+            "max_read_tool_rounds",
+            "max_state_changing_tools",
+            "max_concurrency",
+            "max_requests",
+            "max_input_tokens",
+            "max_total_output_tokens",
+            "tool_allowlist",
+        ]
+    ),
+    scenario_models.CharacterProfileTemplateDefinition: frozenset(["schema_version", "sections"]),
+    scenario_models.CharacterSelectionConstraintsDefinition: frozenset(
+        [
+            "minimum_age",
+            "maximum_age",
+            "allowed_genders",
+            "allowed_template_ids",
+        ]
+    ),
+    scenario_models.CharacterSlotDefinition: frozenset(
+        ["label", "briefing", "default_character_id", "constraints"]
+    ),
+    scenario_models.EntityDefinition: frozenset(["id", "components"]),
+    scenario_models.CalendarSettingsDefinition: frozenset(
+        ["start_datetime", "update_interval_seconds"]
+    ),
+    scenario_models.ScenarioDefinition: frozenset(
+        [
+            "schema_version",
+            "name",
+            "seed",
+            "dt",
+            "speed",
+            "run_id",
+            "calendar",
+            "world",
+            "homeostasis",
+            "system1",
+            "memory",
+            "perception",
+            "cognition",
+            "entities",
+        ]
+    ),
+    scenario_models.PositionDefinition: frozenset(["x", "y"]),
+    scenario_models.MovementDefinition: frozenset({"destination"}),
+    scenario_models.HomeostasisComponentDefinition: frozenset(["satiety", "energy", "stress"]),
+    scenario_models.SpatialLocationDefinition: frozenset(
+        ["scale", "place_id", "local_coordinate", "network_node_id", "edge_id", "edge_progress"]
+    ),
+    scenario_models.CharacterIdentityDefinition: frozenset(
+        ["display_name", "age", "gender", "pronouns", "occupation"]
+    ),
+    scenario_models.CharacterAppearanceDefinition: frozenset(
+        ["summary", "height", "build", "hair", "eyes", "clothing", "distinguishing_features"]
+    ),
+    scenario_models.CharacterPersonalityDefinition: frozenset(
+        ["summary", "traits", "temperament", "social_style", "speech_style", "strengths", "flaws"]
+    ),
+    scenario_models.CharacterBackgroundDefinition: frozenset(
+        ["birthplace", "residence", "education", "history"]
+    ),
+    scenario_models.CharacterMotivationsDefinition: frozenset(
+        ["values", "fears", "needs"]
+    ),
+    scenario_models.CharacterCapabilitiesDefinition: frozenset(
+        ["skills", "knowledge_areas", "limitations"]
+    ),
+    scenario_models.CharacterPreferencesDefinition: frozenset(
+        ["likes", "dislikes", "habits", "routines"]
+    ),
+    scenario_models.CharacterRelationshipDefinition: frozenset(
+        ["target_id", "relationship", "sentiment", "notes"]
+    ),
+    scenario_models.CharacterCustomFieldDefinition: frozenset(
+        ["key", "label", "value", "prompt_visible", "ui_visible"]
+    ),
+    scenario_models.CharacterCustomSectionDefinition: frozenset(
+        ["id", "title", "prompt_visible", "ui_visible", "fields"]
+    ),
+    scenario_models.CharacterProfileDefinition: frozenset(
+        [
+            "template_id",
+            "identity",
+            "appearance",
+            "personality",
+            "background",
+            "motivations",
+            "capabilities",
+            "preferences",
+            "relationships",
+            "custom_sections",
+        ]
+    ),
+    scenario_models.ControllerDefinition: frozenset(["enabled", "tool_allowlist"]),
+    scenario_models.SensesDefinition: frozenset(
+        ["vision_range", "recognition_range", "hearing_multiplier"]
+    ),
+    scenario_models.ActivityDefinition: frozenset({"type"}),
+    scenario_models.PlanActionDefinition: frozenset(["action", "target", "duration", "mode"]),
+    scenario_models.PlanComponentDefinition: frozenset(["queue", "current"]),
+    scenario_models.PlannerComponentDefinition: frozenset(
+        ["daily_goals", "current_priorities", "needs_plan"]
+    ),
+    scenario_models.InitialInformationSourceDefinition: frozenset(
+        ["type", "observer_id", "reference_ids", "metadata"]
+    ),
+    scenario_models.InitialInformationVisibilityDefinition: frozenset(
+        ["level", "owner_ids", "reader_ids"]
+    ),
+    scenario_models.InitialInformationTimeRangeDefinition: frozenset(["start", "end"]),
+    scenario_models.InitialInformationDocumentDefinition: frozenset(
+        [
+            "id",
+            "kind",
+            "schema_id",
+            "subject_ids",
+            "content",
+            "source",
+            "valid_time",
+            "recorded_at",
+            "visibility",
+        ]
+    ),
+    scenario_models.InformationComponentDefinition: frozenset({"documents"}),
+    scenario_models.InitialMemoryDefinition: frozenset(["text", "simulation_time", "importance"]),
+    scenario_models.MemoryComponentDefinition: frozenset(["top_k", "initial_episodes"]),
+    scenario_models.ConversationComponentDefinition: frozenset({"turns"}),
+}
+
+
+def scenario_editor_coverage_errors() -> tuple[str, ...]:
+    errors: list[str] = []
+    for model, registered in SCENARIO_EDITOR_MODEL_FIELDS.items():
+        actual = frozenset(model.model_fields)
+        if actual != registered:
+            errors.append(
+                f"{model.__name__}: registered={sorted(registered)!r}, actual={sorted(actual)!r}"
+            )
+    for model, field_name in ARBITRARY_JSON_FIELDS:
+        if model not in SCENARIO_EDITOR_MODEL_FIELDS:
+            errors.append(f"{model.__name__}.{field_name}: model is not registered")
+        elif field_name not in model.model_fields:
+            errors.append(f"{model.__name__}.{field_name}: unknown field")
+    component_definition_names = {
+        "PositionDefinition",
+        "MovementDefinition",
+        "SpatialLocationDefinition",
+        "CharacterSlotDefinition",
+        "ControllerDefinition",
+        "SensesDefinition",
+        "ActivityDefinition",
+    }
+    discovered_components = {
+        model
+        for name, model in vars(scenario_models).items()
+        if isinstance(model, type)
+        and issubclass(model, BaseModel)
+        and (
+            name.endswith("ComponentDefinition")
+            or name in component_definition_names
+        )
+    }
+    registered_components = {
+        model
+        for model in KNOWN_ENTITY_COMPONENT_MODELS.values()
+        if model is not None
+    }
+    if discovered_components != registered_components:
+        errors.append(
+            "entity components: registered="
+            f"{sorted(item.__name__ for item in registered_components)!r}, "
+            "discovered="
+            f"{sorted(item.__name__ for item in discovered_components)!r}"
+        )
+    return tuple(errors)
+
+
+def _humanize(name: str) -> str:
+    return name.replace("_", " ").strip().title()
+
+
+def _singular(name: str) -> str:
+    if name.endswith("ies"):
+        return f"{name[:-3]}y"
+    if name.endswith("s"):
+        return name[:-1]
+    return name
+
+
+def _field_limits(
+    field_info: FieldInfo,
+) -> tuple[
+    float | int | None,
+    float | int | None,
+    bool,
+    bool,
+]:
+    minimum: float | int | None = None
+    maximum: float | int | None = None
+    minimum_exclusive = False
+    maximum_exclusive = False
+    for item in field_info.metadata:
+        if getattr(item, "ge", None) is not None:
+            minimum = item.ge
+        if getattr(item, "gt", None) is not None:
+            minimum = item.gt
+            minimum_exclusive = True
+        if getattr(item, "le", None) is not None:
+            maximum = item.le
+        if getattr(item, "lt", None) is not None:
+            maximum = item.lt
+            maximum_exclusive = True
+    return minimum, maximum, minimum_exclusive, maximum_exclusive
+
+
+def _is_model(annotation: Any) -> bool:
+    return isinstance(annotation, type) and issubclass(annotation, BaseModel)
+
+
+def _is_enum(annotation: Any) -> bool:
+    return isinstance(annotation, type) and issubclass(annotation, Enum)
+
+
+def _field_schema(
+    annotation: Any,
+    *,
+    label: str,
+    field_name: str = "",
+    field_info: FieldInfo | None = None,
+    owner: type[BaseModel] | None = None,
+) -> ScenarioFieldSchema:
+    if isinstance(annotation, ForwardRef):
+        annotation = getattr(scenario_models, annotation.__forward_arg__)
+    elif isinstance(annotation, str):
+        annotation = getattr(scenario_models, annotation)
+    required = bool(field_info and field_info.is_required())
+    minimum, maximum, minimum_exclusive, maximum_exclusive = (
+        _field_limits(field_info) if field_info is not None else (None, None, False, False)
+    )
+    if owner is not None and (owner, field_name) in ARBITRARY_JSON_FIELDS:
+        return ScenarioFieldSchema(
+            kind="scalar",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            input_type="json",
+            required=required,
+            arbitrary_json=True,
+        )
+    if owner is scenario_models.EntityDefinition and field_name == "components":
+        return _components_schema(label, field_name)
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin in {Union, types.UnionType} and type(None) in args:
+        non_none = tuple(item for item in args if item is not type(None))
+        if len(non_none) == 1:
+            child = _field_schema(
+                non_none[0],
+                label=label,
+                field_name=field_name,
+                field_info=field_info,
+                owner=owner,
+            )
+            return ScenarioFieldSchema(
+                kind="optional",
+                label=label,
+                field_name=field_name,
+                annotation=annotation,
+                item=child,
+            )
+        variants: list[tuple[str, str, ScenarioFieldSchema | None]] = [
+            ("none", "Not included", None)
+        ]
+        for item in non_none:
+            key = "grid" if item is scenario_models.WorldDefinition else "city"
+            variant_label = (
+                "Grid world" if item is scenario_models.WorldDefinition else "City world"
+            )
+            variants.append(
+                (
+                    key,
+                    variant_label,
+                    _field_schema(item, label=variant_label),
+                )
+            )
+        return ScenarioFieldSchema(
+            kind="union",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            variants=tuple(variants),
+        )
+    if origin is list:
+        item_annotation = args[0]
+        return ScenarioFieldSchema(
+            kind="list",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            item=_field_schema(
+                item_annotation,
+                label=_humanize(_singular(field_name) or "Item"),
+            ),
+        )
+    if origin is dict:
+        key_annotation, value_annotation = args
+        key_options: tuple[tuple[str, str], ...] = ()
+        if _is_enum(key_annotation):
+            key_options = tuple(
+                (str(item.value), _humanize(str(item.value))) for item in key_annotation
+            )
+        return ScenarioFieldSchema(
+            kind="mapping",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            value=_field_schema(
+                value_annotation,
+                label=_humanize(_singular(field_name) or "Value"),
+            ),
+            options=key_options,
+        )
+    if _is_model(annotation):
+        if annotation not in SCENARIO_EDITOR_MODEL_FIELDS:
+            raise TypeError(f"unregistered scenario editor model: {annotation.__name__}")
+        children = tuple(
+            _field_schema(
+                model_field.annotation,
+                label=_humanize(model_field_name),
+                field_name=model_field_name,
+                field_info=model_field,
+                owner=annotation,
+            )
+            for model_field_name, model_field in annotation.model_fields.items()
+        )
+        return ScenarioFieldSchema(
+            kind="model",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            model=annotation,
+            children=children,
+            extensible=annotation in EXTENSIBLE_PROFILE_MODELS,
+        )
+    if _is_enum(annotation):
+        options = tuple((str(item.value), _humanize(str(item.value))) for item in annotation)
+        return ScenarioFieldSchema(
+            kind="scalar",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            input_type="select",
+            required=required,
+            options=options,
+        )
+    if origin is Literal:
+        options = tuple((str(item), _humanize(str(item))) for item in args)
+        return ScenarioFieldSchema(
+            kind="scalar",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            input_type="select",
+            required=required,
+            options=options,
+        )
+    if annotation is bool:
+        return ScenarioFieldSchema(
+            kind="scalar",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            input_type="boolean",
+            required=required,
+            options=(("true", "Yes"), ("false", "No")),
+        )
+    if annotation in {int, float}:
+        return ScenarioFieldSchema(
+            kind="scalar",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            input_type="number",
+            required=required,
+            minimum=minimum,
+            maximum=maximum,
+            minimum_exclusive=minimum_exclusive,
+            maximum_exclusive=maximum_exclusive,
+        )
+    if annotation is datetime:
+        return ScenarioFieldSchema(
+            kind="scalar",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            input_type="datetime",
+            required=required,
+        )
+    if annotation is str:
+        return ScenarioFieldSchema(
+            kind="scalar",
+            label=label,
+            field_name=field_name,
+            annotation=annotation,
+            input_type="text",
+            required=required,
+        )
+    raise TypeError(
+        f"scenario editor field {owner.__name__ if owner else ''}.{field_name} "
+        f"has unclassified annotation {annotation!r}"
+    )
+
+
+def _components_schema(label: str, field_name: str) -> ScenarioFieldSchema:
+    children: list[ScenarioFieldSchema] = []
+    for component_name, model in KNOWN_ENTITY_COMPONENT_MODELS.items():
+        if component_name == "metadata":
+            component = ScenarioFieldSchema(
+                kind="scalar",
+                label="Metadata",
+                field_name=component_name,
+                annotation=dict[str, Any],
+                input_type="json",
+                arbitrary_json=True,
+            )
+        else:
+            assert model is not None
+            component = _field_schema(
+                model,
+                label=_humanize(component_name),
+                field_name=component_name,
+            )
+        children.append(
+            ScenarioFieldSchema(
+                kind="optional",
+                label=component.label,
+                field_name=component_name,
+                item=component,
+            )
+        )
+    unknown = ScenarioFieldSchema(
+        kind="mapping",
+        label="Unknown Passthrough Components",
+        field_name="unknown_components",
+        value=ScenarioFieldSchema(
+            kind="scalar",
+            label="Component JSON",
+            input_type="json",
+            arbitrary_json=True,
+        ),
+    )
+    children.append(unknown)
+    return ScenarioFieldSchema(
+        kind="components",
+        label=label,
+        field_name=field_name,
+        children=tuple(children),
+    )
+
+
+SCENARIO_EDITOR_SCHEMA = _field_schema(
+    ScenarioDefinition,
+    label="Scenario Definition",
+)
+
+
+def _field_default(model: type[BaseModel], field_name: str) -> Any:
+    field_info = model.model_fields[field_name]
+    if field_info.default_factory is not None:
+        return field_info.get_default(
+            call_default_factory=True,
+            validated_data={},
+        )
+    if field_info.default is not PydanticUndefined:
+        return field_info.default
+    return PydanticUndefined
+
+
+def _model_default(schema: ScenarioFieldSchema) -> dict[str, Any]:
+    assert schema.model is not None
+    result: dict[str, Any] = {}
+    for child in schema.children:
+        default = _field_default(schema.model, child.field_name)
+        if default is not PydanticUndefined:
+            if isinstance(default, BaseModel):
+                default = default.model_dump(mode="json")
+            elif isinstance(default, Enum):
+                default = default.value
+            result[child.field_name] = default
+    return result
+
+
+def node_from_value(
+    schema: ScenarioFieldSchema,
+    value: Any = PydanticUndefined,
+) -> ScenarioEditorNode:
+    node = ScenarioEditorNode(schema=schema)
+    if schema.kind == "scalar":
+        if value is PydanticUndefined:
+            node.value = ""
+            refresh_node_paths(node)
+            return node
+        if schema.arbitrary_json:
+            node.value = json.dumps(
+                value,
+                ensure_ascii=False,
+                indent=2,
+            )
+        elif isinstance(value, Enum):
+            node.value = str(value.value)
+        elif isinstance(value, bool):
+            node.value = "true" if value else "false"
+        elif value is None or value is PydanticUndefined:
+            node.value = ""
+        elif isinstance(value, datetime):
+            node.value = value.isoformat()
+        else:
+            node.value = str(value)
+    elif schema.kind == "model":
+        raw = _model_default(schema)
+        if isinstance(value, BaseModel):
+            raw.update(value.model_dump(mode="json"))
+        elif isinstance(value, dict):
+            raw.update(value)
+        node.children = [
+            node_from_value(child, raw.get(child.field_name, PydanticUndefined))
+            for child in schema.children
+        ]
+        if schema.extensible:
+            extras = {
+                key: item
+                for key, item in raw.items()
+                if key not in {child.field_name for child in schema.children}
+            }
+            extras_schema = ScenarioFieldSchema(
+                kind="scalar",
+                label="Extra Fields JSON",
+                field_name="__extras__",
+                input_type="json",
+                arbitrary_json=True,
+            )
+            node.children.append(node_from_value(extras_schema, extras))
+    elif schema.kind == "optional":
+        node.choice = "absent" if value is None or value is PydanticUndefined else "present"
+        assert schema.item is not None
+        node.items = [
+            node_from_value(
+                schema.item,
+                value if node.choice == "present" else PydanticUndefined,
+            )
+        ]
+    elif schema.kind == "union":
+        if value is None or value is PydanticUndefined:
+            node.choice = "none"
+        elif isinstance(value, dict) and value.get("type") == "city":
+            node.choice = "city"
+        else:
+            node.choice = "grid"
+        for key, _label, variant_schema in schema.variants:
+            node.variants[key] = (
+                None
+                if variant_schema is None
+                else node_from_value(
+                    variant_schema,
+                    value if key == node.choice else PydanticUndefined,
+                )
+            )
+    elif schema.kind == "list":
+        list_values = value if isinstance(value, list) else []
+        assert schema.item is not None
+        node.items = [node_from_value(schema.item, item) for item in list_values]
+    elif schema.kind == "mapping":
+        mapping_values = value if isinstance(value, dict) else {}
+        assert schema.value is not None
+        for key, item in mapping_values.items():
+            entry = node_from_value(schema.value, item)
+            entry.key = str(key.value if isinstance(key, Enum) else key)
+            node.items.append(entry)
+    elif schema.kind == "components":
+        component_values = value if isinstance(value, dict) else {}
+        known = {child.field_name for child in schema.children[:-1]}
+        for child in schema.children[:-1]:
+            node.children.append(
+                node_from_value(
+                    child,
+                    component_values.get(
+                        child.field_name,
+                        PydanticUndefined,
+                    ),
+                )
+            )
+        unknown_values = {key: item for key, item in component_values.items() if key not in known}
+        node.children.append(node_from_value(schema.children[-1], unknown_values))
+    elif schema.kind == "character_profile":
+        profile_values = value if isinstance(value, dict) else {}
+        node.choice = "character_id" if "character_id" in profile_values else "profile"
+        character_id_schema = ScenarioFieldSchema(
+            kind="scalar",
+            label="Character ID",
+            field_name="character_id",
+            annotation=str,
+            input_type="text",
+            required=True,
+        )
+        assert schema.item is not None
+        node.children = [
+            node_from_value(
+                character_id_schema,
+                profile_values.get("character_id", ""),
+            ),
+            node_from_value(schema.item, profile_values),
+        ]
+    else:
+        raise TypeError(f"unsupported scenario editor node kind: {schema.kind}")
+    refresh_node_paths(node)
+    return node
+
+
+def refresh_node_paths(node: ScenarioEditorNode, path: FieldPath = ()) -> None:
+    node.path = path
+    if node.schema.kind in {"model", "components"}:
+        for child in node.children:
+            child_path = (
+                path
+                if child.schema.field_name == "__extras__"
+                else (*path, child.schema.field_name)
+            )
+            refresh_node_paths(child, child_path)
+    elif node.schema.kind == "optional":
+        refresh_node_paths(node.items[0], path)
+    elif node.schema.kind == "union":
+        for variant in node.variants.values():
+            if variant is not None:
+                refresh_node_paths(variant, path)
+    elif node.schema.kind == "list":
+        for index, item in enumerate(node.items):
+            refresh_node_paths(item, (*path, index))
+    elif node.schema.kind == "mapping":
+        for item in node.items:
+            refresh_node_paths(item, (*path, item.key))
+    elif node.schema.kind == "character_profile":
+        refresh_node_paths(node.children[0], (*path, "character_id"))
+        refresh_node_paths(node.children[1], path)
+
+
+def update_draft_from_form(draft: ScenarioEditorDraft, form: Any) -> None:
+    draft.resource_id = str(form.get("resource_id", draft.resource_id)).strip()
+    _update_node_from_form(draft.root, form)
+    refresh_node_paths(draft.root)
+
+
+def _update_node_from_form(node: ScenarioEditorNode, form: Any) -> None:
+    if node.schema.kind == "scalar":
+        node.value = str(form.get(f"value_{node.id}", node.value))
+    elif node.schema.kind in {"optional", "union", "character_profile"}:
+        node.choice = str(form.get(f"choice_{node.id}", node.choice))
+    if node.schema.kind in {"model", "components", "character_profile"}:
+        for child in node.children:
+            _update_node_from_form(child, form)
+    elif node.schema.kind == "optional":
+        _update_node_from_form(node.items[0], form)
+    elif node.schema.kind == "union":
+        for variant in node.variants.values():
+            if variant is not None:
+                _update_node_from_form(variant, form)
+    elif node.schema.kind in {"list", "mapping"}:
+        for item in node.items:
+            if node.schema.kind == "mapping":
+                item.key = str(form.get(f"key_{item.id}", item.key)).strip()
+            _update_node_from_form(item, form)
+
+
+def apply_collection_action(
+    draft: ScenarioEditorDraft,
+    action: str,
+) -> bool:
+    parts = action.split(":")
+    if len(parts) not in {2, 3}:
+        return False
+    operation, node_id = parts[:2]
+    collection = find_node(draft.root, node_id)
+    if collection is None or collection.schema.kind not in {"list", "mapping"}:
+        return False
+    if operation == "add":
+        item_schema = (
+            collection.schema.item if collection.schema.kind == "list" else collection.schema.value
+        )
+        assert item_schema is not None
+        collection.items.append(node_from_value(item_schema))
+        refresh_node_paths(draft.root)
+        return True
+    if len(parts) != 3:
+        return False
+    item_id = parts[2]
+    index = next(
+        (item_index for item_index, item in enumerate(collection.items) if item.id == item_id),
+        None,
+    )
+    if index is None:
+        return False
+    if operation == "remove":
+        collection.items.pop(index)
+    elif operation == "up" and index > 0:
+        collection.items[index - 1], collection.items[index] = (
+            collection.items[index],
+            collection.items[index - 1],
+        )
+    elif operation == "down" and index < len(collection.items) - 1:
+        collection.items[index + 1], collection.items[index] = (
+            collection.items[index],
+            collection.items[index + 1],
+        )
+    else:
+        return False
+    refresh_node_paths(draft.root)
+    return True
+
+
+def find_node(
+    root: ScenarioEditorNode,
+    node_id: str,
+) -> ScenarioEditorNode | None:
+    if root.id == node_id:
+        return root
+    for child in root.children:
+        match = find_node(child, node_id)
+        if match is not None:
+            return match
+    for item in root.items:
+        match = find_node(item, node_id)
+        if match is not None:
+            return match
+    for variant in root.variants.values():
+        if variant is not None:
+            match = find_node(variant, node_id)
+            if match is not None:
+                return match
+    return None
+
+
+def _all_nodes(root: ScenarioEditorNode) -> list[ScenarioEditorNode]:
+    nodes = [root]
+    for child in root.children:
+        nodes.extend(_all_nodes(child))
+    for item in root.items:
+        nodes.extend(_all_nodes(item))
+    for variant in root.variants.values():
+        if variant is not None:
+            nodes.extend(_all_nodes(variant))
+    return nodes
+
+
+def _scalar_value(
+    node: ScenarioEditorNode,
+    errors: list[tuple[ScenarioEditorNode, str]],
+) -> Any:
+    value = node.value
+    if node.schema.arbitrary_json:
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError as error:
+            errors.append((node, f"Must be valid JSON: {error.msg}"))
+            return value
+    annotation = node.schema.annotation
+    if annotation is bool:
+        if value == "true":
+            return True
+        if value == "false":
+            return False
+        return value
+    if annotation is int:
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    if annotation is float:
+        try:
+            return float(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _encode_node(
+    node: ScenarioEditorNode,
+    errors: list[tuple[ScenarioEditorNode, str]],
+) -> Any:
+    kind = node.schema.kind
+    if kind == "scalar":
+        return _scalar_value(node, errors)
+    if kind == "model":
+        result: dict[str, Any] = {}
+        for child in node.children:
+            value = _encode_node(child, errors)
+            if child.schema.field_name == "__extras__":
+                if isinstance(value, dict):
+                    duplicate = set(result).intersection(value)
+                    if duplicate:
+                        errors.append(
+                            (
+                                child,
+                                f"Extra fields duplicate typed fields: {sorted(duplicate)}",
+                            )
+                        )
+                    result.update(value)
+                elif value not in ({}, None):
+                    errors.append((child, "Extra fields must be a JSON object"))
+            else:
+                result[child.schema.field_name] = value
+        return result
+    if kind == "optional":
+        if node.choice == "absent":
+            return None
+        return _encode_node(node.items[0], errors)
+    if kind == "union":
+        if node.choice == "none":
+            return None
+        variant = node.variants.get(node.choice)
+        if variant is None:
+            errors.append((node, "Choose a valid variant"))
+            return None
+        return _encode_node(variant, errors)
+    if kind == "list":
+        return [_encode_node(item, errors) for item in node.items]
+    if kind == "mapping":
+        result = {}
+        keys: set[str] = set()
+        for item in node.items:
+            if not item.key:
+                errors.append((item, "Key is required"))
+                continue
+            if item.key in keys:
+                errors.append((item, f"Duplicate key: {item.key}"))
+                continue
+            keys.add(item.key)
+            result[item.key] = _encode_node(item, errors)
+        return result
+    if kind == "components":
+        result = {}
+        for child in node.children[:-1]:
+            if child.choice == "present":
+                result[child.schema.field_name] = _encode_node(child, errors)
+        unknown = _encode_node(node.children[-1], errors)
+        if isinstance(unknown, dict):
+            duplicate = set(result).intersection(unknown)
+            if duplicate:
+                errors.append(
+                    (
+                        node.children[-1],
+                        f"Unknown components duplicate typed components: {sorted(duplicate)}",
+                    )
+                )
+            result.update(unknown)
+        return result
+    if kind == "character_profile":
+        if node.choice == "character_id":
+            return {"character_id": _encode_node(node.children[0], errors)}
+        if node.choice == "profile":
+            return _encode_node(node.children[1], errors)
+        errors.append((node, "Choose a character profile mode"))
+        return {}
+    raise TypeError(f"unsupported scenario editor node kind: {kind}")
+
+
+def validate_draft(
+    draft: ScenarioEditorDraft,
+) -> ScenarioDefinition | None:
+    clear_draft_errors(draft)
+    decode_errors: list[tuple[ScenarioEditorNode, str]] = []
+    raw = _encode_node(draft.root, decode_errors)
+    for node, message in decode_errors:
+        _add_node_error(draft, node, message)
+    if decode_errors:
+        return None
+    try:
+        scenario = ScenarioDefinition.model_validate(raw)
+    except ValidationError as error:
+        for item in error.errors(include_url=False):
+            location = tuple(item["loc"])
+            node = _node_for_path(draft.root, location)
+            _add_node_error(draft, node, str(item["msg"]))
+        return None
+    _validate_entity_components(draft, raw)
+    if draft.errors:
+        return None
+    return scenario
+
+
+def clear_draft_errors(draft: ScenarioEditorDraft) -> None:
+    for node in _all_nodes(draft.root):
+        node.errors.clear()
+    draft.errors.clear()
+
+
+def _validate_entity_components(
+    draft: ScenarioEditorDraft,
+    raw: dict[str, Any],
+) -> None:
+    entities = raw.get("entities")
+    if not isinstance(entities, list):
+        return
+    for entity_index, entity in enumerate(entities):
+        if not isinstance(entity, dict):
+            continue
+        components = entity.get("components")
+        if not isinstance(components, dict):
+            continue
+        for component_name, model in KNOWN_ENTITY_COMPONENT_MODELS.items():
+            if component_name not in components or component_name == "metadata":
+                continue
+            location: FieldPath = (
+                "entities",
+                entity_index,
+                "components",
+                component_name,
+            )
+            value = components[component_name]
+            assert model is not None
+            try:
+                model.model_validate(value)
+            except ValidationError as error:
+                for item in error.errors(include_url=False):
+                    field_node = _node_for_path(
+                        draft.root,
+                        (*location, *tuple(item["loc"])),
+                    )
+                    _add_node_error(draft, field_node, str(item["msg"]))
+
+
+def _node_for_path(
+    root: ScenarioEditorNode,
+    path: FieldPath,
+) -> ScenarioEditorNode:
+    nodes = _all_nodes(root)
+    exact = next((node for node in nodes if node.path == path), None)
+    if exact is not None:
+        return exact
+    candidates = [
+        node
+        for node in nodes
+        if len(node.path) <= len(path) and path[: len(node.path)] == node.path
+    ]
+    return max(candidates, key=lambda item: len(item.path), default=root)
+
+
+def _add_node_error(
+    draft: ScenarioEditorDraft,
+    node: ScenarioEditorNode,
+    message: str,
+) -> None:
+    node.errors.append(message)
+    path = ".".join(str(part) for part in node.path)
+    rendered = f"{path}: {message}" if path else message
+    draft.errors.append(ScenarioEditorError(message=rendered, control_id=node.control_id))
+
+
+def minimal_scenario() -> ScenarioDefinition:
+    return ScenarioDefinition(name="Untitled scenario")

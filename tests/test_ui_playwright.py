@@ -30,12 +30,15 @@ def ui_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     temporary = tmp_path_factory.mktemp("playwright-ui")
     characters = temporary / "characters"
     shutil.copytree(root / "characters", characters)
+    scenarios = temporary / "scenarios"
+    shutil.copytree(root / "scenarios", scenarios)
     data = temporary / "runs"
     port = _free_port()
     environment = os.environ.copy()
     environment.update(
         {
             "STAGE0_CHARACTER_DIRECTORY": str(characters),
+            "STAGE0_SCENARIO_DIRECTORY": str(scenarios),
             "STAGE0_DATA_DIRECTORY": str(data),
         }
     )
@@ -115,6 +118,7 @@ def page(browser: Browser, ui_server: str) -> Iterator[Page]:
 
 def test_operator_lifecycle_is_driven_by_accessible_controls(page: Page) -> None:
     page.goto("/ui/")
+    assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
     expect(page.get_by_role("heading", name="Operator Console")).to_be_visible()
     expect(page.get_by_role("button", name="Start run")).to_be_disabled()
     expect(page.get_by_role("region", name="World")).to_be_visible()
@@ -132,6 +136,10 @@ def test_operator_lifecycle_is_driven_by_accessible_controls(page: Page) -> None
     expect(page.locator(".notice[role=status]")).to_contain_text(
         "assignments were validated"
     )
+    expect(page.locator("details", has_text="Character assignments")).to_have_attribute(
+        "open", ""
+    )
+    expect(page.get_by_role("button", name="Validate assignments")).to_be_focused()
 
     page.get_by_role("button", name="Start run").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
@@ -147,6 +155,9 @@ def test_operator_lifecycle_is_driven_by_accessible_controls(page: Page) -> None
         "Simulation resumed"
     )
     page.get_by_role("button", name="Pause").click()
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "Simulation paused"
+    )
     page.get_by_role("combobox", name="Running speed").select_option("2")
     page.get_by_role("button", name="Set speed").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
@@ -182,6 +193,7 @@ def test_operator_lifecycle_is_driven_by_accessible_controls(page: Page) -> None
         "Simulation stopped"
     )
     expect(page.get_by_role("button", name="Start run")).to_be_enabled()
+    assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
 
 
 def test_scenario_upload_and_event_detail_use_native_browser_flows(
@@ -216,6 +228,7 @@ def test_scenario_upload_and_event_detail_use_native_browser_flows(
     page.get_by_role("link", name="Close detail").click()
     page.get_by_role("link", name="Expand log").click()
     expect(page.get_by_role("link", name="Exit expanded log")).to_be_visible()
+    assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
 
 
 def test_character_crud_round_trip_is_role_driven(
@@ -268,6 +281,59 @@ def test_character_crud_round_trip_is_role_driven(
     )
 
 
+def test_scenario_editor_keeps_save_and_stage_separate(page: Page) -> None:
+    page.goto("/ui/scenarios/?new=1")
+    expect(page.get_by_role("heading", name="Scenario Library")).to_be_visible()
+    page.get_by_label("Scenario resource ID").fill("playwright-scenario")
+    definition = page.get_by_role("group", name="Scenario Definition")
+    scenario_name = definition.get_by_label("Name", exact=True).first
+    scenario_name.fill("Playwright Scenario")
+    definition.get_by_label("Dt", exact=True).fill("0")
+    page.get_by_role("button", name="Create scenario").click()
+    expect(page.get_by_role("alert", name="Scenario validation failed")).to_contain_text(
+        "greater than 0"
+    )
+    expect(definition.get_by_label("Dt", exact=True)).to_have_value("0")
+
+    definition.get_by_label("Dt", exact=True).fill("1")
+    page.get_by_role("button", name="Create scenario").click()
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "Saved Playwright Scenario"
+    )
+
+    definition = page.get_by_role("group", name="Scenario Definition")
+    definition.get_by_label("Name", exact=True).first.fill(
+        "Unsaved Playwright Stage"
+    )
+    page.get_by_role("button", name="Validate and stage").click()
+    expect(page.get_by_role("heading", name="Operator Console")).to_be_visible()
+    expect(page.get_by_text("Unsaved Playwright Stage", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Start run")).to_be_enabled()
+
+    page.goto("/ui/scenarios/?selected=playwright-scenario")
+    definition = page.get_by_role("group", name="Scenario Definition")
+    expect(definition.get_by_label("Name", exact=True).first).to_have_value(
+        "Playwright Scenario"
+    )
+    page.get_by_text("Delete playwright-scenario", exact=True).click()
+    page.get_by_label(
+        "I understand this permanently deletes the scenario file."
+    ).check()
+    page.get_by_role("button", name="Delete scenario").click()
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "Deleted playwright-scenario"
+    )
+
+
+def test_large_city_scenario_submits_the_native_structured_form(page: Page) -> None:
+    page.goto("/ui/scenarios/?selected=greyford-office-evening")
+    expect(page.get_by_role("heading", name="greyford-office-evening")).to_be_visible()
+    page.get_by_role("button", name="Save scenario").click()
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "Saved greyford-office-evening"
+    )
+
+
 def test_city_scenario_has_server_rendered_city_controls(page: Page) -> None:
     root = Path(__file__).parents[1]
     page.goto("/ui/")
@@ -278,13 +344,153 @@ def test_city_scenario_has_server_rendered_city_controls(page: Page) -> None:
     expect(page.get_by_role("img", name=re.compile("Staged city preview"))).to_be_visible()
     page.get_by_role("button", name="Start run").click()
     page.get_by_role("button", name="Pause").click()
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "Simulation paused"
+    )
     page.get_by_role("combobox", name="Scale").select_option("city")
     page.get_by_role("button", name="Apply view").click()
     expect(page.get_by_role("img", name=re.compile(r"City ·"))).to_be_visible()
 
 
+def test_live_updates_do_not_reload_or_discard_active_input(page: Page) -> None:
+    page.goto("/ui/")
+    page.get_by_role("button", name="Load example scenario").click()
+    page.get_by_role("button", name="Start run").click()
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "Simulation started"
+    )
+
+    tick_value = page.locator("dt", has_text="Tick").locator(
+        "xpath=following-sibling::dd"
+    )
+    tick_before = int(tick_value.inner_text())
+    page.wait_for_function(
+        """before => {
+            const term = [...document.querySelectorAll("dt")]
+                .find((element) => element.textContent === "Tick");
+            return term && Number(term.nextElementSibling.textContent) > before;
+        }""",
+        arg=tick_before,
+        timeout=5000,
+    )
+    assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
+
+    viewport = page.locator("#world-render")
+    viewport.hover(position={"x": 300, "y": 220})
+    page.mouse.wheel(0, -1000)
+    expect(page.get_by_role("status", name="Zoom level")).to_have_text("300%")
+    page.wait_for_timeout(300)
+    viewport.evaluate("element => { element.scrollLeft = 120; }")
+    tick_before_scroll_check = int(tick_value.inner_text())
+    page.wait_for_function(
+        """before => {
+            const term = [...document.querySelectorAll("dt")]
+                .find((element) => element.textContent === "Tick");
+            return term && Number(term.nextElementSibling.textContent) > before;
+        }""",
+        arg=tick_before_scroll_check,
+        timeout=5000,
+    )
+    assert abs(viewport.evaluate("element => element.scrollLeft") - 120) <= 2
+
+    search = page.get_by_role("searchbox", name="Search")
+    search.fill("unfinished filter")
+    search.focus()
+    page.wait_for_timeout(1300)
+    expect(search).to_have_value("unfinished filter")
+    expect(search).to_be_focused()
+
+    page.get_by_role("button", name="Pause").click()
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "Simulation paused"
+    )
+
+
+def test_map_supports_wheel_zoom_and_drag_panning_without_navigation(
+    page: Page,
+) -> None:
+    page.goto("/ui/")
+    page.get_by_role("button", name="Load example scenario").click()
+    viewport = page.locator("#world-render")
+    viewport.hover(position={"x": 300, "y": 220})
+    page.mouse.wheel(0, -1000)
+    expect(page.get_by_role("status", name="Zoom level")).to_have_text("300%")
+    page.wait_for_timeout(300)
+
+    page.get_by_role("link", name="Focus map").click()
+    expect(page.get_by_role("status", name="Zoom level")).to_have_text("300%")
+    expect(page.get_by_role("link", name="Exit focus")).to_be_visible()
+
+    metrics = viewport.evaluate(
+        """element => ({
+            maximum: element.scrollWidth - element.clientWidth,
+            width: element.clientWidth,
+            height: element.clientHeight,
+        })"""
+    )
+    assert metrics["maximum"] > 150
+    viewport.evaluate("element => { element.scrollLeft = 100; }")
+    before = viewport.evaluate("element => element.scrollLeft")
+    bounds = viewport.bounding_box()
+    assert bounds is not None
+    start_x = bounds["x"] + min(400, bounds["width"] * 0.65)
+    start_y = bounds["y"] + min(260, bounds["height"] * 0.5)
+    page.mouse.move(start_x, start_y)
+    page.mouse.down()
+    page.mouse.move(start_x - 100, start_y, steps=8)
+    page.mouse.up()
+    after = viewport.evaluate("element => element.scrollLeft")
+    assert after > before + 50
+    assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
+
+
+def test_server_rendered_controls_remain_usable_without_javascript(
+    browser: Browser,
+    ui_server: str,
+) -> None:
+    context = browser.new_context(base_url=ui_server, java_script_enabled=False)
+    page = context.new_page()
+    try:
+        page.goto("/ui/")
+        page.get_by_role("button", name="Load example scenario").click()
+        expect(page.get_by_role("img", name="Staged scenario preview")).to_be_visible()
+        page.get_by_role("button", name="Zoom in").click()
+        expect(page.get_by_role("status", name="Zoom level")).to_have_text("125%")
+        page.goto("/ui/scenarios/?new=1")
+        page.get_by_label("Scenario resource ID").fill("nojs-scenario")
+        definition = page.get_by_role("group", name="Scenario Definition")
+        definition.get_by_label("Name", exact=True).first.fill(
+            "No JavaScript Scenario"
+        )
+        definition.get_by_label("World type").select_option("grid")
+        page.get_by_role("button", name="Apply field choices").click()
+
+        grid = page.get_by_role("group", name="Grid world")
+        grid.get_by_label("Width", exact=True).fill("3")
+        grid.get_by_label("Height", exact=True).fill("2")
+        grid.get_by_role("button", name="Add Blocked").click()
+        blocked = page.get_by_role("region", name="Blocked item 1")
+        blocked.get_by_label("X", exact=True).fill("1")
+        blocked.get_by_label("Y", exact=True).fill("0")
+        page.get_by_role("button", name="Create scenario").click()
+        expect(page.get_by_role("heading", name="nojs-scenario")).to_be_visible()
+
+        definition = page.get_by_role("group", name="Scenario Definition")
+        definition.get_by_label("Name", exact=True).first.fill(
+            "No JavaScript Staged Draft"
+        )
+        page.get_by_role("button", name="Validate and stage").click()
+        expect(page.get_by_role("heading", name="Operator Console")).to_be_visible()
+        expect(
+            page.get_by_text("No JavaScript Staged Draft", exact=True)
+        ).to_be_visible()
+        expect(page.get_by_role("button", name="Start run")).to_be_enabled()
+    finally:
+        context.close()
+
+
 def test_pages_have_unique_ids_and_named_primary_landmarks(page: Page) -> None:
-    for path in ("/ui/", "/ui/characters/"):
+    for path in ("/ui/", "/ui/characters/", "/ui/scenarios/?new=1"):
         page.goto(path)
         ids = page.locator("[id]").evaluate_all(
             "(elements) => elements.map((element) => element.id)"

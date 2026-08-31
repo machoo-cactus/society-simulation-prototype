@@ -10,10 +10,14 @@ from fastapi.staticfiles import StaticFiles
 from stage0_sim import __version__
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
+from stage0_sim.adapters.scenarios import FileSystemScenarioLibrary
 from stage0_sim.api.characters import router as characters_router
+from stage0_sim.api.scenario_forms import ScenarioEditorDraftStore
+from stage0_sim.api.scenarios import router as scenarios_router
 from stage0_sim.api.simulation import router as simulation_router
 from stage0_sim.api.ui import OperatorSessionStore
 from stage0_sim.api.ui import router as ui_router
+from stage0_sim.api.ui_scenarios import router as ui_scenarios_router
 from stage0_sim.application.manager import SimulationManager
 from stage0_sim.config import create_model_client, get_settings
 
@@ -21,12 +25,9 @@ from stage0_sim.config import create_model_client, get_settings
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    store = SQLiteDatasetStore(
-        settings.data_directory / settings.dataset_database
-    )
-    character_library = FileSystemCharacterLibrary(
-        settings.character_directory
-    )
+    store = SQLiteDatasetStore(settings.data_directory / settings.dataset_database)
+    character_library = FileSystemCharacterLibrary(settings.character_directory)
+    scenario_library = FileSystemScenarioLibrary(settings.scenario_directory)
     manager = SimulationManager(
         dataset_store=store,
         character_library=character_library,
@@ -36,7 +37,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.simulation_manager = manager
     app.state.character_library = character_library
+    app.state.scenario_library = scenario_library
     app.state.operator_sessions = OperatorSessionStore()
+    app.state.scenario_editor_drafts = ScenarioEditorDraftStore()
     try:
         yield
     finally:
@@ -59,7 +62,9 @@ app.add_middleware(
 )
 app.include_router(simulation_router)
 app.include_router(characters_router)
+app.include_router(scenarios_router)
 app.include_router(ui_router)
+app.include_router(ui_scenarios_router)
 web_directory = Path(__file__).parents[1] / "web"
 app.mount(
     "/ui/assets",

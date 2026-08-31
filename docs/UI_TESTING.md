@@ -8,15 +8,45 @@ runtime.
 
 - Keep simulation behavior in `domain` and `application`.
 - Keep UI orchestration in `stage0_sim.api.ui`.
-- Render operator state as HTML and SVG templates under `src\stage0_sim\web`.
+- Render operator state as HTML and SVG templates under `src/stage0_sim/web`.
 - Bind controls directly to named links or HTML form actions.
-- Do not add client-side stores, duplicated lifecycle state, polling models, or
+- Do not add client-side stores, duplicated lifecycle state, telemetry models, or
   simulation rules.
 - Prefer native HTML: forms, links, `<details>`, `<dialog>` alternatives,
   downloads, validation attributes, and server redirects.
-- Add JavaScript only when the browser capability has no HTML equivalent.
-  `enhancements.js` currently exists only for the clipboard API. Keep such code
-  small, progressive, and covered by Playwright.
+- Keep `enhancements.js` progressive: it may submit native controls through
+  `fetch`, replace named fragments from authoritative server-rendered HTML,
+  preserve browser interaction state, use the clipboard API, and provide
+  pointer map controls.
+- Never calculate simulation outcomes, advance clocks, interpret events, or
+  maintain a second telemetry model in JavaScript.
+- A JavaScript-disabled browser must retain scenario library editing and
+  staging, lifecycle controls, view controls, character operations, and timed
+  live refresh.
+
+## Partial-refresh contract
+
+Every enhanced form or link must remain valid native HTML. The enhancement
+layer may improve transport but must not become the only implementation.
+
+- Give replaceable regions stable, unique IDs.
+- Mark controls with explicit target regions; update the smallest complete set
+  needed for the operation.
+- Set `aria-busy` and prevent conflicting input while a request is in flight.
+- Preserve keyboard focus, window and panel scroll positions, open
+  disclosures, current filters, selected event, and map viewport when they
+  remain applicable.
+- Keep successful and failed operations in the stable live notice region.
+- Pause live polling while the user is editing an input or directly
+  manipulating the map.
+- Use the current URL for filtered live renders so event and focus state do not
+  silently reset.
+- Treat a missing fragment, non-HTML response, or failed zoom synchronization
+  as an explicit browser error; do not silently show stale success-shaped UI.
+
+The map viewport is keyboard focusable and retains ordinary scrollbars. Pointer
+drag pans it, wheel input zooms around the pointer, and the named Zoom
+in/Zoom out/Fit buttons remain the accessible and no-JavaScript alternatives.
 
 ## Install the browser test environment
 
@@ -109,11 +139,19 @@ Playwright assertions auto-wait. Use `expect(...)` instead of sleeps.
 - Pause a realtime run before asserting an exact tick.
 - Read the current tick, single-step, and assert exactly `before + 1`.
 - Assert lifecycle notices after POST/redirect/GET completes.
+- For enhanced controls, assert the navigation performance-entry count does not
+  increase unless navigation is the intended behavior.
+- Exercise live ticks while the map is scrolled and while an input is focused;
+  assert scroll, focus, and unfinished input remain intact.
+- Cover wheel zoom and drag panning, then trigger another server-rendered update
+  to prove the synchronized zoom survives.
+- Keep one Chromium workflow with JavaScript disabled to verify the native
+  server-rendered fallback.
 - Use the bundled deterministic demo unless a test specifically needs a city or
   tool-controller scenario.
 - Never depend on wall-clock timing to prove simulation behavior.
-- Keep browser contexts isolated. The test server uses temporary character and
-  dataset directories so CRUD tests cannot modify the checkout.
+- Keep browser contexts isolated. The test server uses temporary character,
+  scenario, and dataset directories so CRUD tests cannot modify the checkout.
 
 ## ARIA contract
 
@@ -176,6 +214,10 @@ The browser suite must continue to cover:
 
 - load and stage without starting;
 - upload and validate scenario JSON;
+- search, import, create, duplicate, rename, edit, download, and delete saved
+  scenarios;
+- structured grid and city editing, native repeated-record operations, retained
+  validation failures, save-versus-stage isolation, and saved-scenario staging;
 - character assignment validation;
 - start, pause, exact single-step, resume, stop, and restart availability;
 - speed and controlled vital mutation;

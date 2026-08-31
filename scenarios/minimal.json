@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "phase-1-minimal",
   "seed": 20260824,
   "dt": 1.0,
@@ -10,6 +10,12 @@
       "components": {
         "metadata": {
           "display_name": "Alex"
+        },
+        "character_slot": {
+          "label": "Alex",
+          "briefing": "",
+          "default_character_id": "alex-chen",
+          "constraints": {}
         }
       }
     }

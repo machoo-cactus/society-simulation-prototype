@@ -6,6 +6,7 @@ from stage0_sim.application.agents.coordinator import AgentWorkCoordinator
 from stage0_sim.domain.components import (
     AffordanceExecutionComponent,
     CharacterProfileComponent,
+    CharacterSituationComponent,
     ControllerComponent,
     DriveComponent,
     PendingSpeechComponent,
@@ -100,6 +101,9 @@ class CognitionScheduler:
                 character_description=context.registry.get_component(
                     agent_id, CharacterProfileComponent
                 ).description,
+                situation_description=context.registry.get_component(
+                    agent_id, CharacterSituationComponent
+                ).briefing,
                 profile_id=context.registry.get_component(
                     agent_id, CharacterProfileComponent
                 ).profile_id,

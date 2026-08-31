@@ -6,6 +6,7 @@ from stage0_sim.domain.components.affordance import (
 )
 from stage0_sim.domain.components.cognition import (
     CharacterProfileComponent,
+    CharacterSituationComponent,
     ControllerComponent,
     ConversationComponent,
     PlannerComponent,
@@ -59,6 +60,7 @@ __all__ = [
     "ActivityRates",
     "ActivityType",
     "CharacterProfileComponent",
+    "CharacterSituationComponent",
     "ConversationComponent",
     "ControllerComponent",
     "DriveComponent",

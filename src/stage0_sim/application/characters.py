@@ -9,6 +9,8 @@ from pydantic import Field, model_validator
 
 from stage0_sim.application.scenario import (
     CharacterProfileDefinition,
+    CharacterSlotDefinition,
+    ResolvedCharacterProfile,
     ScenarioDefinition,
 )
 from stage0_sim.domain.events import JsonValue
@@ -60,8 +62,10 @@ class CharacterDefinition(CharacterProfileDefinition):
     @model_validator(mode="after")
     def is_standalone_character(self) -> "CharacterDefinition":
         validate_character_id(self.id)
-        if self.profile_ref is not None:
-            raise ValueError("standalone character cannot use profile_ref")
+        if self.template_id != "human-v1":
+            raise ValueError(
+                f"unsupported character template: {self.template_id}"
+            )
         return self
 
     def profile(self) -> CharacterProfileDefinition:
@@ -80,6 +84,8 @@ class CharacterSummary:
     template_id: str
     schema_version: int
     content_hash: str
+    age: int | None
+    gender: str
 
     def to_payload(self) -> dict[str, JsonValue]:
         return {
@@ -88,6 +94,8 @@ class CharacterSummary:
             "template_id": self.template_id,
             "schema_version": self.schema_version,
             "content_hash": self.content_hash,
+            "age": self.age,
+            "gender": self.gender,
         }
 
 
@@ -118,8 +126,8 @@ class CharacterLibrary(Protocol):
 @dataclass(frozen=True, slots=True)
 class PreparedScenario:
     scenario: ScenarioDefinition
+    assignments: Mapping[str, str]
     characters: Mapping[str, CharacterDefinition]
-    warnings: tuple[str, ...] = ()
 
     def dataset_payload(self) -> dict[str, JsonValue]:
         scenario_payload = self.scenario.model_dump(mode="json")
@@ -132,14 +140,25 @@ class PreparedScenario:
                 "data": character.model_dump(mode="json"),
             }
         scenario_payload["resolved_characters"] = resolved
+        scenario_payload["character_assignments"] = dict(
+            sorted(self.assignments.items())
+        )
         return scenario_payload
+
+    def runtime_characters(self) -> dict[str, ResolvedCharacterProfile]:
+        return {
+            entity_id: ResolvedCharacterProfile(
+                character_id=character_id,
+                profile=self.characters[character_id].profile(),
+            )
+            for entity_id, character_id in self.assignments.items()
+        }
 
     def entity_summaries(self) -> tuple[dict[str, JsonValue], ...]:
         summaries: list[dict[str, JsonValue]] = []
         for entity in self.scenario.entities:
-            profile = entity.components.get("character_profile", {})
-            character_id = profile.get("character_id")
-            if not isinstance(character_id, str):
+            character_id = self.assignments.get(entity.id)
+            if character_id is None:
                 continue
             character = self.characters[character_id]
             identity = character.identity
@@ -189,94 +208,91 @@ def character_summary(character: CharacterDefinition) -> CharacterSummary:
         template_id=character.template_id,
         schema_version=character.schema_version,
         content_hash=character_content_hash(character),
+        age=identity.age,
+        gender=identity.gender,
     )
 
 
 def prepare_scenario(
     scenario: ScenarioDefinition,
     library: CharacterLibrary,
+    assignments: Mapping[str, str] | None = None,
 ) -> PreparedScenario:
     scenario = scenario.model_copy(deep=True)
-    resolved: dict[str, CharacterDefinition] = {}
-    warnings: list[str] = []
-    for entity in scenario.entities:
-        profile = entity.components.get("character_profile")
-        if not profile:
-            continue
-        character_id = profile.get("character_id")
-        profile_ref = profile.get("profile_ref")
-        if character_id is not None and profile_ref is not None:
-            raise CharacterLibraryError(
-                f"entity {entity.id} cannot use both character_id and profile_ref"
-            )
-        if isinstance(character_id, str):
-            character = library.get(character_id)
-            inline = scenario.character_profiles.get(character_id)
-            if inline is not None:
-                if inline.model_dump(mode="json") != character.profile().model_dump(
-                    mode="json"
-                ):
-                    raise CharacterConflictError(
-                        f"scenario and character library define different "
-                        f"content for {character_id}"
-                    )
-                warnings.append(
-                    f"deprecated inline profile {character_id} matches the "
-                    "character library and was ignored"
-                )
-            if character.template_id not in scenario.character_profile_templates:
-                raise CharacterLibraryError(
-                    f"character {character_id} uses unknown template "
-                    f"{character.template_id}"
-                )
-            resolved[character_id] = character
-            extra_fields = set(profile) - {"character_id"}
-            if extra_fields:
-                raise CharacterLibraryError(
-                    f"entity {entity.id} character reference cannot contain "
-                    f"profile overrides: {sorted(extra_fields)}"
-                )
-            continue
-        if isinstance(profile_ref, str):
-            if profile_ref in scenario.character_profiles:
-                inline = scenario.character_profiles[profile_ref]
-                try:
-                    character = library.get(profile_ref)
-                except CharacterNotFoundError:
-                    warnings.append(
-                        f"entity {entity.id} uses deprecated inline profile "
-                        f"{profile_ref}"
-                    )
-                else:
-                    if inline.model_dump(
-                        mode="json"
-                    ) != character.profile().model_dump(mode="json"):
-                        raise CharacterConflictError(
-                            f"scenario and character library define different "
-                            f"content for {profile_ref}"
-                        )
-                    resolved[profile_ref] = character
-                    profile["character_id"] = profile_ref
-                    profile.pop("profile_ref", None)
-                    warnings.append(
-                        f"entity {entity.id} inline profile {profile_ref} "
-                        "matches the character library; use character_id"
-                    )
-                continue
-            character = library.get(profile_ref)
-            resolved[profile_ref] = character
-            profile["character_id"] = profile_ref
-            profile.pop("profile_ref", None)
-            warnings.append(
-                f"entity {entity.id} uses deprecated profile_ref; "
-                "use character_id"
-            )
-            continue
-        warnings.append(
-            f"entity {entity.id} uses a deprecated inline character profile"
+    requested = dict(assignments or {})
+    slot_ids = {entity.id for entity in scenario.entities}
+    unknown_assignments = sorted(set(requested) - slot_ids)
+    if unknown_assignments:
+        raise CharacterLibraryError(
+            f"assignments reference unknown character slots: {unknown_assignments}"
         )
+    effective: dict[str, str] = {}
+    resolved: dict[str, CharacterDefinition] = {}
+    for entity in scenario.entities:
+        if "character_slot" not in entity.components:
+            raise CharacterLibraryError(
+                f"entity {entity.id} requires a character_slot component"
+            )
+        slot = CharacterSlotDefinition.model_validate(
+            entity.components["character_slot"]
+        )
+        character_id = requested.get(entity.id, slot.default_character_id)
+        if character_id is None:
+            raise CharacterLibraryError(
+                f"character slot {entity.id} has no assignment or default"
+            )
+        character = library.get(character_id)
+        violations = character_constraint_violations(character, slot)
+        if violations:
+            raise CharacterLibraryError(
+                f"character {character_id} is ineligible for slot {entity.id}: "
+                + "; ".join(violations)
+            )
+        effective[entity.id] = character_id
+        resolved[character_id] = character
     return PreparedScenario(
         scenario=scenario,
+        assignments=effective,
         characters=resolved,
-        warnings=tuple(warnings),
     )
+
+
+def character_constraint_violations(
+    character: CharacterDefinition,
+    slot: CharacterSlotDefinition,
+) -> tuple[str, ...]:
+    constraints = slot.constraints
+    identity = character.identity
+    violations: list[str] = []
+    if constraints.minimum_age is not None:
+        if identity.age is None:
+            violations.append("age is required by the slot")
+        elif identity.age < constraints.minimum_age:
+            violations.append(
+                f"age {identity.age} is below minimum {constraints.minimum_age}"
+            )
+    if constraints.maximum_age is not None:
+        if identity.age is None:
+            violations.append("age is required by the slot")
+        elif identity.age > constraints.maximum_age:
+            violations.append(
+                f"age {identity.age} exceeds maximum {constraints.maximum_age}"
+            )
+    allowed_genders = {
+        value.casefold() for value in constraints.allowed_genders
+    }
+    if allowed_genders:
+        if not identity.gender:
+            violations.append("gender is required by the slot")
+        elif identity.gender.casefold() not in allowed_genders:
+            violations.append(
+                f"gender {identity.gender!r} is not allowed"
+            )
+    if (
+        constraints.allowed_template_ids
+        and character.template_id not in constraints.allowed_template_ids
+    ):
+        violations.append(
+            f"template {character.template_id!r} is not allowed"
+        )
+    return tuple(dict.fromkeys(violations))

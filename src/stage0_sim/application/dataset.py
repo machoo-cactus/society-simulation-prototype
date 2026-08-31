@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from stage0_sim.domain.components import (
     ActivityComponent,
     CharacterProfileComponent,
+    CharacterSituationComponent,
     ControllerComponent,
     ConversationComponent,
     DriveComponent,
@@ -67,6 +68,15 @@ class AgentStateProjector:
                 "template_version": profile.template_version,
                 "content_hash": profile.content_hash,
                 "display_name": profile.display_name,
+            }
+        if registry.has_component(agent_id, CharacterSituationComponent):
+            situation = registry.get_component(
+                agent_id, CharacterSituationComponent
+            )
+            state["character_situation"] = {
+                "slot_id": situation.slot_id,
+                "label": situation.label,
+                "briefing": situation.briefing,
             }
         if registry.has_component(agent_id, PositionComponent):
             state["position"] = registry.get_component(

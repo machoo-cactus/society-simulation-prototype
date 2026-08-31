@@ -20,17 +20,26 @@
       {
         "id": "district-west",
         "name": "West Residential",
-        "center": {"x": 800, "y": 1500}
+        "center": {
+          "x": 800,
+          "y": 1500
+        }
       },
       {
         "id": "district-central",
         "name": "Central",
-        "center": {"x": 3000, "y": 1500}
+        "center": {
+          "x": 3000,
+          "y": 1500
+        }
       },
       {
         "id": "district-east",
         "name": "East Business",
-        "center": {"x": 5200, "y": 1500}
+        "center": {
+          "x": 5200,
+          "y": 1500
+        }
       }
     ],
     "buildings": [
@@ -38,12 +47,18 @@
         "id": "building-home",
         "name": "Alex's Apartment",
         "district_id": "district-west",
-        "city_position": {"x": 600, "y": 1400},
+        "city_position": {
+          "x": 600,
+          "y": 1400
+        },
         "local_map_id": "map-home",
         "entrances": [
           {
             "id": "entrance-home",
-            "local_coordinate": {"x": 2, "y": 1},
+            "local_coordinate": {
+              "x": 2,
+              "y": 1
+            },
             "neighborhood_node_id": "node-home-entrance"
           }
         ]
@@ -52,12 +67,18 @@
         "id": "building-office",
         "name": "East Research Office",
         "district_id": "district-east",
-        "city_position": {"x": 5400, "y": 1400},
+        "city_position": {
+          "x": 5400,
+          "y": 1400
+        },
         "local_map_id": "map-office",
         "entrances": [
           {
             "id": "entrance-office",
-            "local_coordinate": {"x": 0, "y": 1},
+            "local_coordinate": {
+              "x": 0,
+              "y": 1
+            },
             "neighborhood_node_id": "node-office-entrance"
           }
         ]
@@ -68,7 +89,10 @@
         "id": "place-central-square",
         "name": "Central Square",
         "district_id": "district-central",
-        "city_position": {"x": 3000, "y": 1450},
+        "city_position": {
+          "x": 3000,
+          "y": 1450
+        },
         "network_node_id": "node-central-junction"
       }
     ],
@@ -82,7 +106,12 @@
             "id": "home-entry",
             "name": "Home Entry",
             "type": "ENTRY",
-            "bounds": {"x": 1, "y": 0, "width": 2, "height": 3}
+            "bounds": {
+              "x": 1,
+              "y": 0,
+              "width": 2,
+              "height": 3
+            }
           }
         ],
         "stations": []
@@ -96,7 +125,12 @@
             "id": "office-entry",
             "name": "Office Entry",
             "type": "ENTRY",
-            "bounds": {"x": 0, "y": 0, "width": 2, "height": 3}
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 2,
+              "height": 3
+            }
           }
         ],
         "stations": []
@@ -107,31 +141,46 @@
         {
           "id": "node-home-entrance",
           "kind": "BUILDING_ENTRANCE",
-          "position": {"x": 650, "y": 1400},
+          "position": {
+            "x": 650,
+            "y": 1400
+          },
           "place_id": "building-home"
         },
         {
           "id": "node-home-parking",
           "kind": "PARKING",
-          "position": {"x": 800, "y": 1500},
+          "position": {
+            "x": 800,
+            "y": 1500
+          },
           "place_id": "building-home"
         },
         {
           "id": "node-central-junction",
           "kind": "ROAD_JUNCTION",
-          "position": {"x": 3000, "y": 1500},
+          "position": {
+            "x": 3000,
+            "y": 1500
+          },
           "place_id": "district-central"
         },
         {
           "id": "node-office-parking",
           "kind": "PARKING",
-          "position": {"x": 5200, "y": 1500},
+          "position": {
+            "x": 5200,
+            "y": 1500
+          },
           "place_id": "building-office"
         },
         {
           "id": "node-office-entrance",
           "kind": "BUILDING_ENTRANCE",
-          "position": {"x": 5350, "y": 1400},
+          "position": {
+            "x": 5350,
+            "y": 1400
+          },
           "place_id": "building-office"
         }
       ],
@@ -140,11 +189,19 @@
           "id": "walk-home-to-parking",
           "from_node_id": "node-home-entrance",
           "to_node_id": "node-home-parking",
-          "allowed_modes": ["WALK"],
+          "allowed_modes": [
+            "WALK"
+          ],
           "distance_meters": 180,
           "geometry": [
-            {"x": 650, "y": 1400},
-            {"x": 800, "y": 1500}
+            {
+              "x": 650,
+              "y": 1400
+            },
+            {
+              "x": 800,
+              "y": 1500
+            }
           ],
           "bidirectional": true
         },
@@ -152,12 +209,20 @@
           "id": "road-west-central",
           "from_node_id": "node-home-parking",
           "to_node_id": "node-central-junction",
-          "allowed_modes": ["CAR"],
+          "allowed_modes": [
+            "CAR"
+          ],
           "distance_meters": 2200,
           "speed_limit_mps": 13.9,
           "geometry": [
-            {"x": 800, "y": 1500},
-            {"x": 3000, "y": 1500}
+            {
+              "x": 800,
+              "y": 1500
+            },
+            {
+              "x": 3000,
+              "y": 1500
+            }
           ],
           "bidirectional": true
         },
@@ -165,12 +230,20 @@
           "id": "road-central-east",
           "from_node_id": "node-central-junction",
           "to_node_id": "node-office-parking",
-          "allowed_modes": ["CAR"],
+          "allowed_modes": [
+            "CAR"
+          ],
           "distance_meters": 2200,
           "speed_limit_mps": 13.9,
           "geometry": [
-            {"x": 3000, "y": 1500},
-            {"x": 5200, "y": 1500}
+            {
+              "x": 3000,
+              "y": 1500
+            },
+            {
+              "x": 5200,
+              "y": 1500
+            }
           ],
           "bidirectional": true
         },
@@ -178,11 +251,19 @@
           "id": "walk-parking-to-office",
           "from_node_id": "node-office-parking",
           "to_node_id": "node-office-entrance",
-          "allowed_modes": ["WALK"],
+          "allowed_modes": [
+            "WALK"
+          ],
           "distance_meters": 180,
           "geometry": [
-            {"x": 5200, "y": 1500},
-            {"x": 5350, "y": 1400}
+            {
+              "x": 5200,
+              "y": 1500
+            },
+            {
+              "x": 5350,
+              "y": 1400
+            }
           ],
           "bidirectional": true
         }
@@ -210,15 +291,15 @@
         "spatial_location": {
           "scale": "BUILDING",
           "place_id": "building-home",
-          "local_coordinate": {"x": 2, "y": 1}
+          "local_coordinate": {
+            "x": 2,
+            "y": 1
+          }
         },
         "homeostasis": {
           "satiety": 80,
           "energy": 80,
           "stress": 20
-        },
-        "character_profile": {
-          "character_id": "alex-driver"
         },
         "plan": {
           "queue": [
@@ -228,6 +309,20 @@
               "mode": "CAR"
             }
           ]
+        },
+        "planner": {
+          "daily_goals": [
+            "Travel from home to the office"
+          ],
+          "current_priorities": [
+            "Use the available car and complete the planned cross-city route"
+          ]
+        },
+        "character_slot": {
+          "label": "Morning commuter",
+          "briefing": "You are at home before work with access to a parked car. Reach the office using the planned route and available transport infrastructure.",
+          "default_character_id": "alex-chen",
+          "constraints": {}
         }
       }
     }

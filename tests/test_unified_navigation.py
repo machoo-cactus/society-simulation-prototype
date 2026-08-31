@@ -109,10 +109,7 @@ def _city_runner(
     )
     return create_runner(
         scenario,
-        resolved_characters={
-            character_id: character.profile()
-            for character_id, character in prepared.characters.items()
-        },
+        resolved_characters=prepared.runtime_characters(),
         embedding_provider=embedding_provider,
     )
 
@@ -134,16 +131,6 @@ def _cross_building_navigation_payload() -> dict:
         }
     ]
     components = payload["entities"][0]["components"]
-    components["character_profile"] = {
-        "identity": {
-            "display_name": "Young Alex",
-            "age": 12,
-        },
-        "capabilities": {
-            "licences": [],
-            "driving_experience": "none",
-        },
-    }
     components["plan"] = {
         "queue": [
             {
@@ -660,10 +647,7 @@ def test_travel_to_alias_commits_navigation_instead_of_a_parallel_architecture()
     )
     runner = create_runner(
         scenario,
-        resolved_characters={
-            character_id: character.profile()
-            for character_id, character in prepared.characters.items()
-        },
+        resolved_characters=prepared.runtime_characters(),
         model_client=ScriptedModelClient((turn,)),
     )
 

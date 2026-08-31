@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -59,21 +60,32 @@ class SimulationManager:
         self._runs: dict[str, ManagedRun] = {}
         self._next_scenario_id = 1
 
-    def add_scenario(self, scenario: ScenarioDefinition) -> str:
+    def add_scenario(
+        self,
+        scenario: ScenarioDefinition,
+        character_assignments: Mapping[str, str] | None = None,
+    ) -> str:
         if self.character_library is None:
-            if any(
-                isinstance(
-                    entity.components.get("character_profile", {}).get(
-                        "character_id"
-                    ),
-                    str,
+            has_character_references = bool(character_assignments) or any(
+                entity.components.get("character_slot", {}).get(
+                    "default_character_id"
                 )
+                is not None
                 for entity in scenario.entities
-            ):
+            )
+            if has_character_references:
                 raise ValueError("character library is not configured")
-            prepared = PreparedScenario(scenario=scenario, characters={})
+            prepared = PreparedScenario(
+                scenario=scenario,
+                assignments={},
+                characters={},
+            )
         else:
-            prepared = prepare_scenario(scenario, self.character_library)
+            prepared = prepare_scenario(
+                scenario,
+                self.character_library,
+                character_assignments,
+            )
         scenario_id = f"scenario-{self._next_scenario_id:06d}"
         self._next_scenario_id += 1
         self._scenarios[scenario_id] = prepared
@@ -99,10 +111,7 @@ class SimulationManager:
         run_id = f"run-{uuid4()}"
         runner = create_runner(
             scenario,
-            resolved_characters={
-                character_id: character.profile()
-                for character_id, character in prepared.characters.items()
-            },
+            resolved_characters=prepared.runtime_characters(),
             run_id=run_id,
             speed=speed,
             model_client=self.model_client,

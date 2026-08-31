@@ -56,9 +56,10 @@ stage0-sim run scenarios/real-llm-tool-agent.json --ticks 30
 
 The browser UI is Python-rendered HTML/SVG under `src/stage0_sim/web/`; there is
 no Node build step and no client-side application state. Keep authored
-JavaScript limited to browser APIs that HTML cannot provide, and cover every
-such enhancement with Playwright. Follow `docs/UI_TESTING.md` for required
-role-driven browser testing.
+JavaScript limited to progressive fragment transport and browser interactions
+that HTML cannot provide. Server-rendered forms must remain the no-JavaScript
+fallback, and every enhancement must be covered with Playwright. Follow
+`docs/UI_TESTING.md` for required role-driven browser testing.
 
 ## Architecture
 
@@ -154,6 +155,9 @@ and dataset projections.
   `dialogue.*` in dialogue-oriented views.
 - Browser controls must remain ordinary labeled forms or links bound directly
   to Python routes. Do not recreate lifecycle or telemetry state in JavaScript.
+- Partial refreshes must consume server-rendered HTML, update only named stable
+  regions, and preserve focus, scroll positions, open disclosures, filters, and
+  map position when those values remain applicable.
 - Exercise changed UI workflows with Playwright using roles, labels, and
   visible outcomes. Source inspection and JavaScript syntax checks are not
   substitutes for browser behavior.

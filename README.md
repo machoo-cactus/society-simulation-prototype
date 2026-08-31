@@ -1,6 +1,6 @@
 # Stage 0 Simulation Sandbox
 
-A deterministic sandbox for experimenting with spatial agents, continuous
+A deterministic sandbox for experimenting with embodied characters, continuous
 homeostasis, System 1 survival interrupts, System 2 planning, episodic memory,
 dialogue, realtime telemetry, and reproducible datasets.
 
@@ -16,7 +16,7 @@ Requirements:
 
 Clone the repository, enter its root directory, and create a virtual environment.
 
-### Linux and macOS
+### Linux (primary)
 
 ```bash
 python3.12 -m venv .venv
@@ -26,7 +26,9 @@ python -m pip install -e '.[dev]'
 cp .env.example .env
 ```
 
-### Windows PowerShell
+The same commands work on macOS with an installed Python 3.12 or newer.
+
+### Windows PowerShell (secondary)
 
 ```powershell
 py -3.12 -m venv .venv
@@ -58,16 +60,29 @@ Manage them at <http://127.0.0.1:8000/ui/characters/>.
 
 ## Update an existing checkout
 
-On Windows, run the repository update script from PowerShell:
+On Linux, run:
+
+```bash
+bash ./update.sh
+```
+
+It performs a fast-forward-only pull, creates a Linux `.venv` when needed,
+refreshes the editable development installation, and creates `.env` only when
+it is absent. To refresh the environment without pulling:
+
+```bash
+bash ./update.sh --skip-pull
+```
+
+Set `PYTHON=/path/to/python` to select a specific Python 3.12+ interpreter.
+
+On Windows, the equivalent PowerShell helper is:
 
 ```powershell
 .\update.ps1
 ```
 
-It performs a fast-forward-only `git pull`, creates `.venv` with Python 3.12 if
-needed, upgrades pip, refreshes the editable `.[dev]` installation, and creates
-`.env` from `.env.example` only when `.env` does not already exist. It does not
-delete datasets or overwrite local environment settings.
+Both helpers avoid deleting datasets or overwriting local environment settings.
 
 To refresh only the environment without pulling:
 
@@ -75,12 +90,12 @@ To refresh only the environment without pulling:
 .\update.ps1 -SkipPull
 ```
 
-Equivalent manual commands:
+Equivalent Linux manual commands:
 
-```powershell
+```bash
 git pull --ff-only
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e '.[dev]'
 ```
 
 ## Try the included experiments
@@ -233,7 +248,9 @@ Invalid fields and values are rejected when a scenario is loaded.
 
 ## API workflow
 
-The browser uses the same public API available to other clients:
+The public API provides the programmatic workflow equivalent to the operator
+UI. The server-rendered UI calls the same application services directly rather
+than duplicating run state in the browser:
 
 1. Manage reusable files through `GET/POST /characters` and
    `GET/PUT/DELETE /characters/{character_id}`.
@@ -253,10 +270,12 @@ simulation process.
 API run objects are process-local. Restarting the server does not restore a live
 runner, although completed records and episodic memories remain in SQLite.
 
-The browser uses telemetry schema `stage0.telemetry.v2`. Static world/profile
-bootstrap data, latest runtime snapshots, and durable domain-event cursors are
-separate. Reconnecting clients backfill missed events through the REST history
-endpoint before resuming live updates.
+WebSocket API clients use telemetry schema `stage0.telemetry.v2`. Static
+world/profile bootstrap data, latest runtime snapshots, and durable
+domain-event cursors are separate. Reconnecting API clients can backfill missed
+events through the REST history endpoint before resuming live updates. The
+operator UI renders authoritative server snapshots and does not maintain a
+second client-side telemetry model.
 
 ## Reproducibility and provider isolation
 
@@ -289,19 +308,19 @@ OpenAI-compatible server. Each request increments a process-local counter; text
 responses say `Fake response N`, while tool requests return a valid `wait` call
 whose duration counts upward.
 
-```powershell
+```bash
 stage0-fake-llm --host 127.0.0.1 --port 8081
 ```
 
 The equivalent module command is
 `python -m stage0_sim.api.fake_llm --host 127.0.0.1 --port 8081`.
 
-In another PowerShell window:
+In another shell:
 
-```powershell
-$env:STAGE0_LLM_PROVIDER = "openai-compatible"
-$env:STAGE0_LLM_BASE_URL = "http://127.0.0.1:8081/v1"
-$env:STAGE0_LLM_MODEL = "stage0-fake"
+```bash
+export STAGE0_LLM_PROVIDER=openai-compatible
+export STAGE0_LLM_BASE_URL=http://127.0.0.1:8081/v1
+export STAGE0_LLM_MODEL=stage0-fake
 stage0-sim run scenarios/real-llm-tool-agent.json --ticks 30
 ```
 
@@ -349,8 +368,10 @@ or use Uvicorn's supported environment variables.
 |   `-- web/              Browser UI packaged and served by FastAPI
 |-- tests/                Pytest suite
 |-- scenarios/            Runnable experiment definitions
-|-- docs/                 PRD, implementation plan, and state assessment
+|-- docs/                 Current guides, roadmap, and archived design records
 |-- data/runs/            Generated local datasets (ignored)
+|-- update.sh             Linux environment refresh helper
+|-- update.ps1            Windows environment refresh helper
 `-- pyproject.toml        Packaging and tool configuration
 ```
 
@@ -378,19 +399,20 @@ Generated caches, virtual environments, build metadata, and `data/runs/` are
 ignored. Simulation databases are experiment output; delete them only when their
 records are no longer needed.
 
-Design and status documents:
+Current documentation:
 
+- [Documentation map](docs/README.md)
+- [Current project status](docs/PROJECT_STATUS.md)
 - [Concept guide for advanced development](docs/CONCEPT_GUIDE.md)
-- [Product requirements](docs/starting_basic_PRD.md)
-- [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
-- [Project state assessment](docs/PROJECT_STATE_ASSESSMENT.md)
-- [Real LLM tool-agent plan](docs/REAL_LLM_TOOL_AGENT_PLAN.md)
 - [Character profile authoring guide](docs/CHARACTER_PROFILE_GUIDE.md)
-- [Large-scale world and transport plan](docs/LARGE_SCALE_WORLD_AND_TRANSPORT_PLAN.md)
+- [UI testing for coding agents](docs/UI_TESTING.md)
+- [Information and navigation roadmap](docs/roadmaps/INFORMATION_AND_NAVIGATION.md)
+- [Legacy design records](docs/legacy/README.md)
 
 ## Platform support
 
-Runtime code uses `pathlib`, Python APIs, and URL paths rather than shell-specific
-filesystem syntax. The package and tests are intended to run on Linux, macOS, and
-Windows. Repository text files are normalized to LF for reliable Linux tooling;
-Windows command files, if added later, remain CRLF through `.gitattributes`.
+Linux is the primary runtime and CI target. Runtime code uses `pathlib`, Python
+APIs, and URL paths rather than shell-specific filesystem syntax. macOS and
+Windows remain supported secondary development platforms. Repository text files
+are normalized to LF for reliable Linux tooling; Windows command files remain
+CRLF through `.gitattributes`.

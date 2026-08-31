@@ -1,5 +1,8 @@
 # Large-Scale World, Hierarchical Movement, and Transport Plan
 
+> Legacy implementation record. Sparse-city behavior is now part of the active
+> architecture documented in `docs/CONCEPT_GUIDE.md`.
+
 **Status:** Initial sparse-city milestone implemented
 **Date:** 2026-08-30  
 **Scope:** Sparse city representation, movement between buildings, city travel,

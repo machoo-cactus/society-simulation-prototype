@@ -3,7 +3,7 @@
 **Audience:** Developers, architects, reviewers, and coding agents  
 **Purpose:** Provide one definitive mental model of the project's goals,
 vocabulary, current implementation, planned direction, and engineering rules  
-**Status date:** 2026-08-27
+**Status date:** 2026-08-31
 
 ## 1. How to use this guide
 
@@ -920,13 +920,15 @@ Telemetry is a realtime operator projection:
 - event stream;
 - simulation status and sequence number.
 
-The browser transport uses separate cursors for durable telemetry messages,
+WebSocket API clients use separate cursors for durable telemetry messages,
 domain events, and replaceable runtime snapshots. Static world and character
-profile bootstrap data is sent separately from high-frequency state. A client
-whose replay cursor expires must recover the latest snapshot and backfill domain
-events before resuming live display.
+profile bootstrap data is sent separately from high-frequency state. An API
+client whose replay cursor expires must recover the latest snapshot and backfill
+domain events before resuming live display.
 
-The browser does not own simulation behavior.
+The bundled browser UI is server-rendered instead. It renders authoritative
+snapshots on each request or timed document refresh and does not maintain a
+client-side telemetry model. The browser does not own simulation behavior.
 
 Telemetry snapshots may reveal more than any character could know. Never pass a
 telemetry snapshot directly into an LLM character controller.
@@ -1041,7 +1043,8 @@ Do not make a provider swap require changes to domain systems.
 | Fake/scripted planning | Implemented | No external model required |
 | Generated social dialogue | Implemented, transitional | Separate dialogue generator after social action |
 | Episodic memory/retrieval | Implemented | Durable SQLite episodes and in-memory retrieval |
-| Telemetry API/WebSocket/UI | Implemented | Operator-facing, omniscient |
+| Telemetry API/WebSocket | Implemented | Operator-facing, omniscient API for external clients |
+| Server-rendered operator UI | Implemented | Accessible HTML/SVG, direct forms, ARIA-tested with Playwright |
 | Ground-truth dataset export | Implemented | SQLite and JSONL |
 | Real LLM model client | Implemented, opt-in | OpenAI-compatible async HTTP adapter |
 | Typed controller tools | Implemented | `go_to`, `travel_to`, `perform`, `say`, `wait`, `skip` |
@@ -1082,7 +1085,7 @@ src/stage0_sim/
 
 tests/                Behavioral and boundary tests
 scenarios/            Runnable scenario definitions
-docs/                 Requirements, plans, assessment, concept guide
+docs/                 Current guides, active roadmaps, archived design records
 ```
 
 Controller and perception additions belong in focused `application/agents` and
@@ -1299,13 +1302,14 @@ Before accepting a substantial feature, confirm:
 ## 30. Document relationships
 
 - `README.md`: installation, operation, and experimentation.
+- `docs/README.md`: index of active and archived documentation.
+- `docs/PROJECT_STATUS.md`: current implemented capabilities and limitations.
 - `docs/CONCEPT_GUIDE.md`: canonical vocabulary and advanced mental model.
-- `docs/starting_basic_PRD.md`: original Stage 0 product requirements.
-- `docs/IMPLEMENTATION_PLAN.md`: phased implementation of the prototype.
-- `docs/REAL_LLM_TOOL_AGENT_PLAN.md`: detailed sensing and real-LLM controller
-  architecture and implementation record.
-- `docs/PROJECT_STATE_ASSESSMENT.md`: historical assessment and completion
-  record.
+- `docs/CHARACTER_PROFILE_GUIDE.md`: reusable profile schema and authoring.
+- `docs/UI_TESTING.md`: mandatory browser-testing workflow.
+- `docs/roadmaps/INFORMATION_AND_NAVIGATION.md`: active follow-on roadmap.
+- `docs/legacy/README.md`: index of completed, superseded, or historical design
+  records.
 
 This guide should remain shorter than the combined design record but complete
 enough that a developer can locate the correct abstraction without reading every

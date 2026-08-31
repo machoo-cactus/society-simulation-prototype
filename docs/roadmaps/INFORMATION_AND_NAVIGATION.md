@@ -1,6 +1,6 @@
-# Unified Character Information, Memory, and Navigation Architecture Proposal
+# Unified Character Information, Memory, and Navigation Roadmap
 
-**Status:** Partially implemented; initial navigation cutover complete
+**Status:** Active roadmap; information and navigation foundations implemented
 **Date:** 2026-08-30  
 **Scope:** Character information, memory, controller context, spatial knowledge,
 and navigation across nested environments  

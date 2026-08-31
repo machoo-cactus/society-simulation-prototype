@@ -1,9 +1,12 @@
 # Project State Assessment
 
+> Legacy assessment retained as a dated implementation record. Use
+> `docs/CONCEPT_GUIDE.md` for current state.
+
 **Original assessment:** 2026-08-26  
 **Completion update:** 2026-08-26  
-**Compared against:** `docs/IMPLEMENTATION_PLAN.md` and
-`docs/starting_basic_PRD.md`
+**Compared against:** `docs/legacy/plans/IMPLEMENTATION_PLAN.md` and
+`docs/legacy/requirements/starting_basic_PRD.md`
 
 ## Executive conclusion
 

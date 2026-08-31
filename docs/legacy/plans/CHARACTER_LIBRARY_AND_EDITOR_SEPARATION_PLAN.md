@@ -1,5 +1,8 @@
 # Character Library and Editor Separation Plan
 
+> Legacy implementation record. Current profile usage is documented in
+> `docs/CHARACTER_PROFILE_GUIDE.md`.
+
 **Status:** Implemented  
 **Date:** 2026-08-30  
 **Scope:** Character storage, scenario references, scenario preparation, API and

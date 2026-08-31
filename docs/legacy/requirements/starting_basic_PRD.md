@@ -1,4 +1,7 @@
 Product Requirement Document (PRD)
+
+> Legacy baseline retained for historical context. See `docs/CONCEPT_GUIDE.md`
+> and `README.md` for the implemented project.
 Multi-Fidelity LLM Simulation Engine: Stage 0 Agent Primitives Sandbox
 Document Status: Draft / Conceptual Baseline
 Target Stage: Stage 0 Experimental Prototype

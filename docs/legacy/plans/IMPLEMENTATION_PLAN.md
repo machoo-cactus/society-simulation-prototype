@@ -1,5 +1,9 @@
 # Stage 0 Implementation Plan
 
+> Legacy implementation record. The work described here is complete; current
+> architecture and operating instructions live in `docs/CONCEPT_GUIDE.md` and
+> `README.md`.
+
 ## Implementation status (2026-08-26)
 
 All ten Stage 0 phases and milestones M1-M5 are implemented and verified in the

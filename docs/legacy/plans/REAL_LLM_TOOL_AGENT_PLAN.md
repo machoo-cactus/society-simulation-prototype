@@ -1,5 +1,8 @@
 # Real LLM Tool-Agent Architecture Plan
 
+> Legacy implementation record. Current controller contracts are documented in
+> `docs/CONCEPT_GUIDE.md`.
+
 **Status:** Initial vertical slice and global cognition barrier implemented
 **Scope:** Real-run cognition for Stage 0  
 **Primary goal:** Let an LLM control a simulated person through typed tools without

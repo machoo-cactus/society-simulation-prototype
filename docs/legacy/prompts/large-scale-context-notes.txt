@@ -1,5 +1,7 @@
 file for storing prompts and ideas. agents must ignore.
 
+Archived under `docs/legacy/prompts`; this is not active project guidance.
+
 write a plan for allowing create a high detail large scale scenario. it should
 have content for all scale levels, focus on fleshing out a chunk of a city
 centred around an office(fully defining a neighborhood), include some city level

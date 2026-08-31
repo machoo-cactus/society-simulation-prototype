@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "stage0-simulation"
 version = "0.1.0"
-description = "Stage 0 agent primitives simulation sandbox"
+description = "Deterministic embodied-character simulation sandbox"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.116,<1",

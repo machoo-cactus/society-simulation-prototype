@@ -20,18 +20,11 @@ runtime.
 
 ## Install the browser test environment
 
-From the repository root on Windows:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m playwright install chromium
-```
-
-Linux CI uses:
+From the repository root on Linux:
 
 ```bash
-python -m pip install -e '.[dev]'
-python -m playwright install --with-deps chromium
+.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/python -m playwright install --with-deps chromium
 ```
 
 The browser binary is intentionally a separate Playwright installation. A
@@ -39,12 +32,21 @@ normal `python -m pytest` skips the browser module so backend contributors are
 not forced to download Chromium. UI changes are not complete until the explicit
 browser command has passed:
 
-```powershell
-$env:STAGE0_RUN_PLAYWRIGHT = "1"
-.\.venv\Scripts\python.exe -m pytest tests\test_ui_playwright.py
+```bash
+STAGE0_RUN_PLAYWRIGHT=1 \
+  .venv/bin/python -m pytest tests/test_ui_playwright.py
 ```
 
 CI sets `STAGE0_RUN_PLAYWRIGHT=1`, installs Chromium, and runs the same tests.
+
+On Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m playwright install chromium
+$env:STAGE0_RUN_PLAYWRIGHT = "1"
+.\.venv\Scripts\python.exe -m pytest tests\test_ui_playwright.py
+```
 
 ## Required autonomous loop
 
@@ -146,17 +148,16 @@ expected message in a dedicated test.
 
 Run one workflow:
 
-```powershell
-$env:STAGE0_RUN_PLAYWRIGHT = "1"
-.\.venv\Scripts\python.exe -m pytest tests\test_ui_playwright.py -k lifecycle -vv
+```bash
+STAGE0_RUN_PLAYWRIGHT=1 \
+  .venv/bin/python -m pytest tests/test_ui_playwright.py -k lifecycle -vv
 ```
 
 Run headed:
 
-```powershell
-$env:STAGE0_RUN_PLAYWRIGHT = "1"
-$env:PWDEBUG = "1"
-.\.venv\Scripts\python.exe -m pytest tests\test_ui_playwright.py -k lifecycle -s
+```bash
+STAGE0_RUN_PLAYWRIGHT=1 PWDEBUG=1 \
+  .venv/bin/python -m pytest tests/test_ui_playwright.py -k lifecycle -s
 ```
 
 For difficult visual failures, temporarily capture a full-page screenshot:

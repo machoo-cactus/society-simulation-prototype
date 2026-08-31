@@ -1,5 +1,8 @@
 # UI Architecture Reliability and Readability Report
 
+> Legacy UI architecture record. The ES-module implementation was removed;
+> current guidance is in `docs/UI_TESTING.md`.
+
 **Status:** Superseded by the server-rendered UI rewrite
 **Date:** 2026-08-30
 **Scope:** Browser state management, simulation controls, telemetry delivery,

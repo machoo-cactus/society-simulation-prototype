@@ -5,18 +5,19 @@
 Use Python 3.12 or newer. Install the package in editable mode so the `src/`
 layout, console scripts, and packaged web assets are exercised:
 
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
 ```
 
-Existing Windows checkouts can use `.\update.ps1` to fast-forward pull and
-refresh the editable development environment.
+Existing Linux checkouts can use `bash ./update.sh` to fast-forward pull and
+refresh the editable development environment. Windows checkouts can use
+`.\update.ps1`.
 
 Run the standard checks from the repository root:
 
-```powershell
+```bash
 python -m pytest
 python -m ruff check .
 python -m mypy
@@ -25,38 +26,38 @@ python -m pip wheel . --no-deps --wheel-dir dist
 
 Run a single test, test class, or file with pytest node IDs:
 
-```powershell
-python -m pytest tests\test_navigation.py
-python -m pytest tests\test_navigation.py::test_name
+```bash
+python -m pytest tests/test_navigation.py
+python -m pytest tests/test_navigation.py::test_name
 ```
 
 Run the API and bundled browser UI:
 
-```powershell
+```bash
 python -m uvicorn stage0_sim.api.app:app --reload
 ```
 
 Run a deterministic CLI scenario:
 
-```powershell
-stage0-sim run scenarios\minimal.json --ticks 10
+```bash
+stage0-sim run scenarios/minimal.json --ticks 10
 ```
 
 Tool-agent scenarios require an explicit model provider. For local testing,
 start the separate OpenAI-compatible fake API and point the simulation at it:
 
-```powershell
+```bash
 stage0-fake-llm --host 127.0.0.1 --port 8081
-$env:STAGE0_LLM_PROVIDER = "openai-compatible"
-$env:STAGE0_LLM_BASE_URL = "http://127.0.0.1:8081/v1"
-$env:STAGE0_LLM_MODEL = "stage0-fake"
-stage0-sim run scenarios\real-llm-tool-agent.json --ticks 30
+export STAGE0_LLM_PROVIDER=openai-compatible
+export STAGE0_LLM_BASE_URL=http://127.0.0.1:8081/v1
+export STAGE0_LLM_MODEL=stage0-fake
+stage0-sim run scenarios/real-llm-tool-agent.json --ticks 30
 ```
 
-The browser UI is Python-rendered HTML/SVG under `src\stage0_sim\web\`; there is
+The browser UI is Python-rendered HTML/SVG under `src/stage0_sim/web/`; there is
 no Node build step and no client-side application state. Keep authored
 JavaScript limited to browser APIs that HTML cannot provide, and cover every
-such enhancement with Playwright. Follow `docs\UI_TESTING.md` for required
+such enhancement with Playwright. Follow `docs/UI_TESTING.md` for required
 role-driven browser testing.
 
 ## Architecture
@@ -131,9 +132,9 @@ and dataset projections.
   new action as a controller tool.
 - Strict schemas reject extra fields. For extensible character experiments, use
   ordered `custom_sections` and fields rather than allowing arbitrary keys.
-- Model contracts in `application\agents\contracts.py` are provider-neutral.
+- Model contracts in `application/agents/contracts.py` are provider-neutral.
   Normalize provider responses, usage, IDs, errors, and tool calls inside
-  `adapters\llm`.
+  `adapters/llm`.
 - Real providers are opt-in. Keep scripted and replay clients first-class so
   behavior can be tested without network access.
 - Failures are explicit events (`*.failed`, `*.rejected`, `*.cancelled`,
@@ -159,10 +160,12 @@ and dataset projections.
 - When adding scenario fields, update the Pydantic definition, domain
   construction, representative scenario JSON, and any operator projection that
   should expose the field.
-- Use `pathlib` in Python and preserve Windows compatibility. Static UI assets
-  must remain inside the Python package because FastAPI serves them from an
-  installed wheel.
+- Use `pathlib` and platform-neutral Python APIs. Linux is the primary runtime
+  and CI target; preserve macOS and Windows compatibility. Static UI assets must
+  remain inside the Python package because FastAPI serves them from an installed
+  wheel.
 
-Read `docs\CONCEPT_GUIDE.md` before changing simulation behavior, cognition,
+Read `docs/CONCEPT_GUIDE.md` before changing simulation behavior, cognition,
 memory, perception, telemetry, or persistence. Use
-`docs\CHARACTER_PROFILE_GUIDE.md` for profile schema and extension rules.
+`docs/CHARACTER_PROFILE_GUIDE.md` for profile schema and extension rules, and
+`docs/UI_TESTING.md` for browser changes.

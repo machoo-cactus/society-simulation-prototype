@@ -1,5 +1,9 @@
 # Character Agent Definition and UI Rework Plan
 
+> Legacy implementation record. The JavaScript UI described here has since
+> been replaced by the server-rendered interface documented in
+> `docs/UI_TESTING.md`.
+
 **Status:** Implemented  
 **Date:** 2026-08-29  
 **Scope:** Character-controller prompts and profiles; browser scenario/run

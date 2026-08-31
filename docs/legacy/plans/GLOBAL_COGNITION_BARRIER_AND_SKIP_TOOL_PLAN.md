@@ -1,5 +1,8 @@
 # Global Cognition Barrier and Skip Tool Plan
 
+> Legacy implementation record. The global barrier and skip tool are part of
+> the current runtime described in `docs/CONCEPT_GUIDE.md`.
+
 **Status:** Implemented  
 **Date:** 2026-08-30  
 **Scope:** Tool-controller scheduling, runner tick boundaries, provider waiting,
@@ -798,7 +801,7 @@ installed CLI/API/browser behavior agrees.
 Update:
 
 - `docs\CONCEPT_GUIDE.md`;
-- `docs\REAL_LLM_TOOL_AGENT_PLAN.md`;
+- `docs/legacy/plans/REAL_LLM_TOOL_AGENT_PLAN.md`;
 - README execution and speed descriptions;
 - scenario/profile guidance where tool allowlists appear;
 - fake LLM instructions;

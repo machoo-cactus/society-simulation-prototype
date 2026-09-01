@@ -16,7 +16,6 @@ from stage0_sim.domain.components import (
 from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.lineage import (
     action_lineage_payload,
-    emit_action_lifecycle,
 )
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
@@ -304,17 +303,6 @@ class AffordanceExecutionSystem:
             },
             correlation_id=execution.correlation_id,
         )
-        if execution.source == "system1" and execution.action_instance is not None:
-            emit_action_lifecycle(
-                context,
-                "action.progressed",
-                agent_id,
-                execution.action_instance,
-                {
-                    "station_id": execution.station_id,
-                    "progress": round(progress, 12),
-                },
-            )
         if execution.elapsed >= execution.definition.duration:
             self._complete(context, agent_id, execution)
 
@@ -352,19 +340,22 @@ class AffordanceExecutionSystem:
         _restore_activity(context, agent_id, execution, "affordance_completed")
         context.registry.remove_component(agent_id, AffordanceExecutionComponent)
         if execution.source == "system1":
-            from stage0_sim.domain.systems.system1 import System1ArbitrationSystem
+            from stage0_sim.domain.systems.system1 import (
+                resolve_system1,
+                system1_drive_recovered,
+            )
 
             drive = context.registry.get_component(agent_id, DriveComponent)
             configuration = context.registry.get_resource(System1Configuration)
             if (
                 drive.active_drive is not None
-                and System1ArbitrationSystem._is_recovered(
+                and system1_drive_recovered(
                     homeostasis,
                     drive.active_drive,
                     configuration,
                 )
             ):
-                System1ArbitrationSystem()._resolve(
+                resolve_system1(
                     context,
                     agent_id,
                     drive,

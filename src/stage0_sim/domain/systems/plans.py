@@ -17,7 +17,6 @@ from stage0_sim.domain.components import (
     NavigationStatus,
     NpcComponent,
     PlanComponent,
-    PlannerComponent,
     PositionComponent,
     PossessionsComponent,
     SpatialLocationComponent,
@@ -30,10 +29,10 @@ from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.lineage import (
+    ActionLifecycleEvent,
     action_lineage_payload,
     clear_plan_lineage,
     emit_action_lifecycle,
-    materialize_legacy_plan,
 )
 from stage0_sim.domain.npcs import NpcPoolRegistry
 from stage0_sim.domain.systems import SystemContext
@@ -43,7 +42,6 @@ from stage0_sim.domain.systems.spatial_context import (
 )
 from stage0_sim.domain.systems.travel import TravelSystem
 from stage0_sim.domain.world import (
-    CityWorld,
     Coordinate,
     Locator,
     SpaceRegistry,
@@ -52,7 +50,6 @@ from stage0_sim.domain.world import (
     TravelStatus,
     WorldLocation,
     WorldMap,
-    find_path,
 )
 
 
@@ -98,7 +95,107 @@ def fail_social_action(
                 "reason": "plan_action_failed",
             },
         )
-    PlanExecutionSystem()._fail(context, agent_id, plan, reason)
+    fail_plan_action(context, agent_id, plan, reason)
+
+
+def reset_current_plan_action(plan: PlanComponent) -> None:
+    plan.current = None
+    plan.remaining_duration = None
+    plan.previous_activity = None
+    plan.waiting_for_affordance = False
+    plan.waiting_for_transaction = False
+    plan.current_started = False
+
+
+def finish_plan(
+    context: SystemContext,
+    agent_id: str,
+    plan: PlanComponent,
+    reason: str,
+) -> None:
+    if plan.plan_id is None:
+        return
+    context.events.emit(
+        "plan.cleared",
+        simulation_tick=context.clock.tick,
+        simulation_time=context.clock.simulation_time,
+        agent_id=agent_id,
+        payload={
+            "reason": reason,
+            "cleared_actions": 0,
+            "plan_id": plan.plan_id,
+            "plan_revision": plan.plan_revision,
+            "origin": plan.origin.value if plan.origin is not None else None,
+        },
+        correlation_id=plan.root_correlation_id,
+    )
+    plan.plan_id = None
+    plan.plan_revision = 0
+    plan.origin = None
+    plan.root_correlation_id = None
+
+
+def complete_plan_action(
+    context: SystemContext,
+    agent_id: str,
+    plan: PlanComponent,
+) -> None:
+    action = plan.current
+    if action is not None:
+        emit_action_lifecycle(context, "action.completed", agent_id, action)
+    reset_current_plan_action(plan)
+    if not plan.queue:
+        finish_plan(context, agent_id, plan, "completed")
+
+
+def fail_plan_action(
+    context: SystemContext,
+    agent_id: str,
+    plan: PlanComponent,
+    reason: str,
+) -> None:
+    action = plan.current
+    if action is not None:
+        emit_action_lifecycle(
+            context,
+            "action.failed",
+            agent_id,
+            action,
+            {"reason": reason},
+        )
+    reset_current_plan_action(plan)
+    clear_plan_lineage(
+        context,
+        agent_id,
+        plan,
+        reason=reason,
+        current_status="action.cancelled",
+    )
+
+
+def interrupt_plan_action(
+    context: SystemContext,
+    agent_id: str,
+    plan: PlanComponent,
+    reason: str,
+) -> None:
+    action = plan.current
+    if action is not None:
+        emit_action_lifecycle(
+            context,
+            "action.cancelled",
+            agent_id,
+            action,
+            {"reason": reason},
+        )
+    reset_current_plan_action(plan)
+    clear_plan_lineage(
+        context,
+        agent_id,
+        plan,
+        reason=reason,
+        current_status="action.cancelled",
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,9 +215,8 @@ class PlanExecutionSystem:
         ):
             drive = context.registry.get_component(agent_id, DriveComponent)
             plan = context.registry.get_component(agent_id, PlanComponent)
-            materialize_legacy_plan(context, agent_id, plan)
             system1_navigation = (
-                isinstance(plan.current, ActionInstance)
+                plan.current is not None
                 and plan.current.origin is ActionOrigin.SYSTEM1
                 and plan.current.action is ActionType.NAVIGATE
             )
@@ -135,41 +231,15 @@ class PlanExecutionSystem:
                     if plan.current is not None:
                         continue
                     continue
-                if plan.current.action is ActionType.TRAVEL_TO:
-                    travel = context.registry.get_component(
-                        agent_id, TravelComponent
-                    )
-                    if travel.status in {
-                        TravelStatus.ROUTE_PLANNED,
-                        TravelStatus.TRAVELLING,
-                    }:
-                        continue
-                    if travel.status in {
-                        TravelStatus.ARRIVED,
-                        TravelStatus.CANCELLED,
-                        TravelStatus.BLOCKED,
-                    }:
-                        self._reset_current(plan)
-                        travel.status = TravelStatus.IDLE
                 if plan.waiting_for_affordance:
                     self._check_affordance(context, agent_id, plan)
                 elif plan.waiting_for_transaction:
                     self._check_transaction(context, agent_id, plan)
-                elif (
-                    plan.current.action is ActionType.MOVE_TO
-                    and plan.current_started
-                    and context.registry.get_component(
-                        agent_id, MovementComponent
-                    ).destination
-                    is None
-                ):
-                    self._complete(context, agent_id, plan)
                 return_if_active = plan.current is not None
                 if return_if_active:
                     continue
 
             if not plan.queue:
-                self._request_replanning(context, agent_id)
                 continue
             plan.current = plan.queue.pop(0)
             self._start(
@@ -187,7 +257,7 @@ class PlanExecutionSystem:
         world: WorldMap | None,
     ) -> None:
         action = plan.current
-        if not isinstance(action, ActionInstance):
+        if action is None:
             return
         if action.action is ActionType.SOCIALIZE and (
             action.target is None
@@ -197,33 +267,7 @@ class PlanExecutionSystem:
             self._fail(context, agent_id, plan, "invalid_social_target")
             return
         plan.current_started = True
-        self._emit_action(context, "plan.action_started", agent_id, action)
-
-        if action.action is ActionType.MOVE_TO:
-            if world is None:
-                self._fail(
-                    context,
-                    agent_id,
-                    plan,
-                    "local_space_unavailable",
-                )
-                return
-            destination = self._resolve_destination(
-                context, agent_id, world, action.target
-            )
-            if destination is None:
-                self._fail(context, agent_id, plan, "target_unreachable")
-                return
-            position = context.registry.get_component(agent_id, PositionComponent)
-            if position.coordinate == destination:
-                self._complete(context, agent_id, plan)
-                return
-            movement = context.registry.get_component(agent_id, MovementComponent)
-            movement.destination = destination
-            movement.path = ()
-            movement.retry_after_tick = 0
-            movement.action_instance = action
-            return
+        self._emit_action(context, "action.started", agent_id, action)
 
         if action.action is ActionType.NAVIGATE:
             if not context.registry.has_component(
@@ -287,36 +331,6 @@ class PlanExecutionSystem:
                 return
             navigation.status = NavigationStatus.NAVIGATING
             self._advance_navigation(context, agent_id, plan)
-            return
-
-        if action.action is ActionType.TRAVEL_TO:
-            if (
-                not context.registry.has_resource(CityWorld)
-                or action.target is None
-                or action.mode is None
-                or not context.registry.has_component(
-                    agent_id, TravelComponent
-                )
-            ):
-                self._fail(context, agent_id, plan, "travel_precondition_failed")
-                return
-            if not TravelSystem().request(
-                context,
-                agent_id,
-                action.target,
-                action.mode,
-                action_instance=action,
-            ):
-                travel = context.registry.get_component(
-                    agent_id,
-                    TravelComponent,
-                )
-                self._fail(
-                    context,
-                    agent_id,
-                    plan,
-                    travel.failure_reason or "route_not_found",
-                )
             return
 
         if action.action is ActionType.TRANSACT:
@@ -1134,36 +1148,6 @@ class PlanExecutionSystem:
         )
 
     @staticmethod
-    def _resolve_destination(
-        context: SystemContext,
-        agent_id: str,
-        world: WorldMap,
-        target: str | None,
-    ) -> Coordinate | None:
-        if target is None:
-            return None
-        try:
-            return world.station(target).position
-        except KeyError:
-            pass
-        zone = next((candidate for candidate in world.zones if candidate.id == target), None)
-        if zone is None:
-            return None
-        position = context.registry.get_component(agent_id, PositionComponent)
-        occupied = frozenset(
-            other_position.coordinate
-            for other_id, other_position in context.registry.query(PositionComponent)
-            if other_id != agent_id
-            and shares_local_map(context.registry, agent_id, other_id)
-        )
-        candidates: list[tuple[int, int, int, Coordinate]] = []
-        for tile in zone.tiles:
-            path = find_path(world.grid, position.coordinate, tile, occupied)
-            if path is not None:
-                candidates.append((len(path), tile.y, tile.x, tile))
-        return min(candidates)[3] if candidates else None
-
-    @staticmethod
     def _resolve_affordance_station(
         context: SystemContext,
         agent_id: str,
@@ -1199,13 +1183,7 @@ class PlanExecutionSystem:
         agent_id: str,
         plan: PlanComponent,
     ) -> None:
-        action = plan.current
-        if isinstance(action, ActionInstance):
-            self._emit_action(context, "plan.action_completed", agent_id, action)
-        self._reset_current(plan)
-        if not plan.queue:
-            self._finish_plan(context, agent_id, plan, "completed")
-            self._request_replanning(context, agent_id)
+        complete_plan_action(context, agent_id, plan)
 
     def _fail(
         self,
@@ -1214,24 +1192,7 @@ class PlanExecutionSystem:
         plan: PlanComponent,
         reason: str,
     ) -> None:
-        action = plan.current
-        if isinstance(action, ActionInstance):
-            self._emit_action(
-                context,
-                "plan.action_failed",
-                agent_id,
-                action,
-                {"reason": reason},
-            )
-        self._reset_current(plan)
-        clear_plan_lineage(
-            context,
-            agent_id,
-            plan,
-            reason=reason,
-            current_status="action.cancelled",
-        )
-        self._request_replanning(context, agent_id)
+        fail_plan_action(context, agent_id, plan, reason)
 
     def _interrupt(
         self,
@@ -1240,33 +1201,11 @@ class PlanExecutionSystem:
         plan: PlanComponent,
         reason: str,
     ) -> None:
-        action = plan.current
-        if isinstance(action, ActionInstance):
-            emit_action_lifecycle(
-                context,
-                "action.interrupted",
-                agent_id,
-                action,
-                {"reason": reason},
-            )
-        self._reset_current(plan)
-        clear_plan_lineage(
-            context,
-            agent_id,
-            plan,
-            reason=reason,
-            current_status="action.cancelled",
-        )
-        self._request_replanning(context, agent_id)
+        interrupt_plan_action(context, agent_id, plan, reason)
 
     @staticmethod
     def _reset_current(plan: PlanComponent) -> None:
-        plan.current = None
-        plan.remaining_duration = None
-        plan.previous_activity = None
-        plan.waiting_for_affordance = False
-        plan.waiting_for_transaction = False
-        plan.current_started = False
+        reset_current_plan_action(plan)
 
     @staticmethod
     def _finish_plan(
@@ -1275,77 +1214,17 @@ class PlanExecutionSystem:
         plan: PlanComponent,
         reason: str,
     ) -> None:
-        if plan.plan_id is None:
-            return
-        context.events.emit(
-            "plan.cleared",
-            simulation_tick=context.clock.tick,
-            simulation_time=context.clock.simulation_time,
-            agent_id=agent_id,
-            payload={
-                "reason": reason,
-                "cleared_actions": 0,
-                "plan_id": plan.plan_id,
-                "plan_revision": plan.plan_revision,
-                "origin": plan.origin.value if plan.origin is not None else None,
-            },
-            correlation_id=plan.root_correlation_id,
-        )
-        plan.plan_id = None
-        plan.plan_revision = 0
-        plan.origin = None
-        plan.root_correlation_id = None
-
-    @staticmethod
-    def _request_replanning(context: SystemContext, agent_id: str) -> None:
-        if context.registry.has_component(agent_id, PlannerComponent):
-            context.registry.get_component(
-                agent_id, PlannerComponent
-            ).needs_plan = True
+        finish_plan(context, agent_id, plan, reason)
 
     @staticmethod
     def _emit_action(
         context: SystemContext,
-        event_type: str,
+        event_type: ActionLifecycleEvent,
         agent_id: str,
         action: ActionInstance,
         extra: dict[str, JsonValue] | None = None,
     ) -> None:
-        payload: dict[str, JsonValue] = {
-            "action": action.action.value,
-            **action_lineage_payload(action),
-        }
-        if action.target is not None:
-            payload["target"] = action.target
-        if action.duration is not None:
-            payload["duration"] = action.duration
-        if action.mode is not None:
-            payload["mode"] = action.mode.value
-        if action.offer_id is not None:
-            payload["offer_id"] = action.offer_id
-        payload.update(extra or {})
-        legacy_event = context.events.emit(
-            event_type,
-            simulation_tick=context.clock.tick,
-            simulation_time=context.clock.simulation_time,
-            agent_id=agent_id,
-            payload=payload,
-            correlation_id=action.root_correlation_id,
-        )
-        lifecycle_type = {
-            "plan.action_started": "action.started",
-            "plan.action_completed": "action.completed",
-            "plan.action_failed": "action.failed",
-        }.get(event_type)
-        if lifecycle_type is not None:
-            emit_action_lifecycle(
-                context,
-                lifecycle_type,
-                agent_id,
-                action,
-                extra,
-                causation_id=legacy_event.event_id,
-            )
+        emit_action_lifecycle(context, event_type, agent_id, action, extra)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1368,17 +1247,6 @@ class TimedPlanActionSystem:
             plan.remaining_duration = round(
                 max(0.0, plan.remaining_duration - context.clock.dt), 12
             )
-            if isinstance(plan.current, ActionInstance):
-                emit_action_lifecycle(
-                    context,
-                    "action.progressed",
-                    agent_id,
-                    plan.current,
-                    {
-                        "remaining_duration": plan.remaining_duration,
-                        "duration": plan.current.duration,
-                    },
-                )
             if plan.remaining_duration > 0:
                 continue
             activity = context.registry.get_component(agent_id, ActivityComponent)
@@ -1394,16 +1262,8 @@ class TimedPlanActionSystem:
                         "previous": previous_activity.value,
                         "current": activity.current.value,
                         "reason": "plan_action_completed",
-                        **(
-                            action_lineage_payload(plan.current)
-                            if isinstance(plan.current, ActionInstance)
-                            else {}
-                        ),
+                        **action_lineage_payload(plan.current),
                     },
-                    correlation_id=(
-                        plan.current.root_correlation_id
-                        if isinstance(plan.current, ActionInstance)
-                        else None
-                    ),
+                    correlation_id=plan.current.root_correlation_id,
                 )
-            PlanExecutionSystem()._complete(context, agent_id, plan)
+            complete_plan_action(context, agent_id, plan)

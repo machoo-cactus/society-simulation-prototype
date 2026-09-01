@@ -480,10 +480,9 @@ async def import_scenario(request: Request) -> Response:
         scenario_id = Path(upload.filename).stem
         validate_scenario_id(scenario_id)
         raw = json.loads(content)
-        if not isinstance(raw, dict) or raw.get("schema_version") != 3:
+        if not isinstance(raw, dict) or raw.get("schema_version") != 4:
             raise ValueError(
-                "saved scenarios require schema version 3; "
-                "schema-version-2 imports are not supported"
+                "saved scenarios require schema version 4"
             )
         scenario = ScenarioSourceDefinition.model_validate(raw)
         _library(request).create(scenario_id, scenario)

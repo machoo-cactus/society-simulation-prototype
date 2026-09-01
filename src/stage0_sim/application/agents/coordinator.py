@@ -43,13 +43,11 @@ from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.intents import (
     ActivityIntent,
     CharacterIntent,
-    MoveIntent,
     NavigationIntent,
     ServeTransactionIntent,
     SkipIntent,
     SpeechIntent,
     TransactionIntent,
-    TravelIntent,
     WaitIntent,
 )
 from stage0_sim.domain.lineage import (
@@ -105,17 +103,12 @@ class AgentWorkCoordinator:
         max_output_tokens: int | None = None,
         memory_store: EpisodicMemoryStore | None = None,
         information_retriever: InformationRetriever | None = None,
-        execution_mode: str = "global_barrier",
         research_recorder: ResearchRecorder | None = None,
     ) -> None:
         if max_concurrency <= 0:
             raise ValueError("max_concurrency must be greater than zero")
         if request_timeout_seconds <= 0:
             raise ValueError("request_timeout_seconds must be greater than zero")
-        if execution_mode not in {"global_barrier", "background"}:
-            raise ValueError(
-                "execution_mode must be global_barrier or background"
-            )
         self.controller = controller
         self.tool_registry = tool_registry
         self.request_timeout_seconds = request_timeout_seconds
@@ -124,7 +117,6 @@ class AgentWorkCoordinator:
         self.max_output_tokens = max_output_tokens
         self.memory_store = memory_store
         self.information_retriever = information_retriever
-        self.execution_mode = execution_mode
         self.research_recorder = research_recorder
         self.request_count = 0
         self.input_tokens = 0
@@ -182,11 +174,6 @@ class AgentWorkCoordinator:
     def _start(self, request: CharacterDecisionRequest) -> None:
         future = self._executor.submit(asyncio.run, self._decide(request))
         self._pending[future] = _PendingDecision(request, time.monotonic())
-
-    def drain(self, context: SystemContext) -> None:
-        completed = self._collect_completed(start_queued=True)
-        for item in completed:
-            self._apply(context, item)
 
     async def drain_and_wait(
         self,
@@ -392,7 +379,10 @@ class AgentWorkCoordinator:
                 return _DecisionExecution(request, None, error)
             return _DecisionExecution(request, decision, None)
         query_parts = [
-            *request.observation.goals,
+            *(
+                goal.description
+                for goal in request.observation.structured_goals
+            ),
             *(fact.text for fact in request.observation.facts),
         ]
         if not query_parts:
@@ -755,19 +745,7 @@ class AgentWorkCoordinator:
             return
         action_instance = None
         goal_links = active_goal_links(context, request.agent_id)
-        if isinstance(intent, MoveIntent):
-            action_instance = self._queue_navigation(
-                context,
-                request.agent_id,
-                plan,
-                intent.target_id,
-                None,
-                intent.reason,
-                decision_id=request.decision_id,
-                tool_call_id=intent.tool_call_id,
-                goal_links=goal_links,
-            )
-        elif isinstance(intent, ActivityIntent):
+        if isinstance(intent, ActivityIntent):
             duration = intent.duration_seconds
             if intent.action.value in {"WORK", "READ"} and duration is None:
                 self._reject(
@@ -853,18 +831,6 @@ class AgentWorkCoordinator:
                     channel=intent.channel,
                     action_instance=action_instance,
                 ),
-            )
-        elif isinstance(intent, TravelIntent):
-            action_instance = self._queue_navigation(
-                context,
-                request.agent_id,
-                plan,
-                intent.target_id,
-                intent.mode,
-                intent.reason,
-                decision_id=request.decision_id,
-                tool_call_id=intent.tool_call_id,
-                goal_links=goal_links,
             )
         elif isinstance(intent, NavigationIntent):
             action_instance = self._queue_navigation(
@@ -1115,8 +1081,8 @@ def _build_information_query(
             else []
         ),
         *(
-            f"current goal: {goal}"
-            for goal in request.observation.goals
+            f"current goal: {goal.description}"
+            for goal in request.observation.structured_goals
         ),
         *(
             f"perceived fact: {fact.text}"

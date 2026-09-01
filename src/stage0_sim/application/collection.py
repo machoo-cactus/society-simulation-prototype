@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 
-from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.application.data_capture import (
     DATASET_SCHEMA_VERSION,
     ActionId,
@@ -28,8 +27,10 @@ from stage0_sim.application.data_capture import (
     state_delta,
 )
 from stage0_sim.application.dataset import AgentStateProjector, DatasetRecord
+from stage0_sim.application.dataset_projection import DatasetRecordProjector
 from stage0_sim.application.information import InformationStore
 from stage0_sim.application.memory import EpisodicMemoryStore
+from stage0_sim.application.ports import DatasetCaptureRepository
 from stage0_sim.application.runner import SimulationRunner
 from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
@@ -120,7 +121,7 @@ class RunDataCollector:
     def __init__(
         self,
         *,
-        store: SQLiteDatasetStore,
+        store: DatasetCaptureRepository,
         runner: SimulationRunner,
         scenario: dict[str, JsonValue],
         projector: AgentStateProjector | None = None,
@@ -130,7 +131,7 @@ class RunDataCollector:
         self.runner = runner
         self.projector = projector or AgentStateProjector()
         self.run_id = runner.events.run_id
-        self._sequence = 0
+        self._record_projector = DatasetRecordProjector(store, self.run_id)
         self._finalized = False
         self._activities: dict[str, _ActivityInterval] = {}
         self._previous_state_samples: dict[
@@ -231,6 +232,10 @@ class RunDataCollector:
     @property
     def finalized(self) -> bool:
         return self._finalized
+
+    @property
+    def _sequence(self) -> int:
+        return self._record_projector.sequence
 
     def _collect(self, event: DomainEvent) -> None:
         if self._finalized:
@@ -926,8 +931,6 @@ class RunDataCollector:
         event_type = event.event_type
         if event_type.startswith("speech."):
             interaction_ids.extend(self._speech_interactions(event))
-        if event_type.startswith("dialogue."):
-            interaction_ids.extend(self._dialogue_interactions(event))
         if event_type.startswith("transaction."):
             interaction_ids.extend(self._transaction_interactions(event))
         if (
@@ -946,9 +949,6 @@ class RunDataCollector:
         terminal_status = {
             "speech.delivered": "delivered",
             "speech.failed": "failed",
-            "dialogue.generated": "completed",
-            "dialogue.failed": "failed",
-            "dialogue.cancelled": "cancelled",
             "transaction.completed": "completed",
             "transaction.failed": "failed",
             "transaction.cancelled": "cancelled",
@@ -1002,39 +1002,6 @@ class RunDataCollector:
             ),
             event=event,
         )
-        return (interaction_id,)
-
-    def _dialogue_interactions(self, event: DomainEvent) -> tuple[str, ...]:
-        if event.event_type not in {
-            "dialogue.requested",
-            "dialogue.generated",
-            "dialogue.failed",
-            "dialogue.cancelled",
-        }:
-            return ()
-        if event.causation_id is not None:
-            existing = self._event_interactions.get(event.causation_id, ())
-            if existing:
-                return (existing[0],)
-        basis = event.correlation_id or event.causation_id or event.event_id
-        key = ("dialogue", basis)
-        interaction_id = self._interaction_keys.get(key)
-        if interaction_id is None:
-            interaction_id = f"interaction:dialogue:{basis}"
-            target_id = event.payload.get("target_id")
-            participants = [self._participant(event.agent_id, "initiator")]
-            if isinstance(target_id, str):
-                participants.append(
-                    self._participant(target_id, "counterpart")
-                )
-            self._start_interaction(
-                interaction_id,
-                "generated_dialogue",
-                key,
-                tuple(participants),
-                "DIRECT_PARTICIPANTS",
-                event=event,
-            )
         return (interaction_id,)
 
     def _transaction_interactions(
@@ -2291,14 +2258,12 @@ class RunDataCollector:
             return
         if event.event_type == "threshold.breached":
             record_type = "threshold_crossing"
-        elif event.event_type.startswith(("plan.", "planner.")):
+        elif event.event_type.startswith("plan."):
             record_type = "plan_transition"
         elif event.event_type.startswith("affordance."):
             record_type = "affordance"
         elif event.event_type.startswith("transaction."):
             record_type = "transaction"
-        elif event.event_type.startswith("dialogue."):
-            record_type = "dialogue"
         elif event.event_type.startswith("memory."):
             record_type = "memory_reference"
         elif event.event_type.startswith("information."):
@@ -2345,12 +2310,6 @@ class RunDataCollector:
                 ),
             )
         request_events = {
-            "planner.completed": ("plan", "completed"),
-            "planner.failed": ("plan", "failed"),
-            "planner.cancelled": ("plan", "cancelled"),
-            "dialogue.generated": ("dialogue", "completed"),
-            "dialogue.failed": ("dialogue", "failed"),
-            "dialogue.cancelled": ("dialogue", "cancelled"),
             "cognition.completed": ("character_decision", "completed"),
             "cognition.failed": ("character_decision", "failed"),
             "cognition.cancelled": ("character_decision", "cancelled"),
@@ -2442,7 +2401,6 @@ class RunDataCollector:
             "action.completed",
             "action.failed",
             "action.cancelled",
-            "action.interrupted",
         }:
             status = event.event_type.removeprefix("action.")
             terminal = True
@@ -3377,7 +3335,7 @@ class RunDataCollector:
         record_type: str,
         tick: int,
         simulation_time: float,
-        agent_id: str | None,
+        subject_id: str | None,
         payload: dict[str, JsonValue],
         source_event_id: str | None,
         *,
@@ -3392,73 +3350,24 @@ class RunDataCollector:
         schema_id: str = "",
         schema_version: str = DATASET_SCHEMA_VERSION,
     ) -> DatasetRecord:
-        self._sequence += 1
-        record = DatasetRecord(
-            run_id=self.run_id,
-            sequence=self._sequence,
-            record_type=record_type,
-            simulation_tick=tick,
-            simulation_time=simulation_time,
-            agent_id=agent_id,
-            payload=payload,
-            source_event_id=source_event_id,
-            schema_id=schema_id,
-            schema_version=schema_version,
+        return self._record_projector.append(
+            record_type,
+            tick,
+            simulation_time,
+            subject_id,
+            payload,
+            source_event_id,
             category=category,
             source=source,
             phase=phase,
             visibility=visibility,
             related_entity_ids=related_entity_ids,
-            joins=joins or RecordJoinIds(),
+            joins=joins,
             causation_id=causation_id,
             correlation_id=correlation_id,
+            schema_id=schema_id,
+            schema_version=schema_version,
         )
-        self.store.append(record)
-        if agent_id is not None:
-            self.store.add_record_relation(
-                RecordRelation(
-                    run_id=self.run_id,
-                    record_id=record.record_id,
-                    relation_type="subject",
-                    target_type="entity",
-                    target_id=agent_id,
-                )
-            )
-        if source_event_id is not None:
-            self.store.add_record_relation(
-                RecordRelation(
-                    run_id=self.run_id,
-                    record_id=record.record_id,
-                    relation_type="source",
-                    target_type="event",
-                    target_id=source_event_id,
-                )
-            )
-        for ordinal, related_id in enumerate(related_entity_ids):
-            self.store.add_record_relation(
-                RecordRelation(
-                    run_id=self.run_id,
-                    record_id=record.record_id,
-                    relation_type="related",
-                    target_type="entity",
-                    target_id=related_id,
-                    ordinal=ordinal,
-                )
-            )
-        for ordinal, (target_type, target_id) in enumerate(
-            (joins or RecordJoinIds()).to_dict().items()
-        ):
-            self.store.add_record_relation(
-                RecordRelation(
-                    run_id=self.run_id,
-                    record_id=record.record_id,
-                    relation_type="join",
-                    target_type=target_type.removesuffix("_id"),
-                    target_id=str(target_id),
-                    ordinal=ordinal,
-                )
-            )
-        return record
 
 
 def _action_context(state: dict[str, JsonValue]) -> dict[str, JsonValue]:

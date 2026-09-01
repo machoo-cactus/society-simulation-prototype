@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  linux:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,21 +18,120 @@ jobs:
           cache: pip
       - name: Install project
         run: python -m pip install -e '.[dev]'
-      - name: Validate Linux setup helper
+      - name: Validate update helper
         run: bash -n update.sh
       - name: Install Playwright browser
         run: python -m playwright install --with-deps chromium
-      - name: Test
+      - name: Test including browser workflows
         run: python -m pytest
         env:
           STAGE0_RUN_PLAYWRIGHT: "1"
+          STAGE0_CHARACTER_DIRECTORY: ${{ runner.temp }}/stage0/characters
+          STAGE0_SCENARIO_DIRECTORY: ${{ runner.temp }}/stage0/scenarios
+          STAGE0_ELEMENT_DIRECTORY: ${{ runner.temp }}/stage0/elements
+          STAGE0_DATA_DIRECTORY: ${{ runner.temp }}/stage0/runs
       - name: Lint
         run: python -m ruff check .
       - name: Type check
         run: python -m mypy
       - name: Check installed dependencies
         run: python -m pip check
-      - name: Exercise CLI
-        run: stage0-sim run scenarios/minimal.json --ticks 2 --database "${RUNNER_TEMP}/smoke.sqlite3" > "${RUNNER_TEMP}/events.jsonl"
-      - name: Build wheel
-        run: python -m pip wheel . --no-deps --wheel-dir dist
+      - name: Build wheel and source distribution
+        run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/*
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project
+        run: python -m pip install -e ".[dev]"
+      - name: Validate PowerShell update helper
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path .\update.ps1),
+            [ref]$null,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
+      - name: Test
+        run: python -m pytest
+        env:
+          STAGE0_CHARACTER_DIRECTORY: ${{ runner.temp }}\stage0\characters
+          STAGE0_SCENARIO_DIRECTORY: ${{ runner.temp }}\stage0\scenarios
+          STAGE0_ELEMENT_DIRECTORY: ${{ runner.temp }}\stage0\elements
+          STAGE0_DATA_DIRECTORY: ${{ runner.temp }}\stage0\runs
+      - name: Check installed dependencies
+        run: python -m pip check
+
+  compatibility:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.13", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install project
+        run: python -m pip install -e ".[dev]"
+      - name: Focused compatibility checks
+        run: >-
+          python -m pytest
+          tests/unit
+          tests/integration/catalogs
+          tests/integration/cli
+          tests/integration/api/test_health.py
+
+  installed-wheel:
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist
+      - name: Smoke installed wheel outside checkout
+        if: runner.os != 'Windows'
+        run: |
+          python -m venv "${RUNNER_TEMP}/stage0-wheel"
+          "${RUNNER_TEMP}/stage0-wheel/bin/python" -m pip install dist/*.whl
+          "${RUNNER_TEMP}/stage0-wheel/bin/python" -m pip check
+          cd "${RUNNER_TEMP}"
+          "${RUNNER_TEMP}/stage0-wheel/bin/python" \
+            "${GITHUB_WORKSPACE}/tools/installed_smoke.py" \
+            --work-directory "${RUNNER_TEMP}/stage0-installed-smoke"
+      - name: Smoke installed wheel outside checkout
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m venv "$env:RUNNER_TEMP\stage0-wheel"
+          $wheel = (Get-ChildItem .\dist\*.whl).FullName
+          & "$env:RUNNER_TEMP\stage0-wheel\Scripts\python.exe" `
+            -m pip install $wheel
+          & "$env:RUNNER_TEMP\stage0-wheel\Scripts\python.exe" -m pip check
+          Set-Location $env:RUNNER_TEMP
+          & "$env:RUNNER_TEMP\stage0-wheel\Scripts\python.exe" `
+            "$env:GITHUB_WORKSPACE\tools\installed_smoke.py" `
+            --work-directory "$env:RUNNER_TEMP\stage0-installed-smoke"

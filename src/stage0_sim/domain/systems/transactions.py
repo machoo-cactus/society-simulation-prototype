@@ -21,7 +21,6 @@ from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.lineage import (
     action_lineage_payload,
-    emit_action_lifecycle,
 )
 from stage0_sim.domain.npcs import NpcPoolRegistry
 from stage0_sim.domain.systems import SystemContext
@@ -365,18 +364,6 @@ class TransactionExecutionSystem:
             },
             correlation_id=execution.correlation_id,
         )
-        if execution.action_instance is not None:
-            emit_action_lifecycle(
-                context,
-                "action.progressed",
-                agent_id,
-                execution.action_instance,
-                {
-                    "point_id": point.id,
-                    "offer_id": offer.id,
-                    "progress": round(execution.elapsed / offer.duration, 12),
-                },
-            )
         if execution.elapsed >= offer.duration:
             self._complete(context, agent_id, execution, offer)
 

@@ -29,7 +29,6 @@ class RunConfiguration:
     dt: float = 1.0
     speed: float = 1.0
     run_id: str | None = None
-    cognition_execution_mode: str = "global_barrier"
     npc_control_mode: NpcControlMode = NpcControlMode.AUTO
     effective_npc_control_mode: NpcControlMode = NpcControlMode.DETERMINISTIC
 
@@ -40,14 +39,6 @@ class RunConfiguration:
             raise ValueError("speed must be greater than zero")
         if self.run_id == "":
             raise ValueError("run_id must not be empty")
-        if self.cognition_execution_mode not in {
-            "global_barrier",
-            "background",
-        }:
-            raise ValueError(
-                "cognition_execution_mode must be global_barrier or "
-                "background"
-            )
 
 
 class RunnerStatus(StrEnum):
@@ -164,13 +155,7 @@ class SimulationRunner:
 
     def _prepare_stop(self) -> None:
         from stage0_sim.application.agents import AgentWorkCoordinator
-        from stage0_sim.application.macro_work import MacroWorkCoordinator
 
-        if self.registry.has_resource(MacroWorkCoordinator):
-            self.registry.get_resource(MacroWorkCoordinator).cancel_non_memory(
-                self.context,
-                "simulation_stopped",
-            )
         if self.registry.has_resource(AgentWorkCoordinator):
             coordinator = self.registry.get_resource(AgentWorkCoordinator)
             coordinator.cancel_all(self.context, "simulation_stopped")
@@ -178,15 +163,19 @@ class SimulationRunner:
         self.flush_pending_memory()
 
     def flush_pending_memory(self) -> None:
-        from stage0_sim.application.macro_work import MacroWorkCoordinator
-        from stage0_sim.application.memory_recording import MemoryRecordingSystem
+        from stage0_sim.application.memory_recording import (
+            MemoryRecordingSystem,
+            MemoryWorkCoordinator,
+        )
 
-        if not self.registry.has_resource(MacroWorkCoordinator):
+        if not self.registry.has_resource(MemoryWorkCoordinator):
             return
         for system in self.systems.systems:
             if isinstance(system, MemoryRecordingSystem):
                 system.update(self.context)
-        self.registry.get_resource(MacroWorkCoordinator).drain_memory(self.context)
+        self.registry.get_resource(MemoryWorkCoordinator).drain_all(
+            self.context
+        )
 
     def subscribe_tick_completed(
         self,
@@ -284,7 +273,7 @@ class SimulationRunner:
 
     async def advance_one_tick(self) -> bool:
         from stage0_sim.application.agents import AgentWorkCoordinator
-        from stage0_sim.application.macro_work import MacroWorkCoordinator
+        from stage0_sim.application.memory_recording import MemoryWorkCoordinator
 
         self._advancing = True
         stopped = False
@@ -299,28 +288,17 @@ class SimulationRunner:
                 if self.registry.has_resource(AgentWorkCoordinator)
                 else None
             )
-            background = (
-                self.configuration.cognition_execution_mode == "background"
-            )
-            tick_event = (
-                self._emit("simulation.tick", {"dt": self.clock.dt})
-                if background
-                else None
-            )
             has_barrier_work = (
-                not background
-                and (
-                    (
-                        self.registry.has_resource(MacroWorkCoordinator)
-                        and self.registry.get_resource(
-                            MacroWorkCoordinator
-                        ).pending_count
-                        > 0
-                    )
-                    or (
-                        coordinator is not None
-                        and coordinator.pending_count > 0
-                    )
+                (
+                    self.registry.has_resource(MemoryWorkCoordinator)
+                    and self.registry.get_resource(
+                        MemoryWorkCoordinator
+                    ).pending_count
+                    > 0
+                )
+                or (
+                    coordinator is not None
+                    and coordinator.pending_count > 0
                 )
             )
             if has_barrier_work:
@@ -335,14 +313,13 @@ class SimulationRunner:
                     "cognition.barrier_started",
                     {
                         "pending_count": len(batch_decision_ids),
-                        "execution_mode": "global_barrier",
                     },
                 )
             else:
                 batch_decision_ids = ()
             if (
                 not self._stop_requested
-                and self.registry.has_resource(MacroWorkCoordinator)
+                and self.registry.has_resource(MemoryWorkCoordinator)
             ):
                 tick_events = self.events.events[event_start:]
                 survival_agent_ids = frozenset(
@@ -354,7 +331,7 @@ class SimulationRunner:
                         or event.event_type == "threshold.breached"
                     )
                 )
-                self.registry.get_resource(MacroWorkCoordinator).drain(
+                self.registry.get_resource(MemoryWorkCoordinator).drain(
                     self.context,
                     survival_agent_ids=survival_agent_ids,
                 )
@@ -362,13 +339,10 @@ class SimulationRunner:
                 not self._stop_requested
                 and coordinator is not None
             ):
-                if background:
-                    coordinator.drain(self.context)
-                else:
-                    await coordinator.drain_and_wait(
-                        self.context,
-                        on_applying=self._mark_cognition_applying,
-                    )
+                await coordinator.drain_and_wait(
+                    self.context,
+                    on_applying=self._mark_cognition_applying,
+                )
             self.cognition_phase = CognitionPhase.IDLE
             self._cognition_wait_started_at = None
             if has_barrier_work:
@@ -377,11 +351,9 @@ class SimulationRunner:
                     {
                         "decision_count": len(batch_decision_ids),
                         "cancelled": self._stop_requested,
-                        "execution_mode": "global_barrier",
                     },
                 )
-            if tick_event is None:
-                tick_event = self._emit("simulation.tick", {"dt": self.clock.dt})
+            tick_event = self._emit("simulation.tick", {"dt": self.clock.dt})
             if self._stop_requested:
                 self._prepare_stop()
             self._notify_phase(RunnerPhase.TICK_POST_COGNITION)

@@ -20,7 +20,7 @@ class DatasetQueryRepository(Protocol):
     def query_table(
         self,
         run_id: str,
-        table_or_alias: str,
+        table_name: str,
         filters: DatasetQueryFilter | None = None,
     ) -> DatasetQueryPage: ...
 
@@ -61,10 +61,10 @@ class DatasetQueryService:
     def table(
         self,
         run_id: str,
-        table_or_alias: str,
+        table_name: str,
         filters: DatasetQueryFilter | None = None,
     ) -> DatasetQueryPage:
-        return self._repository.query_table(run_id, table_or_alias, filters)
+        return self._repository.query_table(run_id, table_name, filters)
 
     def summary(self, run_id: str) -> dict[str, JsonValue]:
         return self._repository.summary(run_id)

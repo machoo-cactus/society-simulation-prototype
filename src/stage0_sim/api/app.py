@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
+from importlib.resources import files
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,10 +14,10 @@ from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.adapters.scenarios import FileSystemScenarioLibrary
 from stage0_sim.api.characters import router as characters_router
 from stage0_sim.api.elements import router as elements_router
+from stage0_sim.api.operator_sessions import OperatorSessionStore
 from stage0_sim.api.scenario_forms import ScenarioEditorDraftStore
 from stage0_sim.api.scenarios import router as scenarios_router
 from stage0_sim.api.simulation import router as simulation_router
-from stage0_sim.api.ui import OperatorSessionStore
 from stage0_sim.api.ui import router as ui_router
 from stage0_sim.api.ui_elements import router as ui_elements_router
 from stage0_sim.api.ui_scenarios import router as ui_scenarios_router
@@ -72,10 +72,10 @@ app.include_router(scenarios_router)
 app.include_router(ui_router)
 app.include_router(ui_elements_router)
 app.include_router(ui_scenarios_router)
-web_directory = Path(__file__).parents[1] / "web"
+static_directory = files("stage0_sim").joinpath("web", "static")
 app.mount(
     "/ui/assets",
-    StaticFiles(directory=web_directory),
+    StaticFiles(directory=str(static_directory)),
     name="ui-assets",
 )
 

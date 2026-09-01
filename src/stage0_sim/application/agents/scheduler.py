@@ -169,7 +169,6 @@ class CognitionScheduler:
                 payload={
                     "decision_id": decision_id,
                     "trigger": trigger,
-                    "execution_mode": coordinator.execution_mode,
                 },
                 correlation_id=decision_id,
             )
@@ -217,7 +216,6 @@ class CognitionScheduler:
                     "situation_content_hash": request.situation_content_hash,
                     "situation_input_hash": request.situation_input_hash,
                     "allowed_tools": list(request.allowed_tools),
-                    "execution_mode": coordinator.execution_mode,
                     "fact_ids": [
                         fact.fact_id for fact in request.observation.facts
                     ],

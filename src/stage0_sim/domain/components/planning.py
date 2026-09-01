@@ -6,7 +6,6 @@ from stage0_sim.domain.world import TravelMode
 
 
 class ActionType(StrEnum):
-    MOVE_TO = "MOVE_TO"
     WORK = "WORK"
     SOCIALIZE = "SOCIALIZE"
     READ = "READ"
@@ -14,7 +13,6 @@ class ActionType(StrEnum):
     SLEEP = "SLEEP"
     RELAX = "RELAX"
     IDLE = "IDLE"
-    TRAVEL_TO = "TRAVEL_TO"
     NAVIGATE = "NAVIGATE"
     TRANSACT = "TRANSACT"
     SERVE_TRANSACTION = "SERVE_TRANSACTION"
@@ -22,7 +20,6 @@ class ActionType(StrEnum):
 
 class ActionOrigin(StrEnum):
     SCENARIO = "scenario"
-    PLANNER = "planner"
     CONTROLLER = "controller"
     SYSTEM1 = "system1"
     OPERATOR = "operator"
@@ -48,9 +45,7 @@ class PlanAction:
             if self.target is None or self.offer_id is None:
                 raise ValueError("TRANSACT requires target and offer_id")
             if self.mode is not None:
-                raise ValueError(
-                    "mode is only valid for TRAVEL_TO or NAVIGATE"
-                )
+                raise ValueError("mode is only valid for NAVIGATE")
         elif self.action is ActionType.SERVE_TRANSACTION:
             if self.target is None:
                 raise ValueError(
@@ -62,6 +57,8 @@ class PlanAction:
                 )
         elif self.offer_id is not None:
             raise ValueError("offer_id is only valid for TRANSACT")
+        elif self.mode is not None and self.action is not ActionType.NAVIGATE:
+            raise ValueError("mode is only valid for NAVIGATE")
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,13 +153,10 @@ class LineageIdGenerator:
         return value
 
 
-type PlanQueueItem = PlanAction | ActionInstance
-
-
 @dataclass(slots=True)
 class PlanComponent:
-    queue: list[PlanQueueItem] = field(default_factory=list)
-    current: PlanQueueItem | None = None
+    queue: list[ActionInstance] = field(default_factory=list)
+    current: ActionInstance | None = None
     remaining_duration: float | None = None
     previous_activity: ActivityType | None = None
     waiting_for_affordance: bool = False

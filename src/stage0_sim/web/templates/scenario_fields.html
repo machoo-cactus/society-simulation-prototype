@@ -1,0 +1,204 @@
+{% macro field_errors(node) -%}
+  {% if node.errors %}
+    <ul class="field-errors" id="{{ node.control_id }}-errors">
+      {% for error in node.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+{%- endmacro %}
+
+{% macro render_focused_node(node) -%}
+  {% if node.schema.kind == "model" %}
+    <fieldset id="{{ node.control_id }}" class="scenario-group scenario-focused-group" tabindex="-1">
+      <legend>{{ node.schema.label }}</legend>
+      {{ field_errors(node) }}
+      <div class="scenario-fields">
+        {% for child in node.children if child.schema.kind == "scalar" %}
+          {{ render_node(child, 1) }}
+        {% endfor %}
+      </div>
+      {% for child in node.children if child.schema.kind != "scalar" %}
+        <details {% if child.errors %}open{% endif %}>
+          <summary>{{ child.schema.label }}{% if child.errors %} · needs attention{% endif %}</summary>
+          {{ render_node(child, 1) }}
+        </details>
+      {% endfor %}
+    </fieldset>
+  {% elif node.schema.kind == "components" %}
+    <fieldset id="{{ node.control_id }}" class="scenario-group scenario-focused-group" tabindex="-1">
+      <legend>{{ node.schema.label }}</legend>
+      {{ field_errors(node) }}
+      {% for child in node.children %}
+        <details {% if child.errors %}open{% endif %}>
+          <summary>{{ child.schema.label }}{% if child.errors %} · needs attention{% endif %}</summary>
+          {{ render_node(child, 1) }}
+        </details>
+      {% endfor %}
+    </fieldset>
+  {% else %}
+    {{ render_node(node) }}
+  {% endif %}
+{%- endmacro %}
+
+{% macro render_node(node, depth=0, validate=true) -%}
+  {% set schema = node.schema %}
+  {% if schema.kind == "scalar" %}
+    <label class="scenario-field {% if schema.input_type == 'json' %}scenario-field--wide{% endif %}" for="{{ node.control_id }}">
+      <span>{{ schema.label }}</span>
+      {% if schema.input_type == "json" %}
+        <textarea
+          id="{{ node.control_id }}"
+          name="value_{{ node.id }}"
+          rows="7"
+          spellcheck="false"
+          aria-invalid="{{ 'true' if node.errors else 'false' }}"
+          {% if node.errors %}aria-describedby="{{ node.control_id }}-errors"{% endif %}
+        >{{ node.value }}</textarea>
+      {% elif schema.input_type in ("select", "boolean") %}
+        <select
+          id="{{ node.control_id }}"
+          name="value_{{ node.id }}"
+          aria-invalid="{{ 'true' if node.errors else 'false' }}"
+          {% if node.errors %}aria-describedby="{{ node.control_id }}-errors"{% endif %}
+          {% if schema.required and validate %}required{% endif %}
+        >
+          {% if not schema.required %}<option value="">Not set</option>{% endif %}
+          {% for value, label in schema.options %}
+            <option value="{{ value }}" {% if node.value == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <input
+          id="{{ node.control_id }}"
+          name="value_{{ node.id }}"
+          type="{{ 'number' if schema.input_type == 'number' else 'text' }}"
+          value="{{ node.value }}"
+          {% if schema.input_type == "number" %}step="any"{% endif %}
+          {% if schema.minimum is not none and not schema.minimum_exclusive %}min="{{ schema.minimum }}"{% endif %}
+          {% if schema.maximum is not none and not schema.maximum_exclusive %}max="{{ schema.maximum }}"{% endif %}
+          {% if schema.required and validate %}required{% endif %}
+          aria-invalid="{{ 'true' if node.errors else 'false' }}"
+          {% if node.errors %}aria-describedby="{{ node.control_id }}-errors"{% endif %}
+        >
+      {% endif %}
+    </label>
+    {{ field_errors(node) }}
+  {% elif schema.kind == "model" %}
+    <fieldset id="{{ node.control_id }}" class="scenario-group scenario-group--depth-{{ depth }}" tabindex="-1">
+      <legend>{{ schema.label }}</legend>
+      {{ field_errors(node) }}
+      <div class="scenario-fields">
+        {% for child in node.children %}{{ render_node(child, depth + 1, validate) }}{% endfor %}
+      </div>
+    </fieldset>
+  {% elif schema.kind == "optional" %}
+    <fieldset id="{{ node.control_id }}" class="scenario-group scenario-optional" tabindex="-1">
+      <legend>{{ schema.label }}</legend>
+      {{ field_errors(node) }}
+      <label for="{{ node.control_id }}-choice">
+        Include {{ schema.label }}
+        <select id="{{ node.control_id }}-choice" name="choice_{{ node.id }}">
+          <option value="absent" {% if node.choice == "absent" %}selected{% endif %}>No</option>
+          <option value="present" {% if node.choice == "present" %}selected{% endif %}>Yes</option>
+        </select>
+      </label>
+      {% if node.choice == "present" %}
+        <details open>
+          <summary>Edit included value</summary>
+          {{ render_node(node.items[0], depth + 1, validate) }}
+        </details>
+      {% endif %}
+    </fieldset>
+  {% elif schema.kind == "union" %}
+    <fieldset id="{{ node.control_id }}" class="scenario-group scenario-union" tabindex="-1">
+      <legend>{{ schema.label }}</legend>
+      {{ field_errors(node) }}
+      <label for="{{ node.control_id }}-choice">
+        {{ schema.label }} type
+        <select id="{{ node.control_id }}-choice" name="choice_{{ node.id }}">
+          {% for value, label, unused in schema.variants %}
+            <option value="{{ value }}" {% if node.choice == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% for value, label, unused in schema.variants %}
+        {% set variant = node.variants.get(value) %}
+        {% if variant and node.choice == value %}
+          <details open>
+            <summary>{{ label }} fields</summary>
+            {{ render_node(variant, depth + 1, validate) }}
+          </details>
+        {% endif %}
+      {% endfor %}
+    </fieldset>
+  {% elif schema.kind in ("list", "mapping") %}
+    <fieldset id="{{ node.control_id }}" class="scenario-group scenario-collection" tabindex="-1">
+      <legend>{{ schema.label }}</legend>
+      {{ field_errors(node) }}
+      <div class="collection-actions">
+        <button
+          type="submit"
+          name="collection_action"
+          value="add:{{ node.id }}"
+          formnovalidate
+        >Add {{ schema.item.label if schema.kind == "list" else "entry" }}</button>
+      </div>
+      {% for item in node.items %}
+        <section class="scenario-collection-item" aria-label="{{ schema.label }} item {{ loop.index }}">
+          <header>
+            <strong>{{ schema.label }} item {{ loop.index }}</strong>
+            <span class="item-actions">
+              <button
+                type="submit"
+                name="collection_action"
+                value="up:{{ node.id }}:{{ item.id }}"
+                aria-label="Move {{ schema.label }} item {{ loop.index }} up"
+                formnovalidate
+                {% if loop.first %}disabled{% endif %}
+              >↑</button>
+              <button
+                type="submit"
+                name="collection_action"
+                value="down:{{ node.id }}:{{ item.id }}"
+                aria-label="Move {{ schema.label }} item {{ loop.index }} down"
+                formnovalidate
+                {% if loop.last %}disabled{% endif %}
+              >↓</button>
+              <button
+                type="submit"
+                name="collection_action"
+                value="remove:{{ node.id }}:{{ item.id }}"
+                aria-label="Remove {{ schema.label }} item {{ loop.index }}"
+                formnovalidate
+              >Remove</button>
+            </span>
+          </header>
+          {% if schema.kind == "mapping" %}
+            <label for="{{ item.control_id }}-key">
+              Key
+              {% if schema.options %}
+                <select id="{{ item.control_id }}-key" name="key_{{ item.id }}" {% if validate %}required{% endif %}>
+                  <option value="">Select a key</option>
+                  {% for value, label in schema.options %}
+                    <option value="{{ value }}" {% if item.key == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              {% else %}
+                <input id="{{ item.control_id }}-key" name="key_{{ item.id }}" value="{{ item.key }}" {% if validate %}required{% endif %}>
+              {% endif %}
+            </label>
+          {% endif %}
+          {{ render_node(item, depth + 1, validate) }}
+        </section>
+      {% else %}
+        <p class="empty-state">No {{ schema.label|lower }} configured.</p>
+      {% endfor %}
+    </fieldset>
+  {% elif schema.kind == "components" %}
+    <fieldset id="{{ node.control_id }}" class="scenario-group scenario-components" tabindex="-1">
+      <legend>{{ schema.label }}</legend>
+      {{ field_errors(node) }}
+      <p>Enable typed components individually. Metadata and unknown passthrough components use JSON.</p>
+      {% for child in node.children %}{{ render_node(child, depth + 1, validate) }}{% endfor %}
+    </fieldset>
+  {% endif %}
+{%- endmacro %}

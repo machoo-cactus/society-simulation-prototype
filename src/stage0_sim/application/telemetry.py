@@ -17,9 +17,7 @@ from stage0_sim.domain.components import (
     NavigationComponent,
     NpcComponent,
     PerceptionComponent,
-    PlanAction,
     PlanComponent,
-    PlannerComponent,
     PositionComponent,
     PossessionsComponent,
     SpatialLocationComponent,
@@ -682,9 +680,6 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
         "status": runner.status.value,
         "speed": runner.speed,
         "cognition_phase": runner.cognition_phase.value,
-        "cognition_execution_mode": (
-            runner.configuration.cognition_execution_mode
-        ),
         "cognition_pending_count": len(
             runner.cognition_pending_decision_ids
         ),
@@ -892,15 +887,6 @@ def build_agent_snapshot(
             "queue": [_plan_action_payload(action) for action in plan.queue],
             "remaining_duration": plan.remaining_duration,
         }
-    if registry.has_component(agent_id, PlannerComponent):
-        planner = registry.get_component(agent_id, PlannerComponent)
-        payload["planner"] = {
-            "daily_goals": list(planner.daily_goals),
-            "current_priorities": list(planner.current_priorities),
-            "needs_plan": planner.needs_plan,
-            "request_count": planner.request_count,
-            "failure_count": planner.failure_count,
-        }
     if registry.has_component(agent_id, ControllerComponent):
         controller = registry.get_component(agent_id, ControllerComponent)
         payload["controller"] = {
@@ -945,7 +931,6 @@ def build_agent_snapshot(
         payload["conversation"] = {
             "turn_count": len(conversation.turns),
             "latest_turn": conversation.turns[-1] if conversation.turns else None,
-            "request_pending": conversation.request_pending,
         }
     return payload
 
@@ -981,7 +966,7 @@ def _build_agent_static_snapshot(
 
 
 def _plan_action_payload(
-    action: PlanAction | ActionInstance | None,
+    action: ActionInstance | None,
 ) -> JsonValue:
     if action is None:
         return None
@@ -1000,11 +985,11 @@ def _plan_action_payload(
 def _message_type_for_event(event_type: str) -> str:
     if event_type == "homeostasis.changed":
         return "homeostasis_delta"
-    if event_type.startswith(("plan.", "planner.", "navigation.")):
+    if event_type.startswith(("plan.", "action.", "navigation.")):
         return "plan_changed"
     if event_type.startswith("system1.") or event_type == "threshold.breached":
         return "system1_event"
-    if event_type.startswith("dialogue."):
+    if event_type.startswith("speech."):
         return "dialogue_event"
     if event_type.startswith(("cognition.", "tool.")):
         return "cognition_event"

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from stage0_sim.domain.components.goals import GoalComponent, GoalStatus
 from stage0_sim.domain.components.planning import (
@@ -14,6 +14,14 @@ from stage0_sim.domain.events import DomainEvent, JsonValue
 
 if TYPE_CHECKING:
     from stage0_sim.domain.systems import SystemContext
+
+type ActionLifecycleEvent = Literal[
+    "action.queued",
+    "action.started",
+    "action.completed",
+    "action.failed",
+    "action.cancelled",
+]
 
 
 def active_goal_links(
@@ -139,68 +147,21 @@ def queue_plan_actions(
     return instances
 
 
-def materialize_legacy_plan(
-    context: "SystemContext",
-    agent_id: str,
-    plan: PlanComponent,
-) -> None:
-    legacy_current = (
-        plan.current if isinstance(plan.current, PlanAction) else None
-    )
-    legacy_queue = [
-        action for action in plan.queue if isinstance(action, PlanAction)
-    ]
-    if legacy_current is None and not legacy_queue:
-        return
-    generator = _generator(context)
-    if plan.plan_id is None:
-        plan.plan_id = generator.new_plan_id()
-        plan.plan_revision = 1
-        plan.origin = ActionOrigin.SCENARIO
-        plan.root_correlation_id = plan.plan_id
-        _emit_plan(context, "plan.created", agent_id, plan)
-    elif plan.plan_revision < 1:
-        plan.plan_revision = 1
-    links = active_goal_links(context, agent_id)
-
-    def materialize(action: PlanAction) -> ActionInstance:
-        instance = new_action_instance(
-            context,
-            agent_id,
-            origin=plan.origin or ActionOrigin.SCENARIO,
-            specification=action,
-            plan_id=plan.plan_id,
-            plan_revision=plan.plan_revision,
-            goal_links=links,
-            root_correlation_id=plan.root_correlation_id,
-        )
-        emit_action_lifecycle(context, "action.queued", agent_id, instance)
-        return instance
-
-    if legacy_current is not None:
-        plan.current = materialize(legacy_current)
-    plan.queue = [
-        materialize(action) if isinstance(action, PlanAction) else action
-        for action in plan.queue
-    ]
-
-
 def clear_plan_lineage(
     context: "SystemContext",
     agent_id: str,
     plan: PlanComponent,
     *,
     reason: str,
-    current_status: str = "action.cancelled",
+    current_status: ActionLifecycleEvent = "action.cancelled",
 ) -> int:
-    materialize_legacy_plan(context, agent_id, plan)
     plan_id = plan.plan_id
     plan_revision = plan.plan_revision
     plan_origin = plan.origin
     root_correlation_id = plan.root_correlation_id
     current = plan.current
     queued = tuple(plan.queue)
-    if isinstance(current, ActionInstance):
+    if current is not None:
         emit_action_lifecycle(
             context,
             current_status,
@@ -209,14 +170,13 @@ def clear_plan_lineage(
             {"reason": reason},
         )
     for action in queued:
-        if isinstance(action, ActionInstance):
-            emit_action_lifecycle(
-                context,
-                "action.cancelled",
-                agent_id,
-                action,
-                {"reason": reason, "started": False},
-            )
+        emit_action_lifecycle(
+            context,
+            "action.cancelled",
+            agent_id,
+            action,
+            {"reason": reason, "started": False},
+        )
     cleared_count = plan.clear()
     if cleared_count:
         context.events.emit(
@@ -272,7 +232,7 @@ def action_specification_payload(action: ActionInstance) -> dict[str, JsonValue]
 
 def emit_action_lifecycle(
     context: "SystemContext",
-    event_type: str,
+    event_type: ActionLifecycleEvent,
     agent_id: str,
     action: ActionInstance,
     extra: dict[str, JsonValue] | None = None,
@@ -284,6 +244,23 @@ def emit_action_lifecycle(
         **action_lineage_payload(action),
         **(extra or {}),
     }
+    if causation_id is None and event_type != "action.queued":
+        causation_id = next(
+            (
+                prior.event_id
+                for prior in reversed(context.events.events)
+                if prior.event_type
+                in {
+                    "action.queued",
+                    "action.started",
+                    "action.completed",
+                    "action.failed",
+                    "action.cancelled",
+                }
+                and prior.payload.get("action_id") == action.action_id
+            ),
+            None,
+        )
     return context.events.emit(
         event_type,
         simulation_tick=context.clock.tick,

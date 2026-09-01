@@ -1,9 +1,7 @@
 import asyncio
-import io
 import os
 import tempfile
 from collections.abc import AsyncIterator
-from datetime import datetime
 from typing import Annotated, BinaryIO, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket
@@ -12,15 +10,12 @@ from fastapi.websockets import WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.background import BackgroundTask
 
+from stage0_sim.api.persisted_data import router as persisted_data_router
 from stage0_sim.application.data_capture import (
     DatasetQueryFilter,
     DatasetRecordFilter,
     RecordCategory,
     RecordVisibility,
-)
-from stage0_sim.application.data_management import (
-    PersistedRunFilter,
-    RunSelection,
 )
 from stage0_sim.application.element_library import ElementLibrary
 from stage0_sim.application.elements import ScenarioSourceDefinition
@@ -52,6 +47,11 @@ from stage0_sim.domain.npcs import NpcControlMode, NpcPoolRegistry
 from stage0_sim.domain.world import CityWorld, Room
 
 router = APIRouter(prefix="/simulation", tags=["simulation"])
+router.include_router(persisted_data_router)
+
+
+def get_manager(request: Request) -> SimulationManager:
+    return cast(SimulationManager, request.app.state.simulation_manager)
 
 
 class StartRunRequest(BaseModel):
@@ -185,290 +185,6 @@ class DatasetQueryParameters(BaseModel):
         )
 
 
-class PersistedRunCatalogParameters(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    search_text: str | None = None
-    persisted_status: list[str] = Field(default_factory=list)
-    effective_status: list[str] = Field(default_factory=list)
-    scenario_name: str | None = None
-    dataset_schema_version: str | None = None
-    capture_complete: bool | None = None
-    started_at_or_after: datetime | None = None
-    started_before: datetime | None = None
-    completed_at_or_after: datetime | None = None
-    completed_before: datetime | None = None
-    cursor: str | None = None
-    limit: int = Field(default=50, ge=1, le=500)
-
-    def to_filter(self) -> PersistedRunFilter:
-        return PersistedRunFilter(
-            search_text=self.search_text,
-            persisted_statuses=tuple(self.persisted_status),
-            effective_statuses=tuple(self.effective_status),
-            scenario_name=self.scenario_name,
-            dataset_schema_version=self.dataset_schema_version,
-            capture_complete=self.capture_complete,
-            started_at_or_after=self.started_at_or_after,
-            started_before=self.started_before,
-            completed_at_or_after=self.completed_at_or_after,
-            completed_before=self.completed_before,
-            cursor=self.cursor,
-            limit=self.limit,
-        )
-
-
-class RunSelectionFilters(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    search_text: str | None = None
-    persisted_statuses: list[str] = Field(default_factory=list)
-    effective_statuses: list[str] = Field(default_factory=list)
-    scenario_name: str | None = None
-    dataset_schema_version: str | None = None
-    capture_complete: bool | None = None
-    started_at_or_after: datetime | None = None
-    started_before: datetime | None = None
-    completed_at_or_after: datetime | None = None
-    completed_before: datetime | None = None
-
-    def to_filter(self) -> PersistedRunFilter:
-        return PersistedRunFilter(
-            search_text=self.search_text,
-            persisted_statuses=tuple(self.persisted_statuses),
-            effective_statuses=tuple(self.effective_statuses),
-            scenario_name=self.scenario_name,
-            dataset_schema_version=self.dataset_schema_version,
-            capture_complete=self.capture_complete,
-            started_at_or_after=self.started_at_or_after,
-            started_before=self.started_before,
-            completed_at_or_after=self.completed_at_or_after,
-            completed_before=self.completed_before,
-        )
-
-
-class AggregateRunsRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    run_ids: list[str] = Field(min_length=1, max_length=500)
-    selection_fingerprint: str = Field(min_length=64, max_length=64)
-    selection_filters: RunSelectionFilters | None = None
-    include_private_derived: bool = True
-
-    def selection(self) -> RunSelection:
-        selection = RunSelection.create(
-            self.run_ids,
-            (
-                self.selection_filters.to_filter()
-                if self.selection_filters is not None
-                else None
-            ),
-        )
-        if selection.fingerprint != self.selection_fingerprint:
-            raise ValueError("stale or invalid run selection fingerprint")
-        return selection
-
-
-class DeleteRunsRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    run_ids: list[str] = Field(min_length=1, max_length=500)
-    selection_fingerprint: str = Field(min_length=64, max_length=64)
-    selection_filters: RunSelectionFilters | None = None
-
-    def selection(self) -> RunSelection:
-        selection = RunSelection.create(
-            self.run_ids,
-            (
-                self.selection_filters.to_filter()
-                if self.selection_filters is not None
-                else None
-            ),
-        )
-        if selection.fingerprint != self.selection_fingerprint:
-            raise ValueError("stale or invalid run selection fingerprint")
-        return selection
-
-
-class ConfirmDeleteRunsRequest(DeleteRunsRequest):
-    confirmation_token: str = Field(min_length=64, max_length=64)
-    confirmed: bool
-    confirmation_phrase: str
-
-
-class AggregateExportParameters(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    run_id: list[str] = Field(min_length=1, max_length=500)
-    selection_fingerprint: str = Field(min_length=64, max_length=64)
-    selection_filters: str | None = None
-    include_private_derived: bool = True
-
-    def request_body(self) -> AggregateRunsRequest:
-        parsed_filters = (
-            RunSelectionFilters.model_validate_json(self.selection_filters)
-            if self.selection_filters is not None
-            else None
-        )
-        return AggregateRunsRequest(
-            run_ids=self.run_id,
-            selection_fingerprint=self.selection_fingerprint,
-            selection_filters=parsed_filters,
-            include_private_derived=self.include_private_derived,
-        )
-
-
-def get_manager(request: Request) -> SimulationManager:
-    return cast(SimulationManager, request.app.state.simulation_manager)
-
-
-def _data_management_error(error: Exception) -> HTTPException:
-    detail = str(error).strip("'")
-    if isinstance(error, KeyError):
-        return HTTPException(status_code=404, detail=detail)
-    return HTTPException(status_code=409, detail=detail)
-
-
-@router.get("/data-management/runs")
-@router.get("/data/runs")
-async def list_persisted_runs(
-    request: Request,
-    query: Annotated[PersistedRunCatalogParameters, Query()],
-) -> dict[str, JsonValue]:
-    try:
-        return get_manager(request).persisted_runs(query.to_filter()).to_dict()
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-
-
-@router.post("/data-management/aggregate")
-@router.post("/data/aggregate")
-async def aggregate_persisted_runs(
-    body: AggregateRunsRequest,
-    request: Request,
-) -> dict[str, JsonValue]:
-    try:
-        aggregate = get_manager(request).aggregate_persisted_runs(
-            body.selection(),
-            include_private_derived=body.include_private_derived,
-        )
-    except (KeyError, ValueError) as error:
-        raise _data_management_error(error) from error
-    return aggregate.to_dict()
-
-
-def _aggregate_export(
-    body: AggregateRunsRequest,
-    request: Request,
-    export_format: str,
-) -> StreamingResponse:
-    manager = get_manager(request)
-    try:
-        aggregate = manager.aggregate_persisted_runs(
-            body.selection(),
-            include_private_derived=body.include_private_derived,
-        )
-    except (KeyError, ValueError) as error:
-        raise _data_management_error(error) from error
-    output = io.StringIO()
-    if export_format == "json":
-        manager.data_management.write_aggregate_json(aggregate, output)
-        media_type = "application/json"
-    else:
-        manager.data_management.write_aggregate_csv(aggregate, output)
-        media_type = "text/csv"
-    filename = f"stage0-aggregate-{body.selection_fingerprint[:12]}.{export_format}"
-    return StreamingResponse(
-        iter((output.getvalue(),)),
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.post("/data-management/aggregate.json")
-@router.post("/data/aggregate.json")
-async def export_persisted_run_aggregate_json(
-    body: AggregateRunsRequest,
-    request: Request,
-) -> StreamingResponse:
-    return _aggregate_export(body, request, "json")
-
-
-@router.get("/data-management/aggregate.json")
-@router.get("/data/aggregate.json")
-async def download_persisted_run_aggregate_json(
-    request: Request,
-    query: Annotated[AggregateExportParameters, Query()],
-) -> StreamingResponse:
-    return _aggregate_export(query.request_body(), request, "json")
-
-
-@router.post("/data-management/aggregate.csv")
-@router.post("/data/aggregate.csv")
-async def export_persisted_run_aggregate_csv(
-    body: AggregateRunsRequest,
-    request: Request,
-) -> StreamingResponse:
-    return _aggregate_export(body, request, "csv")
-
-
-@router.get("/data-management/aggregate.csv")
-@router.get("/data/aggregate.csv")
-async def download_persisted_run_aggregate_csv(
-    request: Request,
-    query: Annotated[AggregateExportParameters, Query()],
-) -> StreamingResponse:
-    return _aggregate_export(query.request_body(), request, "csv")
-
-
-@router.post("/data-management/deletion-preview")
-@router.post("/data/deletion-preview")
-async def preview_persisted_run_deletion(
-    body: DeleteRunsRequest,
-    request: Request,
-) -> dict[str, JsonValue]:
-    try:
-        preview = get_manager(request).preview_persisted_run_deletion(
-            body.selection()
-        )
-    except (KeyError, ValueError) as error:
-        raise _data_management_error(error) from error
-    return preview.to_dict()
-
-
-@router.post("/data-management/delete")
-@router.post("/data/delete")
-async def delete_persisted_runs(
-    body: ConfirmDeleteRunsRequest,
-    request: Request,
-) -> dict[str, JsonValue]:
-    try:
-        selection = body.selection()
-    except ValueError as error:
-        raise _data_management_error(error) from error
-    expected_phrase = f"DELETE {len(selection.run_ids)} RUNS"
-    if not body.confirmed or body.confirmation_phrase != expected_phrase:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "confirmed must be true and confirmation_phrase must exactly "
-                f"match {expected_phrase!r}"
-            ),
-        )
-    try:
-        result = get_manager(request).delete_persisted_runs(
-            selection,
-            body.confirmation_token,
-        )
-    except (KeyError, ValueError, SimulationConflictError) as error:
-        raise _data_management_error(error) from error
-    session_store = getattr(request.app.state, "operator_sessions", None)
-    cleanup = getattr(session_store, "remove_deleted_run_ids", None)
-    if callable(cleanup):
-        cleanup(result.run_ids)
-    return result.to_dict()
-
-
 @router.post("/scenarios", status_code=201)
 async def create_scenario(
     body: ScenarioCompositionRequest,
@@ -542,9 +258,6 @@ async def get_run(run_id: str, request: Request) -> dict[str, object]:
         "run_id": run_id,
         "status": managed.runner.status.value,
         "cognition_phase": managed.runner.cognition_phase.value,
-        "cognition_execution_mode": (
-            managed.runner.configuration.cognition_execution_mode
-        ),
         "npc_control_mode": managed.runner.configuration.npc_control_mode.value,
         "effective_npc_control_mode": (
             managed.runner.configuration.effective_npc_control_mode.value
@@ -1270,7 +983,6 @@ async def get_dataset_summary(
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
-@router.get("/runs/{run_id}/schema")
 @router.get("/runs/{run_id}/data/schema")
 async def get_dataset_schema(
     run_id: str,
@@ -1283,7 +995,6 @@ async def get_dataset_schema(
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
-@router.get("/runs/{run_id}/records")
 @router.get("/runs/{run_id}/data/records")
 async def get_dataset_records(
     run_id: str,
@@ -1347,7 +1058,6 @@ async def get_dataset_records(
     }
 
 
-@router.get("/runs/{run_id}/goals")
 @router.get("/runs/{run_id}/data/goals")
 async def get_dataset_goals(
     run_id: str,
@@ -1357,7 +1067,6 @@ async def get_dataset_goals(
     return _query_table_response(request, run_id, "goals", query)
 
 
-@router.get("/runs/{run_id}/decisions")
 @router.get("/runs/{run_id}/data/decisions")
 async def get_dataset_decisions(
     run_id: str,
@@ -1367,17 +1076,15 @@ async def get_dataset_decisions(
     return _query_table_response(request, run_id, "decisions", query)
 
 
-@router.get("/runs/{run_id}/actions")
 @router.get("/runs/{run_id}/data/actions")
 async def get_dataset_actions(
     run_id: str,
     request: Request,
     query: Annotated[DatasetQueryParameters, Query()],
 ) -> dict[str, object]:
-    return _query_table_response(request, run_id, "actions", query)
+    return _query_table_response(request, run_id, "action_instances", query)
 
 
-@router.get("/runs/{run_id}/interactions")
 @router.get("/runs/{run_id}/data/interactions")
 async def get_dataset_interactions(
     run_id: str,
@@ -1387,7 +1094,6 @@ async def get_dataset_interactions(
     return _query_table_response(request, run_id, "interactions", query)
 
 
-@router.get("/runs/{run_id}/state")
 @router.get("/runs/{run_id}/data/state")
 async def get_dataset_state(
     run_id: str,
@@ -1397,11 +1103,10 @@ async def get_dataset_state(
     kind = query.kind or "sample"
     if kind not in {"sample", "delta"}:
         raise HTTPException(status_code=422, detail="kind must be sample or delta")
-    table = "state" if kind == "sample" else "state_deltas"
+    table = "state_samples" if kind == "sample" else "state_deltas"
     return _query_table_response(request, run_id, table, query)
 
 
-@router.get("/runs/{run_id}/transitions")
 @router.get("/runs/{run_id}/data/transitions")
 async def get_dataset_transitions(
     run_id: str,
@@ -1415,14 +1120,13 @@ async def get_dataset_transitions(
             detail="kind must be state, goal, or action",
         )
     table = {
-        "state": "transitions",
+        "state": "transition_samples",
         "goal": "goal_transitions",
         "action": "action_transitions",
     }[kind]
     return _query_table_response(request, run_id, table, query)
 
 
-@router.get("/runs/{run_id}/aggregates")
 @router.get("/runs/{run_id}/data/aggregates")
 async def get_dataset_aggregates(
     run_id: str,
@@ -1435,10 +1139,14 @@ async def get_dataset_aggregates(
             status_code=422,
             detail="family must be population, resource_samples, or resource_flows",
         )
-    return _query_table_response(request, run_id, family, query)
+    table = {
+        "population": "population_samples",
+        "resource_samples": "resource_samples",
+        "resource_flows": "resource_flows",
+    }[family]
+    return _query_table_response(request, run_id, table, query)
 
 
-@router.get("/runs/{run_id}/episodes/{family}")
 @router.get("/runs/{run_id}/data/episodes/{family}")
 async def get_dataset_episodes(
     run_id: str,
@@ -1457,7 +1165,6 @@ async def get_dataset_episodes(
     return _query_table_response(request, run_id, table, query)
 
 
-@router.get("/runs/{run_id}/model-requests")
 @router.get("/runs/{run_id}/data/model-requests")
 async def get_dataset_model_requests(
     run_id: str,
@@ -1467,7 +1174,6 @@ async def get_dataset_model_requests(
     return _query_table_response(request, run_id, "model_requests", query)
 
 
-@router.get("/runs/{run_id}/tool-executions")
 @router.get("/runs/{run_id}/data/tool-executions")
 async def get_dataset_tool_executions(
     run_id: str,
@@ -1477,7 +1183,6 @@ async def get_dataset_tool_executions(
     return _query_table_response(request, run_id, "tool_executions", query)
 
 
-@router.get("/runs/{run_id}/perception")
 @router.get("/runs/{run_id}/data/perception")
 async def get_dataset_perception(
     run_id: str,
@@ -1494,7 +1199,6 @@ async def get_dataset_perception(
     return _query_table_response(request, run_id, table, query)
 
 
-@router.get("/runs/{run_id}/memory")
 @router.get("/runs/{run_id}/data/memory")
 async def get_dataset_memory(
     run_id: str,
@@ -1515,18 +1219,17 @@ async def get_dataset_memory(
     return _query_table_response(request, run_id, table, query)
 
 
-@router.get("/runs/{run_id}/opportunities")
 @router.get("/runs/{run_id}/data/opportunities")
 async def get_dataset_opportunities(
     run_id: str,
     request: Request,
     query: Annotated[DatasetQueryParameters, Query()],
 ) -> dict[str, object]:
-    return _query_table_response(request, run_id, "opportunities", query)
+    return _query_table_response(request, run_id, "opportunity_samples", query)
 
 
-@router.get("/runs/{run_id}/export")
-async def export_dataset(
+@router.get("/runs/{run_id}/exports/complete")
+async def export_complete_dataset(
     run_id: str,
     request: Request,
 ) -> StreamingResponse:
@@ -1550,8 +1253,6 @@ async def export_dataset(
 
 
 @router.get("/runs/{run_id}/exports/records")
-@router.get("/runs/{run_id}/export/records")
-@router.get("/runs/{run_id}/data/export/records")
 async def export_filtered_records(
     run_id: str,
     request: Request,
@@ -1618,8 +1319,6 @@ async def export_filtered_records(
 
 
 @router.get("/runs/{run_id}/exports/bundle")
-@router.get("/runs/{run_id}/export/bundle")
-@router.get("/runs/{run_id}/data/export/bundle")
 async def export_analysis_bundle(
     run_id: str,
     request: Request,

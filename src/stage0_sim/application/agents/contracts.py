@@ -154,7 +154,6 @@ class ObservedGoal:
 class CharacterObservation:
     agent_id: str
     display_name: str
-    goals: tuple[str, ...]
     simulation_time: float
     location_id: str | None
     activity: str
@@ -164,7 +163,6 @@ class CharacterObservation:
     targets: tuple[ObservedTarget, ...]
     facts: tuple[ObservationFact, ...]
     recent_outcome: str | None
-    current_priorities: tuple[str, ...] = ()
     spatial_location: dict[str, JsonValue] | None = None
     available_travel_modes: tuple[str, ...] = ()
     calendar_time: CalendarTimeObservation | None = None

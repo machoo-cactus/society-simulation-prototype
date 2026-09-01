@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from stage0_sim.api.operator_sessions import OperatorSession
 from stage0_sim.api.scenario_forms import (
     ScenarioEditorDraft,
     ScenarioEditorNode,
@@ -13,7 +14,6 @@ from stage0_sim.api.scenario_forms import (
     find_node_by_path,
 )
 from stage0_sim.api.ui import (
-    OperatorSession,
     _camera_room,
     _city_view,
     _grid_view,

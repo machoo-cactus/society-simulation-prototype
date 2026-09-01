@@ -1,532 +1,114 @@
-# Stage 0 Simulation Sandbox
+# Stage 0 Simulation
 
-A deterministic sandbox for experimenting with embodied characters, continuous
-homeostasis, System 1 survival interrupts, System 2 planning, episodic memory,
-dialogue, realtime telemetry, and reproducible datasets.
+Stage 0 is a deterministic, fully materialized simulation and research sandbox
+for embodied characters. It combines fixed-step ECS execution, continuous
+homeostasis, non-bypassable System 1 survival behavior, typed character
+controllers, situated perception and memory, grid and sparse-city navigation,
+an operator UI, and reproducible research datasets.
 
-The project runs as one Python application. FastAPI serves both the simulation
-API and a dependency-free browser interface; Node.js is not required.
+Version **0.2.0** supports Python 3.12 or newer. Linux is the primary CI/runtime
+platform; Windows is a first-class development and CI platform.
 
 ## Quick start
 
-Requirements:
-
-- Python 3.12 or newer
-- SQLite support in Python (included in normal CPython builds)
-
-Clone the repository, enter its root directory, and create a virtual environment.
-
-### Linux (primary)
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e '.[dev]'
-cp .env.example .env
-```
-
-The same commands work on macOS with an installed Python 3.12 or newer.
-
-### Windows PowerShell (secondary)
+### Windows PowerShell
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
-```
-
-Start the application from the repository root:
-
-```bash
 python -m uvicorn stage0_sim.api.app:app --reload
 ```
 
-Pass standard Uvicorn options to change the bind address, port, or logging:
+### Linux
 
 ```bash
-python -m uvicorn stage0_sim.api.app:app \
-  --host 0.0.0.0 --port 8080 --log-level info
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+cp .env.example .env
+python -m uvicorn stage0_sim.api.app:app --reload
 ```
 
-Open <http://127.0.0.1:8000/ui/>. The health endpoint is
-<http://127.0.0.1:8000/health>, and OpenAPI documentation is available at
-<http://127.0.0.1:8000/docs>.
+Open <http://127.0.0.1:8000/ui/>. OpenAPI is at
+<http://127.0.0.1:8000/docs> and health status is at
+<http://127.0.0.1:8000/health>.
 
-Reusable characters are stored as individual JSON files under `characters/`.
-Manage them at <http://127.0.0.1:8000/ui/characters/>.
+Existing checkouts can run `.\update.ps1` on Windows or `bash ./update.sh` on
+Linux. Add `-Pull` or `--pull` for an explicit fast-forward-only source update.
 
-## Update an existing checkout
+## Run a simulation
 
-On Linux, run:
-
-```bash
-bash ./update.sh
-```
-
-It performs a fast-forward-only pull, creates a Linux `.venv` when needed,
-refreshes the editable development installation, and creates `.env` only when
-it is absent. To refresh the environment without pulling:
-
-```bash
-bash ./update.sh --skip-pull
-```
-
-Set `PYTHON=/path/to/python` to select a specific Python 3.12+ interpreter.
-
-On Windows, the equivalent PowerShell helper is:
+The installed package includes a self-contained deterministic demo:
 
 ```powershell
-.\update.ps1
+stage0-sim run demo --ticks 10
 ```
 
-Both helpers avoid deleting datasets or overwriting local environment settings.
+Tracked, read-only authoring examples live in:
 
-To refresh only the environment without pulling:
+- `examples\scenarios\`
+- `examples\characters\`
+- `examples\elements\`
+
+For example:
 
 ```powershell
-.\update.ps1 -SkipPull
+stage0-sim run examples\scenarios\minimal.json `
+  --characters-dir examples\characters --ticks 10
+
+stage0-sim run examples\scenarios\greyford-rivermarket-exchange.json `
+  --characters-dir examples\characters `
+  --elements-dir examples\elements --ticks 500
 ```
 
-Equivalent Linux manual commands:
+Linux uses the same arguments with `/` path separators and `\` line
+continuations. See the [example catalog](examples/README.md) for each sample's
+purpose.
 
-```bash
-git pull --ff-only
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e '.[dev]'
-```
+Tool-controlled scenarios require an explicitly configured model provider.
+The bundled fake OpenAI-compatible server supports local testing:
 
-## Try the included experiments
-
-After installation, `stage0-sim` runs a scenario without the browser:
-
-```bash
-stage0-sim run scenarios/minimal.json --ticks 10
-stage0-sim run scenarios/navigation.json --ticks 20
-stage0-sim run scenarios/homeostasis.json --ticks 60
-stage0-sim run scenarios/system1-preemption.json --ticks 20
-stage0-sim run scenarios/fake-llm-planning.json --ticks 30
-stage0-sim run scenarios/sparse-city-car-demo.json --ticks 700
-stage0-sim run scenarios/greyford-rivermarket-exchange.json --ticks 500
-stage0-sim run scenarios/greyford-office-evening.json --ticks 3000
-stage0-sim run scenarios/reference-city-restaurants.json \
-  --elements-dir elements --ticks 10
-```
-
-| Scenario | What it demonstrates |
-| --- | --- |
-| `minimal.json` | Fixed-step clock, deterministic events, and basic entities |
-| `navigation.json` | Grid zones, A* pathfinding, occupancy, and movement |
-| `homeostasis.json` | Activity-dependent satiety, energy, and stress trajectories |
-| `system1-preemption.json` | Plan cancellation, survival navigation, affordance recovery, and resumption |
-| `fake-llm-planning.json` | Post-tick planning, memory retrieval, and validated routines without an external model |
-| `real-llm-tool-agent.json` | Observer-specific sensing and externally configured typed-tool character control |
-| `sparse-city-car-demo.json` | Hierarchical location, sparse city routing, explicit car travel, and city UI |
-| `greyford-rivermarket-exchange.json` | Cross-building navigation, a lazily spawned deterministic cashier, finite stock, bottle redemption, and an atomic purchase |
-| `greyford-office-evening.json` | Large provincial-capital city, detailed office neighborhood, explicit character knowledge, dinner, and mixed walk/metro travel home |
-| `reference-city-restaurants.json` | Two restaurant instances resolved from one shared building/room/object/NPC-role element graph |
-
-By default, canonical events are written to standard output and a SQLite dataset
-is created under `data/runs/`. Canonical events omit run IDs and wall-clock
-timestamps so identical seeded runs can be compared.
-
-Useful CLI options:
-
-```bash
-# Write events and a versioned dataset export.
-stage0-sim run scenarios/system1-preemption.json \
-  --ticks 20 \
-  --output data/runs/events.jsonl \
-  --database data/runs/experiment.sqlite3 \
-  --export data/runs/experiment.jsonl
-
-# Include complete event envelopes.
-stage0-sim run scenarios/navigation.json --ticks 20 --full-events
-
-# Pace simulation time against wall time at 4x speed.
-stage0-sim run scenarios/homeostasis.json --ticks 60 --realtime --speed 4
-
-# Force staffed NPCs to use deterministic decisions.
-stage0-sim run scenarios/greyford-rivermarket-exchange.json \
-  --ticks 500 --npc-control deterministic
-
-# Use a different character library.
-stage0-sim run scenarios/real-llm-tool-agent.json \
-  --characters-dir path/to/characters --ticks 30
-
-# Use a different reusable world-element library.
-stage0-sim run scenarios/reference-city-restaurants.json \
-  --elements-dir path/to/elements --ticks 10
-
-# Override a scenario slot's optional default character.
-stage0-sim run scenarios/real-llm-tool-agent.json \
-  --character agent-001=alex-chen \
-  --character agent-002=jordan-lee \
-  --ticks 30
-
-# Migrate an older embedded-profile scenario to slots and character files.
-stage0-sim characters extract scenarios/legacy.json \
-  --directory characters --write
-```
-
-Use `python -m stage0_sim.cli` instead of `stage0-sim` if the virtual
-environment's executable directory is not on `PATH`.
-
-## Use the browser sandbox
-
-The UI is bundled under `src/stage0_sim/web/` and served at `/ui/` by FastAPI.
-It is intentionally Python-rendered, accessible HTML and SVG:
-
-- no separate frontend server or Node.js build;
-- no client-side application state or duplicated simulation logic;
-- lifecycle controls are ordinary forms bound directly to Python routes;
-- server-rendered fragments update only the panels affected by a control;
-- live runs refresh dynamic regions without reloading the document or
-  discarding focused input, map position, or open disclosures;
-- progressive enhancement provides fragment transport, clipboard access, and
-  direct map manipulation while native forms remain the no-JavaScript fallback.
-
-From the UI you can:
-
-- load and validate a scenario without starting it;
-- assign reusable character-library entries to scenario character slots;
-- start, pause, single-step, resume, stop, and restart the loaded scenario;
-- inspect positions, paths, destinations, activities, plans, and memories;
-- watch satiety, energy, and stress change;
-- mutate vitals to force survival behavior;
-- search and filter planning, survival, perception, cognition, speech, dialogue,
-  and failure events;
-- expand, copy, and inspect complete long-form event payloads;
-- view character names, current vision, hearing pulses, speech bubbles, and a
-  delivered-speech transcript;
-- follow characters between building and city views with AUTO/MANUAL scale,
-  mouse or touch drag panning, cursor-anchored wheel zoom, accessible zoom
-  buttons, focus mode, vehicle progress, and travel events;
-- download the run's versioned JSONL dataset.
-
-The Characters page provides durable create, import, duplicate, rename, edit,
-download, and delete operations for the JSON character library. Character
-editing is independent from loading or running a scenario.
-
-The Scenarios page at `/ui/scenarios/` provides the same durable library
-operations plus a complete structured editor for grid and sparse-city
-definitions, settings, profiles, entities, and typed entity components.
-Repeated records use ordinary add, remove, and reorder form submissions, so
-the workflow remains usable without JavaScript. Resource IDs name files and
-remain separate from the portable scenario `name`.
-
-**Save scenario** writes only the hash-protected library file. **Validate and
-stage** validates the current editor draft, including unsaved changes, and
-replaces the Simulation-page preview. It does not save implicitly or start a
-run. The Simulation page can also explicitly stage a selected saved scenario;
-the bundled example and JSON upload flows remain available.
-
-The UI is tested as an actual browser application with Python Playwright and
-ARIA role locators. See [UI testing for coding agents](docs/UI_TESTING.md) for
-the required autonomous test-and-improve workflow.
-
-The empty top-level `frontend/` scaffold from the original proposed architecture
-has been removed. It had no source files and was not used by packaging or at
-runtime.
-
-## Explore research data
-
-Every run writes the exhaustive `stage0.dataset.v2` research record stream plus
-normalized and derived SQLite projections. Open the run's **Explore research
-dataset** link, or use the first-class **Data** page to discover historical
-runs, select across catalog pages, compare aggregate statistics, export an
-aggregate, or permanently delete finalized runs:
-
-```text
-http://127.0.0.1:8000/ui/data/
-http://127.0.0.1:8000/ui/datasets/{run_id}/
-```
-
-The configured API/UI SQLite database is the catalog authority across
-application restarts. Dataset-store instances maintain ownership leases so a
-second process cannot reconcile or delete a run still owned by a live process.
-Runs whose prior ownership lease is closed or expired are reconciled as
-`interrupted`; active or not-fully-finalized runs cannot be deleted. Bulk
-deletion is atomic, requires a fresh exact-selection preview and typed
-confirmation, and frees pages for SQLite reuse without automatically running
-`VACUUM`.
-
-Aggregate data keeps run identity and reports pooled observation-weighted
-statistics separately from equally weighted per-run macro statistics. Mixed
-schema/scenario/capture groups remain selectable with explicit compatibility
-warnings. Private-derived aggregates are included by default, with a prominent
-warning and an exclusion control; raw private payloads are never rendered on
-the aggregate page.
-
-The server-rendered explorer provides capture-completeness summaries, raw
-records, goal/decision/action/interaction timelines, transitions, population
-and resource views, schema information, lineage filters, and filtered
-downloads. Native GET forms and links remain usable without JavaScript.
-
-Useful API examples:
-
-```bash
-# Summary and generated data dictionary.
-curl http://127.0.0.1:8000/simulation/runs/RUN/data
-curl http://127.0.0.1:8000/simulation/runs/RUN/data/schema
-
-# Character actions and decision episodes.
-curl "http://127.0.0.1:8000/simulation/runs/RUN/data/actions?entity_id=agent-001"
-curl "http://127.0.0.1:8000/simulation/runs/RUN/data/episodes/decisions?limit=50"
-
-# Privacy-filtered raw records and analysis bundle.
-curl -OJ "http://127.0.0.1:8000/simulation/runs/RUN/exports/records?minimum_tick=10"
-curl -OJ "http://127.0.0.1:8000/simulation/runs/RUN/exports/bundle?entity_id=agent-001"
-```
-
-Filtered queries and exports exclude `PRIVATE_RESEARCH` by default. Explicit
-`include_private=true` access can reveal prompts, model text/tool calls,
-retrieved memories and information, embeddings, and profile or synthesized-
-situation context. The compatibility `/export` JSONL is a complete export and
-is **not privacy-filtered**. Treat SQLite databases and complete/private-enabled
-exports as restricted research artifacts.
-
-Telemetry is a separate omniscient operator transport and is never character-
-controller context. Datasets are research records, not resumable checkpoints.
-See [Research Data Collection](docs/DATA_COLLECTION.md) for schemas, lifecycle
-semantics, feature definitions, APIs, exports, and limitations.
-
-## Create an experiment
-
-Copy a scenario and change one variable at a time:
-
-```bash
-cp scenarios/system1-preemption.json scenarios/my-experiment.json
-stage0-sim run scenarios/my-experiment.json --ticks 120 \
-  --database data/runs/my-experiment.sqlite3 \
-  --export data/runs/my-experiment.jsonl
-```
-
-Canonical scenario sources use schema version 3. Grid worlds remain inline:
-
-```json
-{
-  "schema_version": 3,
-  "name": "example",
-  "seed": 42,
-  "dt": 1.0,
-  "speed": 1.0,
-  "world": {
-    "width": 8,
-    "height": 5,
-    "blocked": [],
-    "zones": [],
-    "stations": []
-  },
-  "entities": []
-}
-```
-
-City sources use `city_zones` containing hash-pinned building element
-instances. See `scenarios/sparse-city-car-demo.json` for transport, vehicles,
-and hierarchical locations, and `scenarios/reference-city-restaurants.json`
-for reusable building, room, object, and NPC-role resources.
-
-Common experiment variables include:
-
-- `seed`, `dt`, and initial simulation speed;
-- grid dimensions, blocked cells, zones, and station placement;
-- activity-specific homeostasis coefficients;
-- critical and recovery thresholds;
-- initial positions, vitals, activities, plans, goals, and memories;
-- affordance duration, capacity, and deterministic effects;
-- item catalogs, character possessions, and finite transaction-point offers;
-- compact NPC roles, staffed or automated points, and NPC control mode;
-- memory relevance, recency, and importance weights.
-- schema-version-3 city bounds, city zones, hash-pinned building instances,
-  outdoor places, sparse transport edges, vehicles, and scripted `TRAVEL_TO`
-  actions.
-
-The full examples in `scenarios/` are the most reliable schema reference.
-
-Reusable building, room, object, and NPC-role resources live under `elements/`
-by default. Set `STAGE0_ELEMENT_DIRECTORY` to use another library. Compact
-reference scenarios require matching hash-pinned resources; prepared run
-datasets retain the exact resolved element definitions and hashes.
-Invalid fields and values are rejected when a scenario is loaded.
-
-## API workflow
-
-The public API provides the programmatic workflow equivalent to the operator
-UI. The server-rendered UI calls the same application services directly rather
-than duplicating run state in the browser:
-
-1. Manage reusable character files through `GET/POST /characters` and
-   `GET/PUT/DELETE /characters/{character_id}`, and reusable scenario files
-   through `GET/POST /scenarios` and `GET/PUT/DELETE /scenarios/{scenario_id}`.
-2. `POST /simulation/scenarios` with a schema-version-3
-   `ScenarioSourceDefinition`. Element and character references are resolved
-   and frozen at this boundary; schema-version-2 materialized scenarios are
-   rejected as user input.
-3. `POST /simulation/runs` with the returned `scenario_id`.
-4. Inspect `/simulation/runs/{run_id}` or its `/snapshot`.
-5. Control the run with `/pause`, `/resume`, `/step`, `/speed`, and `/stop`.
-6. Stream ordered telemetry from
-   `ws://127.0.0.1:8000/simulation/runs/{run_id}/stream`.
-7. Query `/data`, `/data/schema`, `/data/records`, and the normalized lifecycle
-   endpoints, or export filtered records from `/exports/records` and an
-   analysis ZIP from `/exports/bundle`.
-
-Additional endpoints provide agent inspection, controlled vital mutation, event
-history, dataset summaries, goals, decisions, actions, interactions, state and
-derived features. `/simulation/runs/{run_id}/export` remains the complete
-compatibility JSONL endpoint. Model APIs are deliberately not mounted in the
-simulation process.
-
-API run objects are process-local. Restarting the server does not restore a live
-runner, although completed records and episodic memories remain in SQLite.
-
-WebSocket API clients use telemetry schema `stage0.telemetry.v2`. Static
-world/profile bootstrap data, latest runtime snapshots, and durable
-domain-event cursors are separate. Reconnecting API clients can backfill missed
-events through the REST history endpoint before resuming live updates. The
-operator UI renders authoritative server snapshots and does not maintain a
-second client-side telemetry model.
-
-## Reproducibility and provider isolation
-
-- The micro-clock advances by a fixed simulated `dt`.
-- Entity, system, pathfinding, and conflict ordering are deterministic.
-- The run seed is stored in the dataset manifest.
-- Physical systems enqueue cognition work but never call a provider from the
-  ordered system pass.
-- System 1 preemption cancels conflicting planner/dialogue work.
-- Telemetry samples authoritative state without advancing the simulation.
-- Legacy planner tests use deterministic in-process fakes.
-
-Tool-agent scenarios require an explicitly configured OpenAI-compatible or
-replay provider. Provider work runs outside the ordered physical system pass,
-and completed tools are applied at deterministic post-system boundaries. The
-default `cognition.execution_mode` is `global_barrier`: all requests created by
-one tick run concurrently, simulation time remains frozen until the whole batch
-settles, and results then commit in stable order. Set the mode to `background`
-only when intentionally reproducing the earlier latency-independent behavior.
-
-Controllers must return exactly one tool call. OpenAI-compatible requests
-therefore default to `tool_choice=required`. `skip` means that no useful
-decision is needed and defers cognition without creating a plan; `wait` creates
-an intentional in-world idle action.
-
-### Start the standalone fake model API
-
-The fake server uses the same `/v1/chat/completions` shape as a real
-OpenAI-compatible server. Each request increments a process-local counter; text
-responses say `Fake response N`, while tool requests return a valid `wait` call
-whose duration counts upward.
-
-```bash
+```powershell
 stage0-fake-llm --host 127.0.0.1 --port 8081
+$env:STAGE0_LLM_PROVIDER = "openai-compatible"
+$env:STAGE0_LLM_BASE_URL = "http://127.0.0.1:8081/v1"
+$env:STAGE0_LLM_MODEL = "stage0-fake"
+stage0-sim run examples\scenarios\provider-character-controller.json `
+  --characters-dir examples\characters --ticks 30
 ```
 
-The equivalent module command is
-`python -m stage0_sim.api.fake_llm --host 127.0.0.1 --port 8081`.
+## Core workflows
 
-In another shell:
+- **CLI:** run schema-version-4 scenarios, assign character slots, select an
+  element library, write canonical events, and persist/export datasets.
+- **Simulation UI (`/ui/`):** stage without starting; assign characters; start,
+  pause, resume, single-step, stop, inspect, and export.
+- **Authoring UI:** manage characters at `/ui/characters/`, scenarios at
+  `/ui/scenarios/`, and reusable world elements at `/ui/elements/`.
+- **Research UI:** explore one run at `/ui/datasets/{run_id}/` or manage,
+  aggregate, export, and delete finalized datasets at `/ui/data/`.
 
-```bash
-export STAGE0_LLM_PROVIDER=openai-compatible
-export STAGE0_LLM_BASE_URL=http://127.0.0.1:8081/v1
-export STAGE0_LLM_MODEL=stage0-fake
-stage0-sim run scenarios/real-llm-tool-agent.json --ticks 30
-```
+## Privacy warning
 
-For llama.cpp, point `STAGE0_LLM_BASE_URL` at either the server root, its `/v1`
-root, or the complete `/v1/chat/completions` URL. The adapter retries transient
-503 responses with backoff and includes llama.cpp's response detail in failures.
+SQLite databases and complete or private-enabled exports can contain character
+profiles, synthesized situations, prompts, model text and tool calls, retrieved
+memories/information, and authoritative state. Filtered queries and exports
+exclude `PRIVATE_RESEARCH` by default; complete exports do not. Treat research
+artifacts as restricted data and apply appropriate consent, access, retention,
+and redaction controls.
 
-## Configuration
+## Documentation
 
-Settings use `STAGE0_` environment variables and may be placed in `.env`:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `STAGE0_CORS_ORIGINS` | `[]` | Optional origins for separately hosted clients |
-| `STAGE0_DATA_DIRECTORY` | `data/runs` | API dataset directory |
-| `STAGE0_DATASET_DATABASE` | `stage0.sqlite3` | API SQLite filename |
-| `STAGE0_CHARACTER_DIRECTORY` | `characters` | Reusable character JSON directory |
-| `STAGE0_SCENARIO_DIRECTORY` | `scenarios` | Reusable scenario JSON directory |
-| `STAGE0_LLM_PROVIDER` | unset | Set to `openai-compatible` to enable a real model |
-| `STAGE0_LLM_BASE_URL` | unset | OpenAI-compatible API root, including `/v1` |
-| `STAGE0_LLM_MODEL` | unset | Provider model identifier |
-| `STAGE0_LLM_API_KEY` | unset | Optional provider credential; never persisted |
-| `STAGE0_LLM_TIMEOUT_SECONDS` | `30` | Provider HTTP timeout |
-| `STAGE0_LLM_RETRY_ATTEMPTS` | `3` | Attempts for transient HTTP/transport failures |
-| `STAGE0_LLM_RETRY_DELAY_SECONDS` | `1` | Initial retry backoff in seconds |
-| `STAGE0_LLM_TOOL_CHOICE` | `required` | OpenAI-compatible tool-choice mode; `none` is invalid for tool-agent cognition |
-| `STAGE0_LLM_MAX_OUTPUT_TOKENS` | `512` | Deployment ceiling per response |
-| `STAGE0_LLM_MAX_CONCURRENCY` | `4` | Deployment ceiling for concurrent requests |
-| `STAGE0_LLM_RECORD_PATH` | unset | Sanitized model request/response JSONL |
-| `STAGE0_LLM_REPLAY_PATH` | unset | Recording used when provider is `replay` |
-
-Paths are interpreted relative to the process working directory. Run commands
-from the repository root, or supply absolute paths in `.env`.
-Server bind and logging options belong to Uvicorn; pass them on its command line
-or use Uvicorn's supported environment variables.
-
-## Project layout
-
-```text
-.
-|-- src/stage0_sim/       Python package
-|   |-- domain/           Deterministic ECS components and systems
-|   |-- application/      Runners, planning, memory, telemetry, datasets
-|   |-- adapters/         Fake providers and SQLite persistence
-|   |-- api/              FastAPI routes and application
-|   `-- web/              Browser UI packaged and served by FastAPI
-|-- tests/                Pytest suite
-|-- scenarios/            Runnable experiment definitions
-|-- docs/                 Current guides, roadmap, and archived design records
-|-- data/runs/            Generated local datasets (ignored)
-|-- update.sh             Linux environment refresh helper
-|-- update.ps1            Windows environment refresh helper
-`-- pyproject.toml        Packaging and tool configuration
-```
-
-The `src/` layout prevents accidental imports from the working tree and tests the
-installed package boundary. Static UI files stay inside the package because the
-application must also serve them after wheel installation.
-
-## Development
-
-Run the existing checks from the repository root:
-
-```bash
-python -m pytest
-python -m ruff check .
-python -m mypy
-```
-
-Build an installable wheel with:
-
-```bash
-python -m pip wheel . --no-deps --wheel-dir dist
-```
-
-Generated caches, virtual environments, build metadata, and `data/runs/` are
-ignored. Simulation databases are experiment output; delete them only when their
-records are no longer needed.
-
-Current documentation:
-
-- [Documentation map](docs/README.md)
-- [Current project status](docs/PROJECT_STATUS.md)
-- [Concept guide for advanced development](docs/CONCEPT_GUIDE.md)
-- [Character profile authoring guide](docs/CHARACTER_PROFILE_GUIDE.md)
-- [UI testing for coding agents](docs/UI_TESTING.md)
-- [Information and navigation roadmap](docs/roadmaps/INFORMATION_AND_NAVIGATION.md)
-- [Legacy design records](docs/legacy/README.md)
-
-## Platform support
-
-Linux is the primary runtime and CI target. Runtime code uses `pathlib`, Python
-APIs, and URL paths rather than shell-specific filesystem syntax. macOS and
-Windows remain supported secondary development platforms. Repository text files
-are normalized to LF for reliable Linux tooling; Windows command files remain
-CRLF through `.gitattributes`.
+- [Documentation by audience and task](docs/README.md)
+- [Architecture and authority boundaries](docs/ARCHITECTURE.md)
+- [Runtime semantics](docs/RUNTIME.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Scenario and element authoring](docs/SCENARIO_EDITOR_GUIDE.md)
+- [Character authoring](docs/CHARACTER_PROFILE_GUIDE.md)
+- [Actions, tools, and events](docs/ACTIONS_AND_EVENTS.md)
+- [Research data](docs/DATA_COLLECTION.md)
+- [API and UI workflows](docs/API_AND_UI.md)
+- [Status and roadmap](docs/STATUS_AND_ROADMAP.md)
+- [Development history and legacy archive](docs/legacy/README.md)

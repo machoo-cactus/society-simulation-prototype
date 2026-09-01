@@ -1,0 +1,19 @@
+{
+  "schema_version": 2,
+  "id": "bundled-demo-character",
+  "template_id": "human-v1",
+  "identity": {
+    "display_name": "Demo Character",
+    "birth_date": "1990-01-01",
+    "gender": "",
+    "pronouns": "they/them",
+    "occupation": "Office worker"
+  },
+  "personality": {
+    "summary": "A focused office worker used by the installed survival demo.",
+    "traits": [
+      "practical",
+      "focused"
+    ]
+  }
+}

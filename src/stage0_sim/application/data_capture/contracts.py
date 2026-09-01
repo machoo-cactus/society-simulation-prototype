@@ -6,7 +6,7 @@ from typing import NewType, Self, cast
 from stage0_sim.domain.events import JsonValue
 
 DATASET_SCHEMA_ID = "stage0.dataset"
-DATASET_SCHEMA_VERSION = "stage0.dataset.v2"
+DATASET_SCHEMA_VERSION = "stage0.dataset.v3"
 
 GoalId = NewType("GoalId", str)
 PlanId = NewType("PlanId", str)
@@ -126,21 +126,15 @@ class RecordJoinIds:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class DatasetRecord:
-    """Provider-neutral immutable raw research record.
-
-    The first eight fields intentionally retain the dataset-v1 constructor
-    shape. New metadata fields have defaults so existing collectors and callers
-    continue to construct records unchanged.
-    """
+    """Provider-neutral immutable raw dataset record."""
 
     run_id: str
     sequence: int
     record_type: str
     simulation_tick: int
     simulation_time: float
-    agent_id: str | None
     payload: dict[str, JsonValue]
     source_event_id: str | None = None
     schema_version: str = DATASET_SCHEMA_VERSION
@@ -177,8 +171,6 @@ class DatasetRecord:
                 "schema_id",
                 f"stage0.record.{self.record_type}",
             )
-        if self.subject_id is None and self.agent_id is not None:
-            object.__setattr__(self, "subject_id", self.agent_id)
 
     def to_dict(self) -> dict[str, JsonValue]:
         content: dict[str, JsonValue] = {
@@ -198,7 +190,6 @@ class DatasetRecord:
         }
         optional: tuple[tuple[str, JsonValue], ...] = (
             ("wall_time", self.wall_time),
-            ("agent_id", self.agent_id),
             ("subject_id", self.subject_id),
             ("source_event_id", self.source_event_id),
             ("causation_id", self.causation_id),
@@ -216,6 +207,8 @@ class DatasetRecord:
 
     @classmethod
     def from_dict(cls, content: dict[str, JsonValue]) -> Self:
+        if "agent_id" in content:
+            raise ValueError("agent_id is not supported; use subject_id")
         payload = content.get("payload")
         if not isinstance(payload, dict):
             raise ValueError("record payload must be an object")
@@ -233,27 +226,16 @@ class DatasetRecord:
             record_type=_required_str(content, "record_type"),
             simulation_tick=_required_int(content, "simulation_tick"),
             simulation_time=_required_number(content, "simulation_time"),
-            agent_id=_optional_str(content, "agent_id"),
             payload=payload,
             source_event_id=_optional_str(content, "source_event_id"),
             schema_version=_required_str(content, "schema_version"),
-            record_id=_optional_str(content, "record_id") or "",
-            schema_id=_optional_str(content, "schema_id") or "",
-            category=RecordCategory(
-                _optional_str(content, "category") or RecordCategory.OTHER.value
-            ),
-            source=RecordSource(
-                _optional_str(content, "source")
-                or RecordSource.DATASET_COLLECTOR.value
-            ),
-            phase=RunnerPhase(
-                _optional_str(content, "phase") or RunnerPhase.UNSPECIFIED.value
-            ),
+            record_id=_required_str(content, "record_id"),
+            schema_id=_required_str(content, "schema_id"),
+            category=RecordCategory(_required_str(content, "category")),
+            source=RecordSource(_required_str(content, "source")),
+            phase=RunnerPhase(_required_str(content, "phase")),
             wall_time=_optional_str(content, "wall_time"),
-            visibility=RecordVisibility(
-                _optional_str(content, "visibility")
-                or RecordVisibility.OPERATOR.value
-            ),
+            visibility=RecordVisibility(_required_str(content, "visibility")),
             subject_id=_optional_str(content, "subject_id"),
             related_entity_ids=tuple(cast(list[str], related)),
             causation_id=_optional_str(content, "causation_id"),
@@ -263,16 +245,12 @@ class DatasetRecord:
         )
 
 
-ResearchRecord = DatasetRecord
-
-
 @dataclass(frozen=True, slots=True)
 class DatasetRecordFilter:
     record_type: str | None = None
     category: RecordCategory | None = None
     schema_id: str | None = None
     schema_version: str | None = None
-    agent_id: str | None = None
     subject_id: str | None = None
     related_entity_id: str | None = None
     minimum_tick: int | None = None

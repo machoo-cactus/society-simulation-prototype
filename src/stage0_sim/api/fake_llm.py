@@ -185,7 +185,7 @@ def _arguments_for(tool: ChatTool, call_number: int) -> dict[str, object]:
             properties.get("target_id"), "agent-001"
         )
         arguments["text"] = f"Fake response {call_number}"
-    elif tool.function.name == "go_to":
+    elif tool.function.name == "navigate_to":
         arguments["target_id"] = _first_string_example(
             properties.get("target_id"), "unknown-target"
         )

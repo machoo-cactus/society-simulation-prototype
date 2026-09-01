@@ -4,12 +4,12 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from pydantic import Field, model_validator
 
+from stage0_sim.application.character_profiles import CharacterProfileDefinition
 from stage0_sim.application.scenario import (
-    CharacterProfileDefinition,
     CharacterSlotDefinition,
     ResolvedCharacterProfile,
     ResolvedCharacterSituation,
@@ -63,7 +63,7 @@ class CharacterConflictError(CharacterLibraryError):
 
 
 class CharacterDefinition(CharacterProfileDefinition):
-    schema_version: int = Field(default=2, ge=1)
+    schema_version: Literal[2] = 2
     id: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -73,17 +73,14 @@ class CharacterDefinition(CharacterProfileDefinition):
             raise ValueError(
                 f"unsupported character template: {self.template_id}"
             )
-        if self.schema_version >= 2:
-            if self.identity.age is not None:
-                raise ValueError(
-                    "character schema version 2 uses identity.birth_date; "
-                    "identity.age is legacy version-1 data"
-                )
-            if self.appearance.height.strip():
-                raise ValueError(
-                    "character schema version 2 uses "
-                    "body_measurements.height_cm; appearance.height is legacy"
-                )
+        if self.identity.age is not None:
+            raise ValueError(
+                "character schema version 2 uses identity.birth_date"
+            )
+        if self.appearance.height.strip():
+            raise ValueError(
+                "character schema version 2 uses body_measurements.height_cm"
+            )
         return self
 
     def profile(self) -> CharacterProfileDefinition:

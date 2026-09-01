@@ -113,10 +113,9 @@ class FileSystemScenarioLibrary:
             raise ScenarioLibraryError(
                 f"scenario {scenario_id} is not valid JSON: {error}"
             ) from error
-        if not isinstance(raw, dict) or raw.get("schema_version") != 3:
+        if not isinstance(raw, dict) or raw.get("schema_version") != 4:
             raise ScenarioLibraryError(
-                f"scenario {scenario_id} requires schema version 3; "
-                "schema-version-2 saved scenarios are not supported"
+                f"scenario {scenario_id} requires schema version 4"
             )
         try:
             return ScenarioSourceDefinition.model_validate(raw)

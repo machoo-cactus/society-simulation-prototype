@@ -19,7 +19,6 @@ from stage0_sim.domain.components import (
     InteractionCountCriterion,
     InteractionType,
     LocationMatchCriterion,
-    PlannerComponent,
     PositionComponent,
     PossessionsComponent,
     PossessionThresholdCriterion,
@@ -39,18 +38,9 @@ _STATE_FIELDS = {
     "controller": frozenset(
         {"enabled", "state_revision", "last_outcome", "request_pending"}
     ),
-    "planner": frozenset(
-        {
-            "needs_plan",
-            "request_count",
-            "failure_count",
-            "request_pending",
-        }
-    ),
 }
 _INTERACTION_EVENTS = {
     InteractionType.SPEECH: "speech.started",
-    InteractionType.DIALOGUE: "dialogue.generated",
     InteractionType.TRANSACTION: "transaction.completed",
 }
 
@@ -60,7 +50,7 @@ class GoalEvaluationSystem:
     """Evaluate goals after physical/perception systems without changing them.
 
     Order 280 is after authoritative physical transitions and perception (250)
-    and before memory/planner/controller scheduling (290+). The system mutates
+    and before memory/controller scheduling (290+). The system mutates
     only GoalComponent runtime state and emits structured lifecycle events.
     """
 
@@ -257,7 +247,7 @@ class GoalEvaluationSystem:
                 }
             return 0.0, None
         if isinstance(criterion, ActionOutcomeCriterion):
-            event_type = f"plan.action_{criterion.outcome.value}"
+            event_type = f"action.{criterion.outcome.value}"
             event = next(
                 (
                     item
@@ -365,7 +355,6 @@ class GoalEvaluationSystem:
                 "previous_status": previous_status.value,
                 "status": goal.status.value,
                 "progress": goal.progress,
-                "legacy": goal.definition.legacy,
                 "evidence": [
                     _evidence_payload(item) for item in goal.evidence
                 ],
@@ -414,7 +403,6 @@ def _state_value(
         "homeostasis": HomeostasisComponent,
         "activity": ActivityComponent,
         "controller": ControllerComponent,
-        "planner": PlannerComponent,
     }[component_name]
     if not context.registry.has_component(character_id, component_type):
         return _MISSING

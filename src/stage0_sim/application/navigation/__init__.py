@@ -11,10 +11,6 @@ from stage0_sim.application.navigation.knowledge import (
 from stage0_sim.application.navigation.learning import (
     NavigationKnowledgeRecordingSystem,
 )
-from stage0_sim.application.navigation.planner import (
-    NavigationPlanningError,
-    RecursiveRoutePlanner,
-)
 from stage0_sim.application.navigation.service import (
     NavigationService,
     PlannedNavigation,
@@ -26,10 +22,8 @@ __all__ = [
     "InformationKnownTopologyProjection",
     "KnownDestination",
     "KnownTopologyProjection",
-    "NavigationPlanningError",
     "NavigationPlanningSystem",
     "NavigationKnowledgeRecordingSystem",
     "NavigationService",
     "PlannedNavigation",
-    "RecursiveRoutePlanner",
 ]

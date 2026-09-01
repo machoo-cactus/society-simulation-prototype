@@ -1,7 +1,7 @@
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import datetime, time
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -18,11 +18,6 @@ from pydantic import (
     model_validator,
 )
 
-from stage0_sim.adapters.llm import (
-    FakeDialogueGenerator,
-    FakeEmbeddingProvider,
-    FakePlanner,
-)
 from stage0_sim.application.agents import (
     AgentWorkCoordinator,
     CognitionScheduler,
@@ -34,19 +29,43 @@ from stage0_sim.application.agents.profile_renderer import (
     CharacterDescriptionRenderer,
 )
 from stage0_sim.application.agents.tools import ToolRegistry
-from stage0_sim.application.cognition import (
-    DialogueGenerator,
-    EmbeddingProvider,
-    Planner,
+from stage0_sim.application.character_profiles import (
+    CharacterAppearanceDefinition,
+    CharacterBackgroundDefinition,
+    CharacterBodyMeasurementsDefinition,
+    CharacterCapabilitiesDefinition,
+    CharacterCommunicationDefinition,
+    CharacterCustomFieldDefinition,
+    CharacterCustomSectionDefinition,
+    CharacterDecisionCopingDefinition,
+    CharacterDispositionsDefinition,
+    CharacterFamilyDefinition,
+    CharacterFamilyMemberDefinition,
+    CharacterFinancialSituationDefinition,
+    CharacterHealthAllergyDefinition,
+    CharacterHealthConditionDefinition,
+    CharacterHealthDefinition,
+    CharacterIdentityDefinition,
+    CharacterLifeStructureDefinition,
+    CharacterMedicationDefinition,
+    CharacterMotivationsDefinition,
+    CharacterPersonalityDefinition,
+    CharacterPreferencesDefinition,
+    CharacterPresentationDefinition,
+    CharacterProfileDefinition,
+    CharacterRelationshipDefinition,
 )
-from stage0_sim.application.dialogue import MacroDialogueSystem
+from stage0_sim.application.cognition import (
+    DeterministicEmbeddingProvider,
+    EmbeddingProvider,
+)
 from stage0_sim.application.environment import EnvironmentInformationService
 from stage0_sim.application.goals import GoalEvaluationSystem
 from stage0_sim.application.information import InformationRetriever, InformationStore
-from stage0_sim.application.macro_work import MacroWorkCoordinator
 from stage0_sim.application.memory import EpisodicMemoryStore, MemoryConfiguration
 from stage0_sim.application.memory_recording import (
     MemoryRecordingSystem,
+    MemoryWorkCoordinator,
     observation_metadata,
 )
 from stage0_sim.application.navigation import (
@@ -54,17 +73,16 @@ from stage0_sim.application.navigation import (
     NavigationKnowledgeRecordingSystem,
     NavigationPlanningSystem,
     NavigationService,
-    RecursiveRoutePlanner,
 )
 from stage0_sim.application.npcs import NpcStaffingSystem
 from stage0_sim.application.perception import (
     PerceptionConfiguration,
     PerceptionSystem,
 )
-from stage0_sim.application.planning import MacroPlanningSystem
 from stage0_sim.application.runner import RunConfiguration, SimulationRunner
 from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
+    ActionOrigin,
     ActionOutcome,
     ActionOutcomeCriterion,
     ActionType,
@@ -100,7 +118,6 @@ from stage0_sim.domain.components import (
     PerceptionComponent,
     PlanAction,
     PlanComponent,
-    PlannerComponent,
     PositionComponent,
     PossessionsComponent,
     PossessionThresholdCriterion,
@@ -112,7 +129,6 @@ from stage0_sim.domain.components import (
     TravelComponent,
     default_activity_rates,
     default_drive_thresholds,
-    legacy_goal_definition,
 )
 from stage0_sim.domain.components import (
     GoalDefinition as DomainGoalDefinition,
@@ -153,6 +169,7 @@ from stage0_sim.domain.information import (
     character_dossier_document_id,
     character_information_namespace_id,
 )
+from stage0_sim.domain.lineage import active_goal_links, queue_plan_actions
 from stage0_sim.domain.npcs import (
     NpcControlMode,
     NpcPoolRegistry,
@@ -215,6 +232,38 @@ from stage0_sim.domain.world import (
     Zone,
     default_affordance_action,
 )
+
+__all__ = [
+    "CharacterAppearanceDefinition",
+    "CharacterBackgroundDefinition",
+    "CharacterBodyMeasurementsDefinition",
+    "CharacterCapabilitiesDefinition",
+    "CharacterCommunicationDefinition",
+    "CharacterCustomFieldDefinition",
+    "CharacterCustomSectionDefinition",
+    "CharacterDecisionCopingDefinition",
+    "CharacterDispositionsDefinition",
+    "CharacterFamilyDefinition",
+    "CharacterFamilyMemberDefinition",
+    "CharacterFinancialSituationDefinition",
+    "CharacterHealthAllergyDefinition",
+    "CharacterHealthConditionDefinition",
+    "CharacterHealthDefinition",
+    "CharacterIdentityDefinition",
+    "CharacterLifeStructureDefinition",
+    "CharacterMedicationDefinition",
+    "CharacterMotivationsDefinition",
+    "CharacterPersonalityDefinition",
+    "CharacterPreferencesDefinition",
+    "CharacterPresentationDefinition",
+    "CharacterProfileDefinition",
+    "CharacterRelationshipDefinition",
+    "ScenarioDefinition",
+    "ScenarioLoadError",
+    "create_runner",
+    "load_scenario",
+]
+from stage0_sim.domain.world.routing import RecursiveRoutePlanner
 
 
 class CoordinateDefinition(BaseModel):
@@ -1096,8 +1145,6 @@ class PerceptionSettingsDefinition(BaseModel):
 class CognitionSettingsDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    controller: str = "legacy"
-    execution_mode: Literal["global_barrier", "background"] = "global_barrier"
     model_profile: str = "default"
     npc_control_mode: NpcControlMode = NpcControlMode.AUTO
     decision_timeout_seconds: float = Field(default=30.0, gt=0)
@@ -1111,12 +1158,10 @@ class CognitionSettingsDefinition(BaseModel):
     tool_allowlist: list[str] = Field(
         default_factory=lambda: [
             "navigate_to",
-            "go_to",
             "perform",
             "say",
             "wait",
             "skip",
-            "travel_to",
             "transact",
             "check_environment",
         ]
@@ -1124,16 +1169,12 @@ class CognitionSettingsDefinition(BaseModel):
 
     @model_validator(mode="after")
     def supported_values(self) -> "CognitionSettingsDefinition":
-        if self.controller not in {"legacy", "tool-agent"}:
-            raise ValueError("cognition controller must be legacy or tool-agent")
         unknown = set(self.tool_allowlist) - {
             "navigate_to",
-            "go_to",
             "perform",
             "say",
             "wait",
             "skip",
-            "travel_to",
             "transact",
             "check_environment",
         }
@@ -1351,7 +1392,7 @@ class CharacterSituationSynthesisSettingsDefinition(BaseModel):
 class ScenarioDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = Field(default=2, ge=2)
+    schema_version: Literal[4] = 4
     name: str = Field(min_length=1)
     seed: int = 0
     dt: float = Field(default=1.0, gt=0)
@@ -1628,8 +1669,6 @@ def create_runner(
     resolved_situations: Mapping[str, ResolvedCharacterSituation] | None = None,
     speed: float | None = None,
     run_id: str | None = None,
-    planner: Planner | None = None,
-    dialogue_generator: DialogueGenerator | None = None,
     embedding_provider: EmbeddingProvider | None = None,
     model_client: ModelClient | None = None,
     model_max_output_tokens: int | None = None,
@@ -1642,7 +1681,9 @@ def create_runner(
     registry = Registry()
     systems = SystemExecutor()
     information_store = InformationStore()
-    resolved_embedding_provider = embedding_provider or FakeEmbeddingProvider()
+    resolved_embedding_provider = (
+        embedding_provider or DeterministicEmbeddingProvider()
+    )
     memory_store = EpisodicMemoryStore(
         resolved_embedding_provider,
         scenario.memory.to_domain(),
@@ -1654,16 +1695,14 @@ def create_runner(
         resolved_embedding_provider,
         research_recorder=research_recorder,
     )
-    macro_work = MacroWorkCoordinator(
-        planner=planner or FakePlanner(),
-        dialogue_generator=dialogue_generator or FakeDialogueGenerator(),
+    memory_work = MemoryWorkCoordinator(
         memory_store=memory_store,
         research_recorder=research_recorder,
     )
     registry.set_resource(information_store)
     registry.set_resource(information_retriever)
     registry.set_resource(memory_store)
-    registry.set_resource(macro_work)
+    registry.set_resource(memory_work)
     registry.set_resource(LineageIdGenerator())
     registry.set_resource(
         ItemCatalog(tuple(item.to_domain() for item in scenario.items))
@@ -1698,8 +1737,6 @@ def create_runner(
     systems.add(System1ArbitrationSystem())
     systems.add(SpeechSystem())
     systems.add(MemoryRecordingSystem())
-    systems.add(MacroDialogueSystem())
-    systems.add(MacroPlanningSystem())
     systems.add(GoalEvaluationSystem())
     city_world = (
         _build_city_world(scenario.world)
@@ -1827,12 +1864,9 @@ def create_runner(
         systems.add(PerceptionSystem())
 
     tool_registry = ToolRegistry()
-    normal_tool_agent_enabled = (
-        scenario.cognition.controller == "tool-agent"
-        or any(
+    normal_tool_agent_enabled = any(
         bool(entity.components.get("controller", {}).get("enabled", False))
         for entity in scenario.entities
-        )
     )
     tool_agent_enabled = normal_tool_agent_enabled or bool(staffing_states)
     if tool_agent_enabled:
@@ -1893,7 +1927,6 @@ def create_runner(
                 max_output_tokens=scenario.cognition.max_total_output_tokens,
                 memory_store=memory_store,
                 information_retriever=information_retriever,
-                execution_mode=scenario.cognition.execution_mode,
                 research_recorder=research_recorder,
             )
         )
@@ -1901,6 +1934,7 @@ def create_runner(
 
     occupied: set[tuple[str, Coordinate]] = set()
     goal_ids: set[str] = set()
+    initial_plan_actions: dict[str, tuple[PlanAction, ...]] = {}
     for entity_definition in scenario.entities:
         entity_id = registry.create_entity(entity_definition.id)
         raw_components = dict(entity_definition.components)
@@ -2024,27 +2058,28 @@ def create_runner(
             plan_definition = _validate_component(
                 PlanComponentDefinition, raw_components.pop("plan"), entity_id
             )
-            registry.add_component(
-                entity_id,
-                PlanComponent(
-                    queue=[action.to_domain() for action in plan_definition.queue],
-                    current=(
-                        plan_definition.current.to_domain()
+            initial_plan_actions[entity_id] = tuple(
+                action.to_domain()
+                for action in (
+                    *(
+                        (plan_definition.current,)
                         if plan_definition.current is not None
-                        else None
+                        else ()
                     ),
-                ),
+                    *plan_definition.queue,
+                )
             )
+            registry.add_component(entity_id, PlanComponent())
 
-        planner_definition: PlannerComponentDefinition | None = None
-        if "planner" in raw_components:
-            planner_definition = _validate_component(
-                PlannerComponentDefinition,
-                raw_components.pop("planner"),
+        goals_definition: GoalsComponentDefinition | None = None
+        if "goals" in raw_components:
+            goals_definition = _validate_component(
+                GoalsComponentDefinition,
+                raw_components.pop("goals"),
                 entity_id,
             )
             structured_definitions = [
-                goal.to_domain() for goal in planner_definition.goals
+                goal.to_domain() for goal in goals_definition.goals
             ]
             duplicate_goal_ids = goal_ids.intersection(
                 goal.id for goal in structured_definitions
@@ -2055,71 +2090,15 @@ def create_runner(
                     f"{sorted(duplicate_goal_ids)}"
                 )
             goal_ids.update(goal.id for goal in structured_definitions)
-            legacy_definitions = [
-                legacy_goal_definition(
-                    entity_id,
-                    "daily_goal",
-                    index,
-                    description,
-                    priority=0,
-                )
-                for index, description in enumerate(
-                    planner_definition.daily_goals
-                )
-            ] + [
-                legacy_goal_definition(
-                    entity_id,
-                    "current_priority",
-                    index,
-                    description,
-                    priority=100,
-                )
-                for index, description in enumerate(
-                    planner_definition.current_priorities
-                )
-            ]
-            duplicate_legacy_ids = goal_ids.intersection(
-                goal.id for goal in legacy_definitions
-            )
-            if duplicate_legacy_ids:
-                raise ValueError(
-                    "goal IDs must be unique across the scenario: "
-                    f"{sorted(duplicate_legacy_ids)}"
-                )
-            all_goal_definitions = [
-                *structured_definitions,
-                *legacy_definitions,
-            ]
-            goal_ids.update(goal.id for goal in legacy_definitions)
-            registry.add_component(
-                entity_id,
-                PlannerComponent(
-                    daily_goals=(
-                        *planner_definition.daily_goals,
-                        *(
-                            goal.description
-                            for goal in structured_definitions
-                        ),
-                    ),
-                    current_priorities=tuple(
-                        planner_definition.current_priorities
-                    ),
-                    needs_plan=planner_definition.needs_plan,
-                ),
-            )
             registry.add_component(
                 entity_id,
                 GoalComponent(
                     [
                         GoalRuntime(
                             definition=goal,
-                            status=(
-                                GoalStatus.ACTIVE
-                                if goal.legacy
-                                else GoalStatus.PENDING
-                            ),
+                            status=GoalStatus.PENDING,
                         )
-                        for goal in all_goal_definitions
+                        for goal in structured_definitions
                     ]
                 ),
             )
@@ -2291,16 +2270,6 @@ def create_runner(
                         if resolved_situations is not None
                         and entity_id in resolved_situations
                         else ""
-                    ),
-                    "daily_goals": (
-                        list(planner_definition.daily_goals)
-                        if planner_definition is not None
-                        else []
-                    ),
-                    "current_priorities": (
-                        list(planner_definition.current_priorities)
-                        if planner_definition is not None
-                        else []
                     ),
                 },
                 source=InformationSource(
@@ -2487,15 +2456,12 @@ def create_runner(
                         preferred_mode=first_action.mode,
                     )
             registry.add_component(entity_id, navigation)
-    if world is not None:
-        _synthesize_navigation_knowledge(registry, information_store)
-    return SimulationRunner(
+    runner = SimulationRunner(
         RunConfiguration(
             seed=scenario.seed,
             dt=scenario.dt,
             speed=speed if speed is not None else scenario.speed,
             run_id=run_id if run_id is not None else scenario.run_id,
-            cognition_execution_mode=scenario.cognition.execution_mode,
             npc_control_mode=requested_npc_mode,
             effective_npc_control_mode=effective_npc_mode,
         ),
@@ -2503,6 +2469,32 @@ def create_runner(
         systems=systems,
         research_recorder=research_recorder,
     )
+    for entity_id, actions in initial_plan_actions.items():
+        if actions:
+            queued = queue_plan_actions(
+                runner.context,
+                entity_id,
+                registry.get_component(entity_id, PlanComponent),
+                actions,
+                origin=ActionOrigin.SCENARIO,
+                goal_links=active_goal_links(runner.context, entity_id),
+            )
+            first = queued[0]
+            if (
+                first.action is ActionType.NAVIGATE
+                and first.target is not None
+                and registry.has_component(entity_id, NavigationComponent)
+            ):
+                registry.get_component(
+                    entity_id, NavigationComponent
+                ).request(
+                    first.target,
+                    preferred_mode=first.mode,
+                    action_instance=first,
+                )
+    if world is not None:
+        _synthesize_navigation_knowledge(registry, information_store)
+    return runner
 
 
 class PositionDefinition(CoordinateDefinition):
@@ -2574,390 +2566,6 @@ class SpatialLocationDefinition(BaseModel):
         )
 
 
-class ExtensibleCharacterProfileModel(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
-
-
-class CharacterIdentityDefinition(ExtensibleCharacterProfileModel):
-
-    display_name: str = Field(min_length=1)
-    age: int | None = Field(default=None, ge=0, le=150)
-    birth_date: date | None = None
-    gender: str = ""
-    pronouns: str = ""
-    occupation: str = ""
-
-
-class CharacterBodyMeasurementsDefinition(ExtensibleCharacterProfileModel):
-
-    measured_on: date | None = None
-    height_cm: float | None = Field(default=None, gt=0, le=300)
-    weight_kg: float | None = Field(default=None, gt=0, le=700)
-    chest_cm: float | None = Field(default=None, gt=0, le=300)
-    waist_cm: float | None = Field(default=None, gt=0, le=300)
-    hips_cm: float | None = Field(default=None, gt=0, le=300)
-    inseam_cm: float | None = Field(default=None, gt=0, le=200)
-    shoe_size_system: str = ""
-    shoe_size_value: float | None = Field(default=None, gt=0, le=100)
-
-
-class CharacterAppearanceDefinition(ExtensibleCharacterProfileModel):
-
-    summary: str = ""
-    height: str = ""
-    build: str = ""
-    hair: str = ""
-    eyes: str = ""
-    clothing: str = ""
-    distinguishing_features: list[str] = Field(default_factory=list)
-
-
-class CharacterPersonalityDefinition(ExtensibleCharacterProfileModel):
-
-    summary: str = ""
-    traits: list[str] = Field(default_factory=list)
-    temperament: str = ""
-    social_style: str = ""
-    speech_style: str = ""
-    strengths: list[str] = Field(default_factory=list)
-    flaws: list[str] = Field(default_factory=list)
-
-
-class CharacterBackgroundDefinition(ExtensibleCharacterProfileModel):
-
-    birthplace: str = ""
-    residence: str = ""
-    education: str = ""
-    history: str = ""
-
-
-class CharacterFinancialSituationDefinition(ExtensibleCharacterProfileModel):
-
-    as_of_date: date | None = None
-    currency: str = ""
-    annual_gross_income: int | None = Field(default=None, ge=0)
-    income_band: str = ""
-    liquid_assets: int | None = Field(default=None, ge=0)
-    total_assets: int | None = Field(default=None, ge=0)
-    total_debt: int | None = Field(default=None, ge=0)
-    monthly_fixed_expenses: int | None = Field(default=None, ge=0)
-    housing_tenure: str = ""
-    financial_dependents: int | None = Field(default=None, ge=0)
-
-    @model_validator(mode="after")
-    def currency_is_iso_style(self) -> "CharacterFinancialSituationDefinition":
-        if self.currency and (
-            len(self.currency) != 3 or not self.currency.isalpha()
-        ):
-            raise ValueError("financial currency must be a three-letter code")
-        self.currency = self.currency.upper()
-        return self
-
-
-class CharacterMotivationsDefinition(ExtensibleCharacterProfileModel):
-
-    values: list[str] = Field(default_factory=list)
-    fears: list[str] = Field(default_factory=list)
-    needs: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="before")
-    @classmethod
-    def rejects_situational_fields(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            forbidden = {"goals", "current_priorities"} & set(value)
-            if forbidden:
-                raise ValueError(
-                    "character motivations cannot contain scenario-owned fields: "
-                    f"{sorted(forbidden)}"
-                )
-        return value
-
-
-class CharacterCapabilitiesDefinition(ExtensibleCharacterProfileModel):
-
-    skills: list[str] = Field(default_factory=list)
-    knowledge_areas: list[str] = Field(default_factory=list)
-    limitations: list[str] = Field(default_factory=list)
-
-
-class CharacterPreferencesDefinition(ExtensibleCharacterProfileModel):
-
-    likes: list[str] = Field(default_factory=list)
-    dislikes: list[str] = Field(default_factory=list)
-    habits: list[str] = Field(default_factory=list)
-    routines: list[str] = Field(default_factory=list)
-
-
-class CharacterPresentationDefinition(ExtensibleCharacterProfileModel):
-
-    aesthetic_identity: str = ""
-    wardrobe_palette: list[str] = Field(default_factory=list)
-    preferred_silhouettes: list[str] = Field(default_factory=list)
-    preferred_fabrics: list[str] = Field(default_factory=list)
-    formality_range: str = ""
-    comfort_priorities: list[str] = Field(default_factory=list)
-    grooming_norms: list[str] = Field(default_factory=list)
-    usual_accessories: list[str] = Field(default_factory=list)
-    practical_constraints: list[str] = Field(default_factory=list)
-    purchase_habits: list[str] = Field(default_factory=list)
-    context_variations: list[str] = Field(default_factory=list)
-
-
-class CharacterDispositionsDefinition(ExtensibleCharacterProfileModel):
-
-    summary: str = ""
-    emotional_baseline: str = ""
-    sociability: str = ""
-    assertiveness: str = ""
-    patience: str = ""
-    conscientiousness: str = ""
-    openness: str = ""
-    adaptability: str = ""
-    risk_tolerance: str = ""
-    ambiguity_tolerance: str = ""
-    impulse_control: str = ""
-    conflict_style: str = ""
-    cooperation_style: str = ""
-    trust_formation: str = ""
-    boundary_setting: str = ""
-    help_seeking: str = ""
-    pressure_response: str = ""
-    fatigue_response: str = ""
-    novelty_response: str = ""
-    authority_response: str = ""
-    crowd_response: str = ""
-
-
-class CharacterCommunicationDefinition(ExtensibleCharacterProfileModel):
-
-    cadence: str = ""
-    vocabulary: str = ""
-    directness: str = ""
-    politeness: str = ""
-    humor: str = ""
-    gesture: str = ""
-    posture: str = ""
-    facial_expressiveness: str = ""
-    listening_style: str = ""
-    disagreement_style: str = ""
-    apology_style: str = ""
-    with_intimates: str = ""
-    with_colleagues: str = ""
-    with_strangers: str = ""
-    with_authority: str = ""
-
-
-class CharacterDecisionCopingDefinition(ExtensibleCharacterProfileModel):
-
-    information_seeking: str = ""
-    planning_horizon: str = ""
-    default_heuristics: list[str] = Field(default_factory=list)
-    error_sensitivity: str = ""
-    persistence: str = ""
-    recovery_habits: list[str] = Field(default_factory=list)
-    self_soothing: list[str] = Field(default_factory=list)
-    stress_signals: list[str] = Field(default_factory=list)
-    disposition_shifts: list[str] = Field(default_factory=list)
-
-
-class CharacterLifeStructureDefinition(ExtensibleCharacterProfileModel):
-
-    household: str = ""
-    recurring_obligations: list[str] = Field(default_factory=list)
-    material_habits: list[str] = Field(default_factory=list)
-    typical_possessions: list[str] = Field(default_factory=list)
-    cultural_practices: list[str] = Field(default_factory=list)
-    interests: list[str] = Field(default_factory=list)
-    social_patterns: list[str] = Field(default_factory=list)
-
-
-class CharacterFamilyMemberDefinition(ExtensibleCharacterProfileModel):
-
-    member_id: str = Field(min_length=1)
-    linked_character_id: str = ""
-    display_name: str = Field(min_length=1)
-    relationship: str = Field(min_length=1)
-    birth_date: date | None = None
-    living_status: Literal["alive", "deceased", "unknown"] = "unknown"
-    residence: str = ""
-    household_member: bool = False
-    financial_dependent: bool = False
-
-
-class CharacterFamilyDefinition(ExtensibleCharacterProfileModel):
-
-    members: list[CharacterFamilyMemberDefinition] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def member_ids_are_unique(self) -> "CharacterFamilyDefinition":
-        member_ids = [member.member_id for member in self.members]
-        if len(member_ids) != len(set(member_ids)):
-            raise ValueError("family member IDs must be unique")
-        return self
-
-
-class CharacterHealthConditionDefinition(ExtensibleCharacterProfileModel):
-
-    name: str = Field(min_length=1)
-    status: Literal["active", "managed", "resolved", "unknown"] = "unknown"
-    diagnosed_on: date | None = None
-    notes: str = ""
-
-
-class CharacterHealthAllergyDefinition(ExtensibleCharacterProfileModel):
-
-    substance: str = Field(min_length=1)
-    reaction: str = ""
-    severity: Literal["mild", "moderate", "severe", "unknown"] = "unknown"
-
-
-class CharacterMedicationDefinition(ExtensibleCharacterProfileModel):
-
-    name: str = Field(min_length=1)
-    dose: str = ""
-    schedule: str = ""
-    purpose: str = ""
-
-
-class CharacterHealthDefinition(ExtensibleCharacterProfileModel):
-
-    as_of_date: date | None = None
-    blood_type: str = ""
-    conditions: list[CharacterHealthConditionDefinition] = Field(
-        default_factory=list
-    )
-    allergies: list[CharacterHealthAllergyDefinition] = Field(
-        default_factory=list
-    )
-    medications: list[CharacterMedicationDefinition] = Field(
-        default_factory=list
-    )
-    disabilities: list[str] = Field(default_factory=list)
-    vision: str = ""
-    hearing: str = ""
-    mobility: str = ""
-    past_procedures: list[str] = Field(default_factory=list)
-    dietary_restrictions: list[str] = Field(default_factory=list)
-
-
-class CharacterRelationshipDefinition(ExtensibleCharacterProfileModel):
-
-    target_id: str = Field(min_length=1)
-    relationship: str = Field(min_length=1)
-    sentiment: str = ""
-    notes: str = ""
-
-
-class CharacterCustomFieldDefinition(ExtensibleCharacterProfileModel):
-
-    key: str = Field(min_length=1)
-    label: str = Field(min_length=1)
-    value: JsonValue
-    prompt_visible: bool = True
-    ui_visible: bool = True
-
-
-class CharacterCustomSectionDefinition(ExtensibleCharacterProfileModel):
-
-    id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    prompt_visible: bool = True
-    ui_visible: bool = True
-    fields: list[CharacterCustomFieldDefinition] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def field_keys_are_unique(self) -> "CharacterCustomSectionDefinition":
-        keys = [field.key for field in self.fields]
-        if len(keys) != len(set(keys)):
-            raise ValueError(f"custom section {self.id} field keys must be unique")
-        return self
-
-
-class CharacterProfileDefinition(ExtensibleCharacterProfileModel):
-
-    template_id: str = "human-v1"
-    identity: CharacterIdentityDefinition
-    body_measurements: CharacterBodyMeasurementsDefinition = Field(
-        default_factory=CharacterBodyMeasurementsDefinition
-    )
-    appearance: CharacterAppearanceDefinition = Field(
-        default_factory=CharacterAppearanceDefinition
-    )
-    health: CharacterHealthDefinition = Field(
-        default_factory=CharacterHealthDefinition
-    )
-    personality: CharacterPersonalityDefinition = Field(
-        default_factory=CharacterPersonalityDefinition
-    )
-    background: CharacterBackgroundDefinition = Field(
-        default_factory=CharacterBackgroundDefinition
-    )
-    financial_situation: CharacterFinancialSituationDefinition = Field(
-        default_factory=CharacterFinancialSituationDefinition
-    )
-    motivations: CharacterMotivationsDefinition = Field(
-        default_factory=CharacterMotivationsDefinition
-    )
-    capabilities: CharacterCapabilitiesDefinition = Field(
-        default_factory=CharacterCapabilitiesDefinition
-    )
-    preferences: CharacterPreferencesDefinition = Field(
-        default_factory=CharacterPreferencesDefinition
-    )
-    presentation: CharacterPresentationDefinition = Field(
-        default_factory=CharacterPresentationDefinition
-    )
-    dispositions: CharacterDispositionsDefinition = Field(
-        default_factory=CharacterDispositionsDefinition
-    )
-    communication: CharacterCommunicationDefinition = Field(
-        default_factory=CharacterCommunicationDefinition
-    )
-    decision_coping: CharacterDecisionCopingDefinition = Field(
-        default_factory=CharacterDecisionCopingDefinition
-    )
-    life_structure: CharacterLifeStructureDefinition = Field(
-        default_factory=CharacterLifeStructureDefinition
-    )
-    family: CharacterFamilyDefinition = Field(
-        default_factory=CharacterFamilyDefinition
-    )
-    relationships: list[CharacterRelationshipDefinition] = Field(
-        default_factory=list
-    )
-    custom_sections: list[CharacterCustomSectionDefinition] = Field(
-        default_factory=list
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def rejects_legacy_profile_shape(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            forbidden = {
-                "profile_ref",
-                "display_name",
-                "role",
-                "traits",
-                "values",
-                "goals",
-                "current_priorities",
-            } & set(value)
-            if forbidden:
-                raise ValueError(
-                    "character profile contains removed fields: "
-                    f"{sorted(forbidden)}"
-                )
-        return value
-    @model_validator(mode="after")
-    def custom_sections_are_unique(self) -> "CharacterProfileDefinition":
-        section_ids = [section.id for section in self.custom_sections]
-        if len(section_ids) != len(set(section_ids)):
-            raise ValueError("custom section IDs must be unique")
-        return self
-
-
 class ControllerDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2965,12 +2573,10 @@ class ControllerDefinition(BaseModel):
     tool_allowlist: list[str] = Field(
         default_factory=lambda: [
             "navigate_to",
-            "go_to",
             "perform",
             "say",
             "wait",
             "skip",
-            "travel_to",
             "transact",
             "check_environment",
         ]
@@ -2980,12 +2586,10 @@ class ControllerDefinition(BaseModel):
     def tools_are_supported(self) -> "ControllerDefinition":
         unknown = set(self.tool_allowlist) - {
             "navigate_to",
-            "go_to",
             "perform",
             "say",
             "wait",
             "skip",
-            "travel_to",
             "transact",
             "check_environment",
         }
@@ -3038,17 +2642,14 @@ class PlanActionDefinition(BaseModel):
 
     @model_validator(mode="after")
     def travel_fields_are_consistent(self) -> "PlanActionDefinition":
-        if self.action is ActionType.TRAVEL_TO:
-            if self.target is None or self.mode is None:
-                raise ValueError("TRAVEL_TO requires target and mode")
-        elif self.action is ActionType.NAVIGATE:
+        if self.action is ActionType.NAVIGATE:
             if self.target is None:
                 raise ValueError("NAVIGATE requires target")
         elif self.action is ActionType.TRANSACT:
             if self.target is None or self.offer_id is None:
                 raise ValueError("TRANSACT requires target and offer_id")
             if self.mode is not None:
-                raise ValueError("mode is only valid for TRAVEL_TO or NAVIGATE")
+                raise ValueError("mode is only valid for NAVIGATE")
         elif self.action is ActionType.SERVE_TRANSACTION:
             if self.target is None:
                 raise ValueError(
@@ -3059,7 +2660,7 @@ class PlanActionDefinition(BaseModel):
                     "SERVE_TRANSACTION does not accept mode or offer_id"
                 )
         elif self.mode is not None:
-            raise ValueError("mode is only valid for TRAVEL_TO or NAVIGATE")
+            raise ValueError("mode is only valid for NAVIGATE")
         if self.action is not ActionType.TRANSACT and self.offer_id is not None:
             raise ValueError("offer_id is only valid for TRANSACT")
         return self
@@ -3125,12 +2726,6 @@ class StateComparisonCriterionDefinition(BaseModel):
                 "enabled",
                 "state_revision",
                 "last_outcome",
-                "request_pending",
-            },
-            GoalStateComponent.PLANNER: {
-                "needs_plan",
-                "request_count",
-                "failure_count",
                 "request_pending",
             },
         }
@@ -3313,16 +2908,13 @@ class GoalDefinition(BaseModel):
         )
 
 
-class PlannerComponentDefinition(BaseModel):
+class GoalsComponentDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    daily_goals: list[str] = Field(default_factory=list)
-    current_priorities: list[str] = Field(default_factory=list)
     goals: list[GoalDefinition] = Field(default_factory=list)
-    needs_plan: bool = True
 
     @model_validator(mode="after")
-    def goal_ids_are_unique(self) -> "PlannerComponentDefinition":
+    def goal_ids_are_unique(self) -> "GoalsComponentDefinition":
         goal_ids = [goal.id for goal in self.goals]
         if len(goal_ids) != len(set(goal_ids)):
             raise ValueError("structured goal IDs must be unique")
@@ -3834,8 +3426,6 @@ def _synthesize_navigation_knowledge(
                 if (
                     action.action
                     not in {
-                        ActionType.MOVE_TO,
-                        ActionType.TRAVEL_TO,
                         ActionType.NAVIGATE,
                         ActionType.TRANSACT,
                     }
@@ -3846,7 +3436,7 @@ def _synthesize_navigation_knowledge(
                 requested[action.target] = action.mode
         for target_id in sorted(requested):
             document_id = (
-                f"navigation-compatibility:{character_id}:{target_id}"
+                f"navigation-plan-context:{character_id}:{target_id}"
             )
             if information.has(document_id):
                 continue

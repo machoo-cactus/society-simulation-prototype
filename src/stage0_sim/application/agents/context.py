@@ -26,7 +26,6 @@ from stage0_sim.domain.components import (
     HomeostasisComponent,
     NpcComponent,
     PerceptionComponent,
-    PlannerComponent,
     PositionComponent,
     PossessionsComponent,
     SpatialLocationComponent,
@@ -213,16 +212,9 @@ def build_character_observation(
             weekday=str(calendar_payload["weekday"]),
             period=str(calendar_payload["period"]),
         )
-    planner = (
-        registry.get_component(agent_id, PlannerComponent)
-        if registry.has_component(agent_id, PlannerComponent)
-        else PlannerComponent()
-    )
     return CharacterObservation(
         agent_id=agent_id,
         display_name=profile.display_name,
-        goals=planner.daily_goals,
-        current_priorities=planner.current_priorities,
         simulation_time=context.clock.simulation_time,
         location_id=zone.id if zone is not None else None,
         activity=activity.current.value,
@@ -356,8 +348,6 @@ def _build_npc_observation(
     return CharacterObservation(
         agent_id=agent_id,
         display_name=profile.display_name,
-        goals=(),
-        current_priorities=(),
         simulation_time=context.clock.simulation_time,
         location_id=zone.id if zone is not None else None,
         activity=activity.current.value,

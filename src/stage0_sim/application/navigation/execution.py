@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from stage0_sim.application.navigation.destinations import (
     DestinationResolutionError,
 )
-from stage0_sim.application.navigation.planner import NavigationPlanningError
 from stage0_sim.application.navigation.service import NavigationService
 from stage0_sim.domain.components import (
     ActionType,
@@ -15,6 +14,7 @@ from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.lineage import action_lineage_payload
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.world import Locator
+from stage0_sim.domain.world.routing import NavigationPlanningError
 
 
 @dataclass(frozen=True, slots=True)

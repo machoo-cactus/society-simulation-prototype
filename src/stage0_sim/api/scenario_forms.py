@@ -165,7 +165,7 @@ KNOWN_ENTITY_COMPONENT_MODELS: dict[str, type[BaseModel] | None] = {
     "possessions": scenario_models.PossessionsComponentDefinition,
     "character_slot": scenario_models.CharacterSlotDefinition,
     "plan": scenario_models.PlanComponentDefinition,
-    "planner": scenario_models.PlannerComponentDefinition,
+    "goals": scenario_models.GoalsComponentDefinition,
     "information": scenario_models.InformationComponentDefinition,
     "controller": scenario_models.ControllerDefinition,
     "senses": scenario_models.SensesDefinition,
@@ -186,7 +186,7 @@ ARBITRARY_JSON_FIELDS: frozenset[tuple[type[BaseModel], str]] = frozenset(
         ),
         (scenario_models.TransportDefinition, "metro_lines"),
         (scenario_models.CharacterCustomFieldDefinition, "value"),
-        (scenario_models.PlannerComponentDefinition, "goals"),
+        (scenario_models.GoalsComponentDefinition, "goals"),
     }
 )
 
@@ -518,8 +518,6 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     ),
     scenario_models.CognitionSettingsDefinition: frozenset(
         [
-            "controller",
-            "execution_mode",
             "model_profile",
             "npc_control_mode",
             "decision_timeout_seconds",
@@ -824,8 +822,8 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         ["action", "target", "duration", "mode", "offer_id"]
     ),
     scenario_models.PlanComponentDefinition: frozenset(["queue", "current"]),
-    scenario_models.PlannerComponentDefinition: frozenset(
-        ["daily_goals", "current_priorities", "goals", "needs_plan"]
+    scenario_models.GoalsComponentDefinition: frozenset(
+        ["goals"]
     ),
     scenario_models.InitialInformationSourceDefinition: frozenset(
         ["type", "observer_id", "reference_ids", "metadata"]
@@ -1326,25 +1324,6 @@ def node_from_value(
             )
         unknown_values = {key: item for key, item in component_values.items() if key not in known}
         node.children.append(node_from_value(schema.children[-1], unknown_values))
-    elif schema.kind == "character_profile":
-        profile_values = value if isinstance(value, dict) else {}
-        node.choice = "character_id" if "character_id" in profile_values else "profile"
-        character_id_schema = ScenarioFieldSchema(
-            kind="scalar",
-            label="Character ID",
-            field_name="character_id",
-            annotation=str,
-            input_type="text",
-            required=True,
-        )
-        assert schema.item is not None
-        node.children = [
-            node_from_value(
-                character_id_schema,
-                profile_values.get("character_id", ""),
-            ),
-            node_from_value(schema.item, profile_values),
-        ]
     else:
         raise TypeError(f"unsupported scenario editor node kind: {schema.kind}")
     refresh_node_paths(node)
@@ -1373,9 +1352,6 @@ def refresh_node_paths(node: ScenarioEditorNode, path: FieldPath = ()) -> None:
     elif node.schema.kind == "mapping":
         for item in node.items:
             refresh_node_paths(item, (*path, item.key))
-    elif node.schema.kind == "character_profile":
-        refresh_node_paths(node.children[0], (*path, "character_id"))
-        refresh_node_paths(node.children[1], path)
 
 
 def update_draft_from_form(draft: ScenarioEditorDraft, form: Any) -> None:
@@ -1387,9 +1363,9 @@ def update_draft_from_form(draft: ScenarioEditorDraft, form: Any) -> None:
 def _update_node_from_form(node: ScenarioEditorNode, form: Any) -> None:
     if node.schema.kind == "scalar":
         node.value = str(form.get(f"value_{node.id}", node.value))
-    elif node.schema.kind in {"optional", "union", "character_profile"}:
+    elif node.schema.kind in {"optional", "union"}:
         node.choice = str(form.get(f"choice_{node.id}", node.choice))
-    if node.schema.kind in {"model", "components", "character_profile"}:
+    if node.schema.kind in {"model", "components"}:
         for child in node.children:
             _update_node_from_form(child, form)
     elif node.schema.kind == "optional":
@@ -1612,13 +1588,6 @@ def _encode_node(
                 )
             result.update(unknown)
         return result
-    if kind == "character_profile":
-        if node.choice == "character_id":
-            return {"character_id": _encode_node(node.children[0], errors)}
-        if node.choice == "profile":
-            return _encode_node(node.children[1], errors)
-        errors.append((node, "Choose a character profile mode"))
-        return {}
     raise TypeError(f"unsupported scenario editor node kind: {kind}")
 
 

@@ -6,12 +6,10 @@ from stage0_sim.domain.world import TravelMode
 
 
 class IntentKind(StrEnum):
-    MOVE = "move"
     ACTIVITY = "activity"
     SPEECH = "speech"
     WAIT = "wait"
     SKIP = "skip"
-    TRAVEL = "travel"
     NAVIGATE = "navigate"
     TRANSACT = "transact"
     SERVE_TRANSACTION = "serve_transaction"
@@ -24,11 +22,6 @@ class CharacterIntent:
     agent_id: str
     kind: IntentKind
     reason: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class MoveIntent(CharacterIntent):
-    target_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +46,6 @@ class WaitIntent(CharacterIntent):
 @dataclass(frozen=True, slots=True)
 class SkipIntent(CharacterIntent):
     reconsider_after_seconds: float = 30.0
-
-
-@dataclass(frozen=True, slots=True)
-class TravelIntent(CharacterIntent):
-    target_id: str = ""
-    mode: TravelMode = TravelMode.WALK
 
 
 @dataclass(frozen=True, slots=True)

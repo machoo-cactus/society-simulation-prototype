@@ -19,7 +19,6 @@ from stage0_sim.domain.environment import (
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.lineage import (
     action_lineage_payload,
-    emit_action_lifecycle,
 )
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.world import (
@@ -427,18 +426,6 @@ class TravelSystem:
             },
             correlation_id=travel.correlation_id,
         )
-        if travel.action_instance is not None:
-            emit_action_lifecycle(
-                context,
-                "action.progressed",
-                agent_id,
-                travel.action_instance,
-                {
-                    "destination_id": travel.destination_id,
-                    "edge_id": leg.edge_id,
-                    "progress": round(progress, 12),
-                },
-            )
         if progress < 1.0:
             return
         TravelSystem._emit_leg(
@@ -640,20 +627,24 @@ class TravelSystem:
             and plan.current.action is ActionType.NAVIGATE
         ):
             return
-        from stage0_sim.domain.systems.plans import PlanExecutionSystem
+        from stage0_sim.domain.systems.plans import (
+            complete_plan_action,
+            fail_plan_action,
+            interrupt_plan_action,
+        )
 
         travel = context.registry.get_component(agent_id, TravelComponent)
         if travel.status is TravelStatus.ARRIVED:
-            PlanExecutionSystem()._complete(context, agent_id, plan)
+            complete_plan_action(context, agent_id, plan)
         elif travel.status is TravelStatus.CANCELLED:
-            PlanExecutionSystem()._interrupt(
+            interrupt_plan_action(
                 context,
                 agent_id,
                 plan,
                 travel.failure_reason or "system1_preemption",
             )
         elif travel.status is TravelStatus.BLOCKED:
-            PlanExecutionSystem()._fail(
+            fail_plan_action(
                 context,
                 agent_id,
                 plan,

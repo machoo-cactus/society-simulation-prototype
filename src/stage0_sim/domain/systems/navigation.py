@@ -9,7 +9,6 @@ from stage0_sim.domain.components import (
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.lineage import (
     action_lineage_payload,
-    emit_action_lifecycle,
 )
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.spatial_context import (
@@ -329,18 +328,5 @@ class MovementSystem:
                 },
                 correlation_id=movement.path_correlation_id,
             )
-            if movement.action_instance is not None:
-                emit_action_lifecycle(
-                    context,
-                    "action.progressed",
-                    agent_id,
-                    movement.action_instance,
-                    {
-                        "from": previous.to_payload(),
-                        "to": next_coordinate.to_payload(),
-                        "remaining_path_steps": len(movement.path),
-                    },
-                )
-
             if movement.destination == next_coordinate and not movement.path:
                 PathfindingSystem._complete_path(context, agent_id, movement)

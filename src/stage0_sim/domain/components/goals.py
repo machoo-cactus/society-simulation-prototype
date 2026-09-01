@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 from enum import StrEnum
-from hashlib import sha256
 
 from stage0_sim.domain.components.planning import ActionType
 from stage0_sim.domain.events import JsonValue
@@ -40,7 +39,6 @@ class GoalStateComponent(StrEnum):
     HOMEOSTASIS = "homeostasis"
     ACTIVITY = "activity"
     CONTROLLER = "controller"
-    PLANNER = "planner"
 
 
 class GoalLocationKind(StrEnum):
@@ -56,7 +54,6 @@ class ActionOutcome(StrEnum):
 
 class InteractionType(StrEnum):
     SPEECH = "speech"
-    DIALOGUE = "dialogue"
     TRANSACTION = "transaction"
 
 
@@ -142,8 +139,6 @@ class GoalDefinition:
     deadline_time: float | None = None
     completion_policy: GoalCompletionPolicy = GoalCompletionPolicy.ALL
     criteria: tuple[GoalCriterion, ...] = ()
-    legacy: bool = False
-
     def __post_init__(self) -> None:
         if not self.id or not self.description:
             raise ValueError("goal identity and description must not be empty")
@@ -188,33 +183,3 @@ class GoalComponent:
             if goal.definition.id == goal_id:
                 return goal
         raise KeyError(f"unknown goal: {goal_id}")
-
-
-def legacy_goal_id(
-    character_id: str,
-    source: str,
-    index: int,
-    description: str,
-) -> str:
-    identity = "\x1f".join(
-        (character_id, source, str(index), description.strip())
-    )
-    digest = sha256(identity.encode("utf-8")).hexdigest()[:16]
-    return f"legacy-{source}-{digest}"
-
-
-def legacy_goal_definition(
-    character_id: str,
-    source: str,
-    index: int,
-    description: str,
-    *,
-    priority: int,
-) -> GoalDefinition:
-    return GoalDefinition(
-        id=legacy_goal_id(character_id, source, index, description),
-        description=description,
-        priority=priority,
-        tags=("legacy", source),
-        legacy=True,
-    )

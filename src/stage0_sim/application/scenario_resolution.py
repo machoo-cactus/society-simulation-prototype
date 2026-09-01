@@ -137,10 +137,9 @@ def load_and_resolve_scenario(
         raise ScenarioResolutionError(
             f"scenario is not valid JSON: {error}"
         ) from error
-    if isinstance(raw, dict) and raw.get("schema_version") != 3:
+    if isinstance(raw, dict) and raw.get("schema_version") != 4:
         raise ScenarioResolutionError(
-            "scenario schema version 3 is required; schema-version-2 "
-            "scenarios are not supported"
+            "scenario schema version 4 is required"
         )
     try:
         source = ScenarioSourceDefinition.model_validate(raw)

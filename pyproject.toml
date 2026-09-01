@@ -4,9 +4,26 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stage0-simulation"
-version = "0.1.0"
-description = "Deterministic embodied-character simulation sandbox"
+dynamic = ["version"]
+description = "Deterministic embodied-character simulation and research sandbox"
+readme = "README.md"
 requires-python = ">=3.12"
+keywords = [
+    "agent simulation",
+    "deterministic simulation",
+    "embodied characters",
+    "research data",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
 dependencies = [
     "fastapi>=0.116,<1",
     "jinja2>=3.1,<4",
@@ -21,6 +38,7 @@ stage0-fake-llm = "stage0_sim.api.fake_llm:main"
 
 [project.optional-dependencies]
 dev = [
+    "build>=1.2,<2",
     "httpx>=0.28,<1",
     "mypy>=1.17,<2",
     "playwright>=1.55,<2",
@@ -29,14 +47,28 @@ dev = [
     "ruff>=0.12,<1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/machoo-cactus/society-simulation-prototype"
+Issues = "https://github.com/machoo-cactus/society-simulation-prototype/issues"
+Repository = "https://github.com/machoo-cactus/society-simulation-prototype.git"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.dynamic]
+version = {attr = "stage0_sim.__version__"}
+
 [tool.setuptools.package-data]
-stage0_sim = ["web/*.css", "web/*.html", "web/*.js", "web/*.json"]
+stage0_sim = [
+    "py.typed",
+    "web/templates/*.html",
+    "web/static/*.css",
+    "web/static/*.js",
+    "resources/*.json",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

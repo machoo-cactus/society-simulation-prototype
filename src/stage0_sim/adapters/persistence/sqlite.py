@@ -2,19 +2,21 @@ import base64
 import csv
 import io
 import json
-import os
 import sqlite3
 import threading
-import time
 import zipfile
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import fields, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import BinaryIO, cast
 from uuid import uuid4
 
+from stage0_sim.adapters.persistence.sqlite_schema import (
+    RUN_SCOPED_TABLES,
+    initialize_schema,
+    schema_initialization_lock,
+)
 from stage0_sim.application.data_capture import (
     DATASET_SCHEMA_VERSION,
     DatasetQueryFilter,
@@ -48,50 +50,8 @@ from stage0_sim.domain.information import (
     information_document_from_dict,
 )
 
-_DATABASE_SCHEMA_VERSION = 7
-_MAX_DATABASE_SCHEMA_VERSION = 7
 _INSTANCE_HEARTBEAT_INTERVAL_SECONDS = 10.0
 _INSTANCE_LEASE_TIMEOUT_SECONDS = 120.0
-
-
-@contextmanager
-def _schema_migration_lock(path: Path) -> Iterator[None]:
-    lock_path = path.with_name(f"{path.name}.migration.lock")
-    with lock_path.open("a+b") as handle:
-        handle.seek(0, io.SEEK_END)
-        if handle.tell() == 0:
-            handle.write(b"\0")
-            handle.flush()
-        handle.seek(0)
-        if os.name == "nt":
-            import msvcrt
-
-            while True:
-                try:
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-                    break
-                except OSError:
-                    time.sleep(0.05)
-            try:
-                yield
-            finally:
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import importlib
-
-            fcntl = importlib.import_module("fcntl")
-            flock = cast(
-                Callable[[int, int], object],
-                fcntl.__dict__["flock"],
-            )
-            lock_ex = cast(int, fcntl.__dict__["LOCK_EX"])
-            lock_un = cast(int, fcntl.__dict__["LOCK_UN"])
-            flock(handle.fileno(), lock_ex)
-            try:
-                yield
-            finally:
-                flock(handle.fileno(), lock_un)
 
 _ANALYSIS_TABLES = (
     "record_relations",
@@ -126,32 +86,6 @@ _ANALYSIS_TABLES = (
     "resource_samples",
     "resource_flows",
 )
-_QUERY_TABLE_ALIASES = {
-    "actions": "action_instances",
-    "action_episodes": "action_episodes",
-    "action_transitions": "action_transitions",
-    "decisions": "decisions",
-    "decision_episodes": "decision_episodes",
-    "goals": "goals",
-    "goal_episodes": "goal_episodes",
-    "goal_transitions": "goal_transitions",
-    "information_retrievals": "information_retrievals",
-    "interactions": "interactions",
-    "interaction_episodes": "interaction_episodes",
-    "memory_operations": "memory_operations",
-    "model_requests": "model_requests",
-    "model_turns": "model_turns",
-    "opportunities": "opportunity_samples",
-    "perception_deliveries": "perception_deliveries",
-    "perception_facts": "perception_facts",
-    "population": "population_samples",
-    "resource_flows": "resource_flows",
-    "resource_samples": "resource_samples",
-    "state": "state_samples",
-    "state_deltas": "state_deltas",
-    "tool_executions": "tool_executions",
-    "transitions": "transition_samples",
-}
 _DOMAIN_ID_COLUMNS = (
     "goal_id",
     "plan_id",
@@ -177,47 +111,6 @@ _FEATURE_SCHEMA_VERSIONS = {
     "stage0.feature.transition_sample": "1",
 }
 
-# Child tables precede their parents. This is the complete deletion and schema
-# coverage registry for every SQLite table containing a run_id column.
-RUN_SCOPED_TABLES = (
-    "perception_deliveries",
-    "interaction_participants",
-    "interaction_events",
-    "goal_action_links",
-    "action_episodes",
-    "action_transitions",
-    "decision_options",
-    "model_turns",
-    "goal_transitions",
-    "memory_relations",
-    "decision_episodes",
-    "goal_episodes",
-    "interaction_episodes",
-    "memory_operations",
-    "information_retrievals",
-    "state_samples",
-    "state_deltas",
-    "plans",
-    "opportunity_samples",
-    "transition_samples",
-    "population_samples",
-    "resource_samples",
-    "resource_flows",
-    "tool_executions",
-    "perception_facts",
-    "action_instances",
-    "decisions",
-    "model_requests",
-    "goals",
-    "interactions",
-    "record_relations",
-    "records",
-    "episodic_memories",
-    "information_documents",
-    "runs",
-)
-
-
 class SQLiteDatasetStore:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -229,8 +122,8 @@ class SQLiteDatasetStore:
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA journal_mode = WAL")
         self._connection.execute("PRAGMA foreign_keys = ON")
-        with _schema_migration_lock(path):
-            self._migrate()
+        with schema_initialization_lock(path):
+            initialize_schema(self._connection)
         self._register_instance()
         self._heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop,
@@ -333,7 +226,7 @@ class SQLiteDatasetStore:
             INSERT INTO records (
                 run_id, sequence, record_id, schema_id, schema_version,
                 record_type, category, source, phase, simulation_tick,
-                simulation_time, wall_time, visibility, agent_id, subject_id,
+                simulation_time, wall_time, visibility, subject_id,
                 related_entity_ids_json, source_event_id, causation_id,
                 correlation_id, goal_id, plan_id, action_id, decision_id,
                 model_request_id, tool_call_id, interaction_id,
@@ -341,7 +234,7 @@ class SQLiteDatasetStore:
                 operator_intervention_id, source_metadata_json, payload_json
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -358,7 +251,6 @@ class SQLiteDatasetStore:
                 record.simulation_time,
                 record.wall_time,
                 record.visibility.value,
-                record.agent_id,
                 record.subject_id,
                 _json(list(record.related_entity_ids)),
                 record.source_event_id,
@@ -2106,7 +1998,6 @@ class SQLiteDatasetStore:
             ("category", query.category.value if query.category is not None else None),
             ("schema_id", query.schema_id),
             ("schema_version", query.schema_version),
-            ("agent_id", query.agent_id),
             ("subject_id", query.subject_id),
             (
                 "visibility",
@@ -2191,14 +2082,14 @@ class SQLiteDatasetStore:
     def query_table(
         self,
         run_id: str,
-        table_or_alias: str,
+        table_name: str,
         filters: DatasetQueryFilter | None = None,
     ) -> DatasetQueryPage:
         self._require_run(run_id)
         query = filters or DatasetQueryFilter()
-        table = _QUERY_TABLE_ALIASES.get(table_or_alias, table_or_alias)
+        table = table_name
         if table not in _ANALYSIS_TABLES:
-            raise ValueError(f"unknown dataset table: {table_or_alias}")
+            raise ValueError(f"unknown dataset table: {table_name}")
         columns = self._table_columns(table)
         primary_key = self._table_primary_key(table)
         if not primary_key:
@@ -2229,10 +2120,8 @@ class SQLiteDatasetStore:
                 if column in columns
             ]
             entity_parameters = [query.primary_entity_id] * len(entity_clauses)
-            entity_clauses.extend(("r.subject_id = ?", "r.agent_id = ?"))
-            entity_parameters.extend(
-                (query.primary_entity_id, query.primary_entity_id)
-            )
+            entity_clauses.append("r.subject_id = ?")
+            entity_parameters.append(query.primary_entity_id)
             if table in {"interactions", "interaction_episodes"}:
                 entity_clauses.append(
                     """
@@ -2437,7 +2326,7 @@ class SQLiteDatasetStore:
                     "simulation_tick": record.simulation_tick,
                     "simulation_time": record.simulation_time,
                     "wall_time": event_payload.get("wall_time"),
-                    "agent_id": record.agent_id,
+                    "agent_id": record.subject_id,
                     "event_type": event_payload.get("event_type"),
                     "payload": payload if isinstance(payload, dict) else {},
                     "causation_id": record.causation_id,
@@ -2692,7 +2581,6 @@ class SQLiteDatasetStore:
                         if document.recorded_at is not None
                         else 0.0
                     ),
-                    agent_id=None,
                     source_event_id=None,
                     payload=document.to_dict(),
                     schema_id=document.schema_id,
@@ -2881,11 +2769,10 @@ class SQLiteDatasetStore:
         counts: dict[str, int] = {}
         for row in self._connection.execute(
             """
-            SELECT COALESCE(subject_id, agent_id) AS entity_id,
-                   COUNT(*) AS count
+            SELECT subject_id AS entity_id, COUNT(*) AS count
             FROM records
-            WHERE run_id = ? AND COALESCE(subject_id, agent_id) IS NOT NULL
-            GROUP BY COALESCE(subject_id, agent_id)
+            WHERE run_id = ? AND subject_id IS NOT NULL
+            GROUP BY subject_id
             ORDER BY entity_id
             """,
             (run_id,),
@@ -3489,250 +3376,6 @@ class SQLiteDatasetStore:
         self._connection.commit()
         self._connection.close()
 
-    def _migrate(self) -> None:
-        current = int(self._connection.execute("PRAGMA user_version").fetchone()[0])
-        if current > _MAX_DATABASE_SCHEMA_VERSION:
-            raise RuntimeError(
-                f"database schema {current} is newer than supported "
-                f"schema {_MAX_DATABASE_SCHEMA_VERSION}"
-            )
-        if current < 1:
-            self._connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS runs (
-                    run_id TEXT PRIMARY KEY,
-                    schema_version TEXT NOT NULL,
-                    seed INTEGER NOT NULL,
-                    dt REAL NOT NULL,
-                    initial_speed REAL NOT NULL,
-                    scenario_json TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'running',
-                    final_tick INTEGER,
-                    final_simulation_time REAL,
-                    started_at TEXT NOT NULL,
-                    completed_at TEXT
-                );
-                CREATE TABLE IF NOT EXISTS records (
-                    run_id TEXT NOT NULL,
-                    sequence INTEGER NOT NULL,
-                    schema_version TEXT NOT NULL,
-                    record_type TEXT NOT NULL,
-                    simulation_tick INTEGER NOT NULL,
-                    simulation_time REAL NOT NULL,
-                    agent_id TEXT,
-                    source_event_id TEXT,
-                    payload_json TEXT NOT NULL,
-                    PRIMARY KEY (run_id, sequence),
-                    FOREIGN KEY (run_id) REFERENCES runs(run_id)
-                );
-                CREATE INDEX IF NOT EXISTS records_run_type_tick
-                ON records(run_id, record_type, simulation_tick);
-                CREATE INDEX IF NOT EXISTS records_run_agent_tick
-                ON records(run_id, agent_id, simulation_tick);
-                PRAGMA user_version = 1;
-                """
-            )
-            self._connection.commit()
-            current = 1
-        if current < 2:
-            self._connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS episodic_memories (
-                    run_id TEXT NOT NULL,
-                    memory_id TEXT NOT NULL,
-                    agent_id TEXT NOT NULL,
-                    simulation_time REAL NOT NULL,
-                    importance REAL NOT NULL,
-                    text TEXT NOT NULL,
-                    embedding_json TEXT NOT NULL,
-                    metadata_json TEXT NOT NULL,
-                    PRIMARY KEY (run_id, memory_id),
-                    FOREIGN KEY (run_id) REFERENCES runs(run_id)
-                );
-                CREATE INDEX IF NOT EXISTS memories_run_agent_time
-                ON episodic_memories(run_id, agent_id, simulation_time);
-                PRAGMA user_version = 2;
-                """
-            )
-            self._connection.commit()
-            current = 2
-        if current < 3:
-            self._connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS information_documents (
-                    run_id TEXT NOT NULL,
-                    document_id TEXT NOT NULL,
-                    revision INTEGER NOT NULL,
-                    namespace_id TEXT NOT NULL,
-                    kind TEXT NOT NULL,
-                    content_hash TEXT NOT NULL,
-                    document_json TEXT NOT NULL,
-                    PRIMARY KEY (run_id, document_id, revision),
-                    FOREIGN KEY (run_id) REFERENCES runs(run_id)
-                );
-                CREATE INDEX IF NOT EXISTS information_run_namespace_kind
-                ON information_documents(run_id, namespace_id, kind);
-                PRAGMA user_version = 3;
-                """
-            )
-            self._connection.commit()
-            current = 3
-        if current < 4:
-            self._migrate_v4()
-            current = 4
-        if current < 5:
-            self._ensure_v4_lineage_schema()
-            self._connection.executescript(_V5_SCHEMA)
-            self._connection.execute("PRAGMA user_version = 5")
-            self._connection.commit()
-            current = 5
-        if current < 6:
-            self._migrate_v6()
-            self._connection.execute("PRAGMA user_version = 6")
-            self._connection.commit()
-            current = 6
-        if current < 7:
-            self._migrate_v7()
-            self._connection.execute("PRAGMA user_version = 7")
-            self._connection.commit()
-
-    def _migrate_v6(self) -> None:
-        existing = {
-            str(row["name"])
-            for row in self._connection.execute("PRAGMA table_info(runs)")
-        }
-        columns = {
-            "owner_instance_id": "TEXT",
-            "capture_complete": "INTEGER NOT NULL DEFAULT 0",
-            "interruption_reason": "TEXT",
-        }
-        for name, declaration in columns.items():
-            if name not in existing:
-                self._connection.execute(
-                    f"ALTER TABLE runs ADD COLUMN {name} {declaration}"
-                )
-        self._connection.execute(
-            """
-            UPDATE runs
-            SET capture_complete = CASE
-                WHEN status IN ('completed', 'stopped')
-                 AND EXISTS (
-                     SELECT 1 FROM records
-                     WHERE records.run_id = runs.run_id
-                       AND records.phase = ?
-                 )
-                THEN 1 ELSE 0 END
-            """,
-            (RunnerPhase.RUN_FINAL.value,),
-        )
-        self._connection.executescript(
-            """
-            CREATE INDEX IF NOT EXISTS runs_status_started
-            ON runs(status, started_at DESC, run_id DESC);
-            CREATE INDEX IF NOT EXISTS runs_completed
-            ON runs(completed_at DESC, run_id DESC);
-            CREATE INDEX IF NOT EXISTS runs_schema_started
-            ON runs(schema_version, started_at DESC, run_id DESC);
-            CREATE INDEX IF NOT EXISTS runs_capture_started
-            ON runs(capture_complete, started_at DESC, run_id DESC);
-            """
-        )
-
-    def _migrate_v7(self) -> None:
-        self._connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS dataset_store_instances (
-                instance_id TEXT PRIMARY KEY,
-                started_at TEXT NOT NULL,
-                heartbeat_at TEXT NOT NULL,
-                closed_at TEXT
-            );
-            CREATE INDEX IF NOT EXISTS dataset_store_instances_lease
-            ON dataset_store_instances(closed_at, heartbeat_at);
-            """
-        )
-
-    def _ensure_v4_lineage_schema(self) -> None:
-        existing = {
-            str(row["name"])
-            for row in self._connection.execute(
-                "PRAGMA table_info(action_instances)"
-            )
-        }
-        columns = {
-            "origin": "TEXT NOT NULL DEFAULT 'scenario'",
-            "plan_revision": "INTEGER",
-            "created_tick": "INTEGER NOT NULL DEFAULT 0",
-            "created_at": "REAL NOT NULL DEFAULT 0",
-            "root_correlation_id": "TEXT NOT NULL DEFAULT 'legacy'",
-        }
-        for name, declaration in columns.items():
-            if name not in existing:
-                self._connection.execute(
-                    f"ALTER TABLE action_instances ADD COLUMN {name} {declaration}"
-                )
-        self._connection.executescript(_V4_LINEAGE_SCHEMA)
-        self._connection.commit()
-
-    def _migrate_v4(self) -> None:
-        columns = {
-            "record_id": "TEXT",
-            "schema_id": "TEXT NOT NULL DEFAULT 'stage0.record.legacy'",
-            "category": "TEXT NOT NULL DEFAULT 'OTHER'",
-            "source": "TEXT NOT NULL DEFAULT 'DATASET_COLLECTOR'",
-            "phase": "TEXT NOT NULL DEFAULT 'unspecified'",
-            "wall_time": "TEXT",
-            "visibility": "TEXT NOT NULL DEFAULT 'OPERATOR'",
-            "subject_id": "TEXT",
-            "related_entity_ids_json": "TEXT NOT NULL DEFAULT '[]'",
-            "causation_id": "TEXT",
-            "correlation_id": "TEXT",
-            "goal_id": "TEXT",
-            "plan_id": "TEXT",
-            "action_id": "TEXT",
-            "decision_id": "TEXT",
-            "model_request_id": "TEXT",
-            "tool_call_id": "TEXT",
-            "interaction_id": "TEXT",
-            "perception_fact_id": "TEXT",
-            "memory_id": "TEXT",
-            "transaction_request_id": "TEXT",
-            "operator_intervention_id": "TEXT",
-            "source_metadata_json": "TEXT NOT NULL DEFAULT '{}'",
-        }
-        existing = {
-            str(row["name"])
-            for row in self._connection.execute("PRAGMA table_info(records)")
-        }
-        for name, declaration in columns.items():
-            if name not in existing:
-                self._connection.execute(
-                    f"ALTER TABLE records ADD COLUMN {name} {declaration}"
-                )
-        self._connection.execute(
-            """
-            UPDATE records
-            SET record_id = run_id || ':record:' || printf('%08d', sequence)
-            WHERE record_id IS NULL OR record_id = ''
-            """
-        )
-        self._connection.execute(
-            """
-            UPDATE records
-            SET schema_id = 'stage0.record.' || record_type
-            WHERE schema_id = 'stage0.record.legacy'
-            """
-        )
-        self._connection.execute(
-            """
-            UPDATE records SET subject_id = agent_id
-            WHERE subject_id IS NULL AND agent_id IS NOT NULL
-            """
-        )
-        self._connection.executescript(_V4_SCHEMA)
-        self._connection.execute("PRAGMA user_version = 4")
-        self._connection.commit()
-
 
 def _rebuild_interaction_episode(
     store: SQLiteDatasetStore,
@@ -4130,7 +3773,6 @@ def _field_meaning(name: str) -> str:
         "wall_time": "nondeterministic diagnostic wall-clock timestamp",
         "visibility": "disclosure class enforced by query and export defaults",
         "subject_id": "primary entity described by the row",
-        "agent_id": "legacy alias for the primary character entity",
         "related_entity_ids": "ordered secondary entities related to the record",
         "payload": "complete forward-compatible record content",
         "record_sequence": "sequence of the linked immutable raw record",
@@ -4182,7 +3824,6 @@ def _record_from_row(row: sqlite3.Row) -> DatasetRecord:
         record_type=str(row["record_type"]),
         simulation_tick=int(row["simulation_tick"]),
         simulation_time=float(row["simulation_time"]),
-        agent_id=_row_str(row, "agent_id"),
         payload=payload,
         source_event_id=_row_str(row, "source_event_id"),
         schema_version=str(row["schema_version"]),
@@ -4262,550 +3903,3 @@ def _world_schema_version(
 
 def _first_text(*values: object) -> str | None:
     return next((value for value in values if isinstance(value, str)), None)
-
-
-_V4_SCHEMA = """
-CREATE UNIQUE INDEX IF NOT EXISTS records_run_record_id
-ON records(run_id, record_id);
-CREATE INDEX IF NOT EXISTS records_run_category_tick
-ON records(run_id, category, simulation_tick);
-CREATE INDEX IF NOT EXISTS records_run_schema_tick
-ON records(run_id, schema_id, schema_version, simulation_tick);
-CREATE INDEX IF NOT EXISTS records_run_subject_tick
-ON records(run_id, subject_id, simulation_tick);
-CREATE INDEX IF NOT EXISTS records_run_visibility_sequence
-ON records(run_id, visibility, sequence);
-
-CREATE TABLE IF NOT EXISTS record_relations (
-    run_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    relation_type TEXT NOT NULL,
-    target_type TEXT NOT NULL,
-    target_id TEXT NOT NULL,
-    ordinal INTEGER NOT NULL DEFAULT 0,
-    metadata_json TEXT NOT NULL,
-    PRIMARY KEY (
-        run_id, record_id, relation_type, target_type, target_id, ordinal
-    ),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS record_relations_target
-ON record_relations(run_id, target_type, target_id, relation_type);
-
-CREATE TABLE IF NOT EXISTS state_samples (
-    run_id TEXT NOT NULL,
-    state_sample_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    phase TEXT NOT NULL,
-    simulation_tick INTEGER NOT NULL,
-    simulation_time REAL NOT NULL,
-    state_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, state_sample_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS state_samples_subject_tick
-ON state_samples(run_id, subject_id, simulation_tick, phase);
-
-CREATE TABLE IF NOT EXISTS state_deltas (
-    run_id TEXT NOT NULL,
-    state_delta_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    from_sample_id TEXT,
-    to_sample_id TEXT,
-    simulation_tick INTEGER NOT NULL,
-    delta_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, state_delta_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS state_deltas_subject_tick
-ON state_deltas(run_id, subject_id, simulation_tick);
-
-CREATE TABLE IF NOT EXISTS goals (
-    run_id TEXT NOT NULL,
-    goal_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    description TEXT NOT NULL,
-    status TEXT NOT NULL,
-    goal_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, goal_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS goals_subject_status
-ON goals(run_id, subject_id, status);
-
-CREATE TABLE IF NOT EXISTS goal_transitions (
-    run_id TEXT NOT NULL,
-    goal_transition_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    goal_id TEXT NOT NULL,
-    simulation_tick INTEGER NOT NULL,
-    from_status TEXT,
-    to_status TEXT NOT NULL,
-    transition_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, goal_transition_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id),
-    FOREIGN KEY (run_id, goal_id) REFERENCES goals(run_id, goal_id)
-);
-CREATE INDEX IF NOT EXISTS goal_transitions_goal_tick
-ON goal_transitions(run_id, goal_id, simulation_tick);
-
-CREATE TABLE IF NOT EXISTS decisions (
-    run_id TEXT NOT NULL,
-    decision_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    simulation_tick INTEGER NOT NULL,
-    status TEXT NOT NULL,
-    selected_option_id TEXT,
-    context_json TEXT NOT NULL,
-    outcome_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, decision_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS decisions_subject_tick
-ON decisions(run_id, subject_id, simulation_tick, status);
-
-CREATE TABLE IF NOT EXISTS decision_options (
-    run_id TEXT NOT NULL,
-    decision_id TEXT NOT NULL,
-    option_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    option_index INTEGER NOT NULL,
-    option_type TEXT NOT NULL,
-    selected INTEGER NOT NULL,
-    option_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, decision_id, option_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id),
-    FOREIGN KEY (run_id, decision_id) REFERENCES decisions(run_id, decision_id)
-);
-CREATE INDEX IF NOT EXISTS decision_options_selected
-ON decision_options(run_id, decision_id, selected, option_index);
-
-CREATE TABLE IF NOT EXISTS model_requests (
-    run_id TEXT NOT NULL,
-    model_request_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    decision_id TEXT,
-    subject_id TEXT,
-    operation TEXT NOT NULL,
-    provider TEXT,
-    model TEXT,
-    status TEXT NOT NULL,
-    request_json TEXT NOT NULL,
-    response_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, model_request_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS model_requests_subject_status
-ON model_requests(run_id, subject_id, operation, status);
-
-CREATE TABLE IF NOT EXISTS model_turns (
-    run_id TEXT NOT NULL,
-    model_request_id TEXT NOT NULL,
-    turn_index INTEGER NOT NULL,
-    record_id TEXT NOT NULL,
-    role TEXT NOT NULL,
-    content_json TEXT NOT NULL,
-    usage_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, model_request_id, turn_index),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id),
-    FOREIGN KEY (run_id, model_request_id)
-        REFERENCES model_requests(run_id, model_request_id)
-);
-
-CREATE TABLE IF NOT EXISTS tool_executions (
-    run_id TEXT NOT NULL,
-    tool_call_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    decision_id TEXT,
-    action_id TEXT,
-    subject_id TEXT,
-    tool_name TEXT NOT NULL,
-    status TEXT NOT NULL,
-    input_json TEXT NOT NULL,
-    output_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, tool_call_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS tool_executions_subject_status
-ON tool_executions(run_id, subject_id, tool_name, status);
-
-CREATE TABLE IF NOT EXISTS action_instances (
-    run_id TEXT NOT NULL,
-    action_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    plan_id TEXT,
-    goal_id TEXT,
-    decision_id TEXT,
-    tool_call_id TEXT,
-    subject_id TEXT,
-    action_type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    origin TEXT NOT NULL DEFAULT 'scenario',
-    plan_revision INTEGER,
-    created_tick INTEGER NOT NULL DEFAULT 0,
-    created_at REAL NOT NULL DEFAULT 0,
-    root_correlation_id TEXT NOT NULL DEFAULT 'legacy',
-    action_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, action_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS action_instances_subject_status
-ON action_instances(run_id, subject_id, action_type, status);
-
-CREATE TABLE IF NOT EXISTS action_transitions (
-    run_id TEXT NOT NULL,
-    action_transition_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    action_id TEXT NOT NULL,
-    simulation_tick INTEGER NOT NULL,
-    from_status TEXT,
-    to_status TEXT NOT NULL,
-    transition_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, action_transition_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id),
-    FOREIGN KEY (run_id, action_id)
-        REFERENCES action_instances(run_id, action_id)
-);
-CREATE INDEX IF NOT EXISTS action_transitions_action_tick
-ON action_transitions(run_id, action_id, simulation_tick);
-
-CREATE TABLE IF NOT EXISTS interactions (
-    run_id TEXT NOT NULL,
-    interaction_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    interaction_type TEXT NOT NULL,
-    start_tick INTEGER NOT NULL,
-    end_tick INTEGER,
-    status TEXT NOT NULL,
-    context_json TEXT NOT NULL,
-    outcome_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, interaction_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS interactions_type_status
-ON interactions(run_id, interaction_type, status, start_tick);
-
-CREATE TABLE IF NOT EXISTS interaction_participants (
-    run_id TEXT NOT NULL,
-    interaction_id TEXT NOT NULL,
-    participant_id TEXT NOT NULL,
-    role TEXT NOT NULL,
-    participant_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, interaction_id, participant_id, role),
-    FOREIGN KEY (run_id, interaction_id)
-        REFERENCES interactions(run_id, interaction_id)
-);
-CREATE INDEX IF NOT EXISTS interaction_participants_participant
-ON interaction_participants(run_id, participant_id, interaction_id);
-
-CREATE TABLE IF NOT EXISTS interaction_events (
-    run_id TEXT NOT NULL,
-    interaction_id TEXT NOT NULL,
-    event_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    event_index INTEGER NOT NULL,
-    event_type TEXT NOT NULL,
-    simulation_tick INTEGER NOT NULL,
-    event_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, interaction_id, event_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id),
-    FOREIGN KEY (run_id, interaction_id)
-        REFERENCES interactions(run_id, interaction_id)
-);
-CREATE INDEX IF NOT EXISTS interaction_events_tick
-ON interaction_events(run_id, interaction_id, simulation_tick, event_index);
-
-CREATE TABLE IF NOT EXISTS opportunity_samples (
-    run_id TEXT NOT NULL,
-    opportunity_sample_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    simulation_tick INTEGER NOT NULL,
-    selected_option_id TEXT,
-    context_json TEXT NOT NULL,
-    options_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, opportunity_sample_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS opportunity_samples_subject_tick
-ON opportunity_samples(run_id, subject_id, simulation_tick);
-
-CREATE TABLE IF NOT EXISTS transition_samples (
-    run_id TEXT NOT NULL,
-    transition_sample_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    action_id TEXT,
-    start_tick INTEGER NOT NULL,
-    end_tick INTEGER NOT NULL,
-    elapsed_simulation_time REAL NOT NULL,
-    outcome TEXT NOT NULL,
-    state_before_json TEXT NOT NULL,
-    action_json TEXT NOT NULL,
-    exogenous_context_json TEXT NOT NULL,
-    state_after_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, transition_sample_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS transition_samples_subject_outcome
-ON transition_samples(run_id, subject_id, outcome, start_tick);
-
-CREATE TABLE IF NOT EXISTS population_samples (
-    run_id TEXT NOT NULL,
-    population_sample_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    simulation_tick INTEGER NOT NULL,
-    phase TEXT NOT NULL,
-    population_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, population_sample_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS population_samples_tick_phase
-ON population_samples(run_id, simulation_tick, phase);
-"""
-
-
-_V4_LINEAGE_SCHEMA = """
-CREATE TABLE IF NOT EXISTS plans (
-    run_id TEXT NOT NULL,
-    plan_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    revision INTEGER NOT NULL,
-    origin TEXT NOT NULL,
-    status TEXT NOT NULL,
-    root_correlation_id TEXT,
-    plan_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, plan_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS plans_subject_status
-ON plans(run_id, subject_id, status, revision);
-
-CREATE TABLE IF NOT EXISTS goal_action_links (
-    run_id TEXT NOT NULL,
-    goal_id TEXT NOT NULL,
-    action_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    link_kind TEXT NOT NULL,
-    ordinal INTEGER NOT NULL,
-    PRIMARY KEY (run_id, goal_id, action_id),
-    FOREIGN KEY (run_id, goal_id) REFERENCES goals(run_id, goal_id),
-    FOREIGN KEY (run_id, action_id)
-        REFERENCES action_instances(run_id, action_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS goal_action_links_action
-ON goal_action_links(run_id, action_id, link_kind, ordinal);
-
-CREATE TABLE IF NOT EXISTS action_episodes (
-    run_id TEXT NOT NULL,
-    action_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    terminal_status TEXT NOT NULL,
-    created_tick INTEGER NOT NULL,
-    terminal_tick INTEGER NOT NULL,
-    created_at REAL NOT NULL,
-    terminal_at REAL NOT NULL,
-    elapsed_simulation_time REAL NOT NULL,
-    source_event_ids_json TEXT NOT NULL,
-    episode_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, action_id),
-    FOREIGN KEY (run_id, action_id)
-        REFERENCES action_instances(run_id, action_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS action_episodes_subject_status
-ON action_episodes(run_id, subject_id, terminal_status, terminal_tick);
-"""
-
-
-_V5_SCHEMA = """
-CREATE TABLE IF NOT EXISTS decision_episodes (
-    run_id TEXT NOT NULL,
-    decision_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    action_id TEXT,
-    goal_id TEXT,
-    tool_call_id TEXT,
-    status TEXT NOT NULL,
-    selected_option_id TEXT,
-    requested_tick INTEGER NOT NULL,
-    terminal_tick INTEGER NOT NULL,
-    requested_at REAL NOT NULL,
-    terminal_at REAL NOT NULL,
-    terminal_reason TEXT,
-    delays_json TEXT NOT NULL,
-    episode_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, decision_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS decision_episodes_subject_status
-ON decision_episodes(run_id, subject_id, status, requested_tick);
-
-CREATE TABLE IF NOT EXISTS memory_operations (
-    run_id TEXT NOT NULL,
-    operation_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    operation_type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    memory_id TEXT,
-    request_json TEXT NOT NULL,
-    result_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, operation_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS memory_operations_subject_status
-ON memory_operations(run_id, subject_id, operation_type, status);
-
-CREATE TABLE IF NOT EXISTS information_retrievals (
-    run_id TEXT NOT NULL,
-    retrieval_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    status TEXT NOT NULL,
-    query_json TEXT NOT NULL,
-    result_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, retrieval_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS information_retrievals_subject_status
-ON information_retrievals(run_id, subject_id, status);
-
-CREATE TABLE IF NOT EXISTS interaction_episodes (
-    run_id TEXT NOT NULL,
-    interaction_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    interaction_type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    start_tick INTEGER NOT NULL,
-    terminal_tick INTEGER NOT NULL,
-    started_at REAL NOT NULL,
-    terminal_at REAL NOT NULL,
-    duration REAL NOT NULL,
-    initiating_goal_id TEXT,
-    initiating_decision_id TEXT,
-    initiating_action_id TEXT,
-    initiating_tool_call_id TEXT,
-    content_visibility TEXT NOT NULL,
-    episode_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, interaction_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS interaction_episodes_type_status
-ON interaction_episodes(run_id, interaction_type, status, start_tick);
-
-CREATE TABLE IF NOT EXISTS perception_facts (
-    run_id TEXT NOT NULL,
-    fact_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    source_event_id TEXT,
-    fact_type TEXT NOT NULL,
-    subject_id TEXT,
-    object_id TEXT,
-    location_id TEXT,
-    modality TEXT NOT NULL,
-    disclosure TEXT NOT NULL,
-    created_tick INTEGER NOT NULL,
-    fact_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, fact_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS perception_facts_subject_tick
-ON perception_facts(run_id, subject_id, created_tick, fact_type);
-
-CREATE TABLE IF NOT EXISTS perception_deliveries (
-    run_id TEXT NOT NULL,
-    delivery_id TEXT NOT NULL,
-    fact_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    observer_id TEXT NOT NULL,
-    status TEXT NOT NULL,
-    reason TEXT,
-    perceived_tick INTEGER NOT NULL,
-    fact_age REAL NOT NULL,
-    salience REAL,
-    delivery_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, delivery_id),
-    FOREIGN KEY (run_id, fact_id) REFERENCES perception_facts(run_id, fact_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS perception_deliveries_observer_tick
-ON perception_deliveries(run_id, observer_id, perceived_tick, status);
-
-CREATE TABLE IF NOT EXISTS goal_episodes (
-    run_id TEXT NOT NULL,
-    goal_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    subject_id TEXT,
-    terminal_status TEXT NOT NULL,
-    activated_tick INTEGER NOT NULL,
-    terminal_tick INTEGER NOT NULL,
-    activated_at REAL NOT NULL,
-    terminal_at REAL NOT NULL,
-    duration REAL NOT NULL,
-    episode_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, goal_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS goal_episodes_subject_status
-ON goal_episodes(run_id, subject_id, terminal_status, activated_tick);
-
-CREATE TABLE IF NOT EXISTS resource_samples (
-    run_id TEXT NOT NULL,
-    resource_sample_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    resource_id TEXT NOT NULL,
-    resource_type TEXT NOT NULL,
-    simulation_tick INTEGER NOT NULL,
-    phase TEXT NOT NULL,
-    capacity INTEGER,
-    occupancy INTEGER NOT NULL,
-    queue_length INTEGER NOT NULL,
-    utilization REAL,
-    sample_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, resource_sample_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS resource_samples_resource_tick
-ON resource_samples(run_id, resource_id, simulation_tick, phase);
-
-CREATE TABLE IF NOT EXISTS resource_flows (
-    run_id TEXT NOT NULL,
-    resource_flow_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    resource_id TEXT NOT NULL,
-    subject_id TEXT,
-    simulation_tick INTEGER NOT NULL,
-    flow_type TEXT NOT NULL,
-    amount REAL,
-    flow_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, resource_flow_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS resource_flows_resource_tick
-ON resource_flows(run_id, resource_id, simulation_tick, flow_type);
-
-CREATE TABLE IF NOT EXISTS memory_relations (
-    run_id TEXT NOT NULL,
-    relation_id TEXT NOT NULL,
-    record_id TEXT NOT NULL,
-    memory_id TEXT NOT NULL,
-    subject_id TEXT,
-    relation_type TEXT NOT NULL,
-    source_type TEXT NOT NULL,
-    source_id TEXT NOT NULL,
-    relation_json TEXT NOT NULL,
-    PRIMARY KEY (run_id, relation_id),
-    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
-);
-CREATE INDEX IF NOT EXISTS memory_relations_memory_type
-ON memory_relations(run_id, memory_id, relation_type);
-"""

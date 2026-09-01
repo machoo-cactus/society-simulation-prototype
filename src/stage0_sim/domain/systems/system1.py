@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 from stage0_sim.domain.components import (
-    ActionInstance,
     ActionOrigin,
     ActionType,
     ActivityComponent,
@@ -17,7 +16,6 @@ from stage0_sim.domain.components import (
     NavigationStatus,
     PlanAction,
     PlanComponent,
-    PlannerComponent,
     PositionComponent,
     SpatialLocationComponent,
     System1Configuration,
@@ -53,6 +51,35 @@ from stage0_sim.domain.world import (
     WorldMap,
     find_path,
 )
+
+
+def system1_drive_recovered(
+    homeostasis: HomeostasisComponent,
+    drive: DriveType,
+    configuration: System1Configuration,
+) -> bool:
+    return configuration.thresholds[drive].is_recovered(
+        system1_meter_value(homeostasis, drive)
+    )
+
+
+def system1_meter_value(
+    homeostasis: HomeostasisComponent,
+    drive: DriveType,
+) -> float:
+    if drive is DriveType.SATIETY:
+        return homeostasis.satiety
+    if drive is DriveType.ENERGY:
+        return homeostasis.energy
+    return homeostasis.stress
+
+
+def resolve_system1(
+    context: SystemContext,
+    agent_id: str,
+    drive: DriveComponent,
+) -> None:
+    System1ArbitrationSystem()._resolve_transition(context, agent_id, drive)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +125,7 @@ class System1ArbitrationSystem:
                         if drive.correction_action is not None:
                             emit_action_lifecycle(
                                 context,
-                                "action.interrupted",
+                                "action.cancelled",
                                 agent_id,
                                 drive.correction_action,
                                 {"reason": "drive_priority_changed"},
@@ -572,7 +599,7 @@ class System1ArbitrationSystem:
             agent_id, NavigationComponent
         )
         if (
-            isinstance(plan.current, ActionInstance)
+            plan.current is not None
             and plan.current.origin is ActionOrigin.SYSTEM1
             and plan.current.action is ActionType.NAVIGATE
             and plan.current.target == station_id
@@ -663,17 +690,11 @@ class System1ArbitrationSystem:
         drive: DriveType,
         configuration: System1Configuration,
     ) -> bool:
-        return configuration.thresholds[drive].is_recovered(
-            System1ArbitrationSystem._meter_value(homeostasis, drive)
-        )
+        return system1_drive_recovered(homeostasis, drive, configuration)
 
     @staticmethod
     def _meter_value(homeostasis: HomeostasisComponent, drive: DriveType) -> float:
-        if drive is DriveType.SATIETY:
-            return homeostasis.satiety
-        if drive is DriveType.ENERGY:
-            return homeostasis.energy
-        return homeostasis.stress
+        return system1_meter_value(homeostasis, drive)
 
     def _emit_new_breaches(
         self,
@@ -700,6 +721,14 @@ class System1ArbitrationSystem:
             )
 
     def _resolve(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        drive: DriveComponent,
+    ) -> None:
+        resolve_system1(context, agent_id, drive)
+
+    def _resolve_transition(
         self,
         context: SystemContext,
         agent_id: str,
@@ -777,7 +806,7 @@ class System1ArbitrationSystem:
         plan = context.registry.get_component(agent_id, PlanComponent)
         if (
             preserve_system1_navigation
-            and isinstance(plan.current, ActionInstance)
+            and plan.current is not None
             and plan.current.origin is ActionOrigin.SYSTEM1
             and plan.current.action is ActionType.NAVIGATE
         ):
@@ -823,14 +852,10 @@ class System1ArbitrationSystem:
             agent_id,
             plan,
             reason="system1_preemption",
-            current_status="action.interrupted",
+            current_status="action.cancelled",
         )
         if cleared_count:
             System1ArbitrationSystem._clear_activity(context, agent_id)
-            if context.registry.has_component(agent_id, PlannerComponent):
-                context.registry.get_component(
-                    agent_id, PlannerComponent
-                ).needs_plan = True
 
     @staticmethod
     def _clear_affordance_request(context: SystemContext, agent_id: str) -> None:

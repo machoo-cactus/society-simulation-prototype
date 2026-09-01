@@ -369,7 +369,7 @@ class DatasetManagementRepository(Protocol):
     def query_table(
         self,
         run_id: str,
-        table_or_alias: str,
+        table_name: str,
         filters: DatasetQueryFilter | None = None,
     ) -> DatasetQueryPage: ...
 
@@ -633,7 +633,7 @@ class DatasetManagementService:
             ...,
         ] = (
             (
-                "actions",
+                "action_instances",
                 ("action_type", "status", "origin"),
                 (("created_tick", "actions.created_tick", "ticks"),),
             ),
@@ -692,7 +692,7 @@ class DatasetManagementService:
                 (),
             ),
             (
-                "transitions",
+                "transition_samples",
                 ("outcome",),
                 (
                     (
@@ -719,12 +719,16 @@ class DatasetManagementService:
             ),
         )
         for table, dimensions, numeric in table_specs:
+            family = {
+                "action_instances": "actions",
+                "transition_samples": "transitions",
+            }.get(table, table)
             for row in self._iter_table(run_id, table, include_private):
-                distributions["feature.family"][table] += 1
+                distributions["feature.family"][family] += 1
                 for dimension in dimensions:
                     value = row.get(dimension)
                     if value is not None:
-                        distributions[f"{table}.{dimension}"][str(value)] += 1
+                        distributions[f"{family}.{dimension}"][str(value)] += 1
                 for column, name, unit in numeric:
                     value = _number(row.get(column))
                     if value is not None:
@@ -801,7 +805,11 @@ class DatasetManagementService:
                         unit,
                     )
 
-        for row in self._iter_table(run_id, "population", include_private):
+        for row in self._iter_table(
+            run_id,
+            "population_samples",
+            include_private,
+        ):
             distributions["feature.family"]["population"] += 1
             population = row.get("population")
             if not isinstance(population, dict):
@@ -831,7 +839,11 @@ class DatasetManagementService:
                                 numeric_count
                             )
 
-        for row in self._iter_table(run_id, "opportunities", include_private):
+        for row in self._iter_table(
+            run_id,
+            "opportunity_samples",
+            include_private,
+        ):
             distributions["feature.family"]["opportunities"] += 1
             options = row.get("options")
             if isinstance(options, list):
@@ -844,11 +856,11 @@ class DatasetManagementService:
                     "options",
                 )
 
-        for table, metric_name in (
-            ("actions", "actions.count"),
-            ("decisions", "decisions.count"),
-            ("goals", "goals.count"),
-            ("interactions", "interactions.count"),
+        for table, metric_name, unit in (
+            ("action_instances", "actions.count", "actions"),
+            ("decisions", "decisions.count", "decisions"),
+            ("goals", "goals.count", "goals"),
+            ("interactions", "interactions.count", "interactions"),
         ):
             count = sum(1 for _ in self._iter_table(run_id, table, include_private))
             _add_metric(
@@ -857,7 +869,7 @@ class DatasetManagementService:
                 metric_name,
                 run_id,
                 float(count),
-                table,
+                unit,
             )
 
     def _iter_table(

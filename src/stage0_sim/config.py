@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     cors_origins: list[str] = []
     data_directory: Path = Path("data/runs")
     dataset_database: str = "stage0.sqlite3"
-    character_directory: Path = Path("characters")
-    scenario_directory: Path = Path("scenarios")
-    element_directory: Path = Path("elements")
+    character_directory: Path = Path("data/characters")
+    scenario_directory: Path = Path("data/scenarios")
+    element_directory: Path = Path("data/elements")
     llm_provider: str | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None

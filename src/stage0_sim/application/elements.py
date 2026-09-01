@@ -41,7 +41,6 @@ from stage0_sim.domain.components import ActionType
 from stage0_sim.domain.economy import TransactionOperation
 
 ELEMENT_SCHEMA_VERSION = 1
-SCENARIO_SOURCE_SCHEMA_VERSION = 3
 ELEMENT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 LOCAL_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -559,7 +558,7 @@ class CityWorldSourceDefinition(BaseModel):
 class ScenarioSourceDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[3] = 3
+    schema_version: Literal[4] = 4
     name: str = Field(min_length=1)
     seed: int = 0
     dt: float = Field(default=1.0, gt=0)

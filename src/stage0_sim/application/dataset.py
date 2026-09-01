@@ -11,7 +11,6 @@ from stage0_sim.application.data_capture import (
     RecordRelation,
     RecordSource,
     RecordVisibility,
-    ResearchRecord,
     RunnerPhase,
 )
 from stage0_sim.domain.components import (
@@ -31,9 +30,7 @@ from stage0_sim.domain.components import (
     NpcComponent,
     PendingSpeechComponent,
     PerceptionComponent,
-    PlanAction,
     PlanComponent,
-    PlannerComponent,
     PositionComponent,
     PossessionsComponent,
     SpatialLocationComponent,
@@ -60,7 +57,6 @@ __all__ = [
     "RecordRelation",
     "RecordSource",
     "RecordVisibility",
-    "ResearchRecord",
     "RunnerPhase",
 ]
 
@@ -296,15 +292,6 @@ class AgentStateProjector:
                 "channel": speech.channel,
                 **action_lineage_payload(speech.action_instance),
             }
-        if registry.has_component(agent_id, PlannerComponent):
-            planner = registry.get_component(agent_id, PlannerComponent)
-            state["planner"] = {
-                "needs_plan": planner.needs_plan,
-                "request_count": planner.request_count,
-                "failure_count": planner.failure_count,
-                "last_planned_at": planner.last_planned_at,
-                "request_pending": planner.request_pending,
-            }
         if registry.has_component(agent_id, GoalComponent):
             goal_component = registry.get_component(agent_id, GoalComponent)
             state["goals"] = [
@@ -318,7 +305,6 @@ class AgentStateProjector:
                     "completion_policy": (
                         goal.definition.completion_policy.value
                     ),
-                    "legacy": goal.definition.legacy,
                     "status": goal.status.value,
                     "progress": goal.progress,
                     "evidence_count": len(goal.evidence),
@@ -351,20 +337,15 @@ class AgentStateProjector:
                 "latest_turn": (
                     conversation.turns[-1] if conversation.turns else None
                 ),
-                "request_pending": conversation.request_pending,
             }
         return state
 
 
-def _plan_action(action: PlanAction | ActionInstance | None) -> JsonValue:
+def _plan_action(action: ActionInstance | None) -> JsonValue:
     if action is None:
         return None
     content: dict[str, JsonValue] = {
-        "action": (
-            action.action_name
-            if isinstance(action, ActionInstance)
-            else action.action.value
-        )
+        "action": action.action_name
     }
     if action.target is not None:
         content["target"] = action.target
@@ -374,6 +355,5 @@ def _plan_action(action: PlanAction | ActionInstance | None) -> JsonValue:
         content["mode"] = action.mode.value
     if action.offer_id is not None:
         content["offer_id"] = action.offer_id
-    if isinstance(action, ActionInstance):
-        content.update(action_lineage_payload(action))
+    content.update(action_lineage_payload(action))
     return content

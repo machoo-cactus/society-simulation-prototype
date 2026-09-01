@@ -9,7 +9,6 @@ from stage0_sim.domain.components.cognition import (
     CharacterSituationComponent,
     ControllerComponent,
     ConversationComponent,
-    PlannerComponent,
 )
 from stage0_sim.domain.components.goals import (
     ActionOutcome,
@@ -32,8 +31,6 @@ from stage0_sim.domain.components.goals import (
     PossessionThresholdCriterion,
     SimulationTimeCriterion,
     StateComparisonCriterion,
-    legacy_goal_definition,
-    legacy_goal_id,
 )
 from stage0_sim.domain.components.information import InformationNamespaceComponent
 from stage0_sim.domain.components.memory import MemoryComponent
@@ -135,7 +132,6 @@ __all__ = [
     "PerceptionComponent",
     "PlanAction",
     "PlanComponent",
-    "PlannerComponent",
     "PositionComponent",
     "PossessionsComponent",
     "PossessionThresholdCriterion",
@@ -153,6 +149,4 @@ __all__ = [
     "LocationMatchCriterion",
     "default_activity_rates",
     "default_drive_thresholds",
-    "legacy_goal_definition",
-    "legacy_goal_id",
 ]

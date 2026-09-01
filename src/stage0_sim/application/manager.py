@@ -3,7 +3,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from uuid import uuid4
 
-from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.application.agents.contracts import ModelClient
 from stage0_sim.application.character_synthesis import (
     CharacterSituationSynthesizer,
@@ -27,6 +26,7 @@ from stage0_sim.application.data_management import (
     RunSelection,
 )
 from stage0_sim.application.data_query import DatasetQueryService
+from stage0_sim.application.ports import DatasetStore
 from stage0_sim.application.runner import (
     CognitionPhase,
     RunnerStatus,
@@ -65,7 +65,7 @@ class ManagedRun:
 class SimulationManager:
     def __init__(
         self,
-        dataset_store: SQLiteDatasetStore,
+        dataset_store: DatasetStore,
         character_library: CharacterLibrary | None = None,
         telemetry_hz: float = 10.0,
         model_client: ModelClient | None = None,

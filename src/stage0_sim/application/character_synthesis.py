@@ -321,7 +321,7 @@ def build_synthesis_input(
     selected_components: dict[str, JsonValue] = {
         name: cast(dict[str, JsonValue], entity.components[name])
         for name in (
-            "planner",
+            "goals",
             "homeostasis",
             "activity",
             "position",

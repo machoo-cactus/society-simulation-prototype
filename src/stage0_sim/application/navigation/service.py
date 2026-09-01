@@ -5,10 +5,6 @@ from stage0_sim.application.navigation.knowledge import (
     KnownDestination,
     KnownTopologyProjection,
 )
-from stage0_sim.application.navigation.planner import (
-    NavigationPlanningError,
-    RecursiveRoutePlanner,
-)
 from stage0_sim.domain.components import (
     NavigationPrimitive,
     NavigationPrimitiveKind,
@@ -23,6 +19,10 @@ from stage0_sim.domain.world import (
     SpaceRegistry,
     TravelMode,
     TraversalContext,
+)
+from stage0_sim.domain.world.routing import (
+    NavigationPlanningError,
+    RecursiveRoutePlanner,
 )
 
 

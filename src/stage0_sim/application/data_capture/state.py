@@ -24,8 +24,8 @@ _OPERATIONAL_RESOURCE_EXCLUSIONS = {
     "stage0_sim.application.information.retrieval.InformationRetriever": (
         "retrieval service containing an embedding provider"
     ),
-    "stage0_sim.application.macro_work.MacroWorkCoordinator": (
-        "provider-work queue and provider implementations"
+    "stage0_sim.application.memory_recording.MemoryWorkCoordinator": (
+        "memory-work queue and embedding provider"
     ),
     "stage0_sim.application.navigation.service.NavigationService": (
         "derived navigation service referencing the registry"

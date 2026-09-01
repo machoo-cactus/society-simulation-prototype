@@ -4,20 +4,8 @@ from stage0_sim.domain.events import JsonValue
 
 
 @dataclass(slots=True)
-class PlannerComponent:
-    daily_goals: tuple[str, ...] = ()
-    current_priorities: tuple[str, ...] = ()
-    needs_plan: bool = True
-    request_count: int = 0
-    failure_count: int = 0
-    last_planned_at: float | None = None
-    request_pending: bool = False
-
-
-@dataclass(slots=True)
 class ConversationComponent:
     turns: list[str] = field(default_factory=list)
-    request_pending: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,13 +46,12 @@ class ControllerComponent:
     enabled: bool = False
     tool_allowlist: tuple[str, ...] = (
         "navigate_to",
-        "go_to",
         "perform",
         "say",
         "wait",
         "skip",
-        "travel_to",
         "transact",
+        "check_environment",
     )
     state_revision: int = 0
     decision_sequence: int = 0

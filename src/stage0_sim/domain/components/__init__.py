@@ -11,6 +11,30 @@ from stage0_sim.domain.components.cognition import (
     ConversationComponent,
     PlannerComponent,
 )
+from stage0_sim.domain.components.goals import (
+    ActionOutcome,
+    ActionOutcomeCriterion,
+    EventMatchCriterion,
+    GoalComparator,
+    GoalCompletionPolicy,
+    GoalComponent,
+    GoalCriterion,
+    GoalCriterionEffect,
+    GoalDefinition,
+    GoalEvidence,
+    GoalLocationKind,
+    GoalRuntime,
+    GoalStateComponent,
+    GoalStatus,
+    InteractionCountCriterion,
+    InteractionType,
+    LocationMatchCriterion,
+    PossessionThresholdCriterion,
+    SimulationTimeCriterion,
+    StateComparisonCriterion,
+    legacy_goal_definition,
+    legacy_goal_id,
+)
 from stage0_sim.domain.components.information import InformationNamespaceComponent
 from stage0_sim.domain.components.memory import MemoryComponent
 from stage0_sim.domain.components.navigation import (
@@ -19,6 +43,7 @@ from stage0_sim.domain.components.navigation import (
     NavigationPrimitiveKind,
     NavigationStatus,
 )
+from stage0_sim.domain.components.npcs import NpcComponent
 from stage0_sim.domain.components.perception import (
     KnowledgeRecord,
     PerceptionComponent,
@@ -33,9 +58,19 @@ from stage0_sim.domain.components.physiology import (
     default_activity_rates,
 )
 from stage0_sim.domain.components.planning import (
+    ActionGoalLink,
+    ActionInstance,
+    ActionOrigin,
     ActionType,
+    GoalLinkKind,
+    LineageIdGenerator,
     PlanAction,
     PlanComponent,
+)
+from stage0_sim.domain.components.possessions import (
+    PossessionsComponent,
+    TransactionExecutionComponent,
+    TransactionRequestComponent,
 )
 from stage0_sim.domain.components.spatial import MovementComponent, PositionComponent
 from stage0_sim.domain.components.speech import PendingSpeechComponent
@@ -54,6 +89,9 @@ from stage0_sim.domain.components.travel import (
 
 __all__ = [
     "ActionType",
+    "ActionGoalLink",
+    "ActionInstance",
+    "ActionOrigin",
     "AffordanceExecutionComponent",
     "AffordanceRequestComponent",
     "ActivityComponent",
@@ -66,15 +104,32 @@ __all__ = [
     "DriveComponent",
     "DriveThreshold",
     "DriveType",
+    "EventMatchCriterion",
+    "GoalComparator",
+    "GoalCompletionPolicy",
+    "GoalComponent",
+    "GoalCriterion",
+    "GoalCriterionEffect",
+    "GoalDefinition",
+    "GoalEvidence",
+    "GoalLocationKind",
+    "GoalLinkKind",
+    "GoalRuntime",
+    "GoalStateComponent",
+    "GoalStatus",
     "HomeostasisComponent",
     "HomeostasisConfiguration",
     "InformationNamespaceComponent",
+    "InteractionCountCriterion",
+    "InteractionType",
     "MemoryComponent",
+    "LineageIdGenerator",
     "MovementComponent",
     "NavigationComponent",
     "NavigationPrimitive",
     "NavigationPrimitiveKind",
     "NavigationStatus",
+    "NpcComponent",
     "KnowledgeRecord",
     "PendingSpeechComponent",
     "PerceptionComponent",
@@ -82,11 +137,22 @@ __all__ = [
     "PlanComponent",
     "PlannerComponent",
     "PositionComponent",
+    "PossessionsComponent",
+    "PossessionThresholdCriterion",
     "SensesComponent",
     "SpatialLocationComponent",
+    "SimulationTimeCriterion",
+    "StateComparisonCriterion",
     "System1Configuration",
     "System1State",
     "TravelComponent",
+    "TransactionExecutionComponent",
+    "TransactionRequestComponent",
+    "ActionOutcome",
+    "ActionOutcomeCriterion",
+    "LocationMatchCriterion",
     "default_activity_rates",
     "default_drive_thresholds",
+    "legacy_goal_definition",
+    "legacy_goal_id",
 ]

@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-general-hospital-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 4
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-general-hospital",
+  "kind": "building",
+  "name": "Greyford General Hospital",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "98ecc948ec4414eccf5136758f1e0ae8874d356a8d54dfee776b5599fe22e1ea",
+        "id": "greyford-office-evening.map-greyford-general-hospital",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

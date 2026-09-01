@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from stage0_sim.domain.economy import TransactionPoint
 from stage0_sim.domain.events import JsonValue
 
 
@@ -140,10 +141,21 @@ class WorldMap:
     grid: WorldGrid
     zones: tuple[Zone, ...] = ()
     stations: tuple[AffordanceStation, ...] = ()
+    transaction_points: tuple[TransactionPoint, ...] = ()
 
     def __post_init__(self) -> None:
         self._validate_unique_ids("zone", [zone.id for zone in self.zones])
         self._validate_unique_ids("station", [station.id for station in self.stations])
+        self._validate_unique_ids(
+            "transaction point",
+            [point.id for point in self.transaction_points],
+        )
+        destination_ids = [
+            *(zone.id for zone in self.zones),
+            *(station.id for station in self.stations),
+            *(point.id for point in self.transaction_points),
+        ]
+        self._validate_unique_ids("world destination", destination_ids)
         for zone in self.zones:
             for tile in zone.tiles:
                 if not self.grid.contains(tile):
@@ -152,6 +164,11 @@ class WorldMap:
             if not self.grid.is_walkable(station.position):
                 raise ValueError(
                     f"station {station.id} must be placed on a walkable grid tile"
+                )
+        for point in self.transaction_points:
+            if not self.grid.is_walkable(point.position):
+                raise ValueError(
+                    f"transaction point {point.id} must be placed on a walkable grid tile"
                 )
 
     def zone_at(self, coordinate: Coordinate) -> Zone | None:
@@ -162,6 +179,14 @@ class WorldMap:
             return next(station for station in self.stations if station.id == station_id)
         except StopIteration as error:
             raise KeyError(f"unknown station: {station_id}") from error
+
+    def transaction_point(self, point_id: str) -> TransactionPoint:
+        try:
+            return next(
+                point for point in self.transaction_points if point.id == point_id
+            )
+        except StopIteration as error:
+            raise KeyError(f"unknown transaction point: {point_id}") from error
 
     @staticmethod
     def _validate_unique_ids(kind: str, identifiers: list[str]) -> None:

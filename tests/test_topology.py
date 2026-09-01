@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
+from stage0_sim.adapters.elements import FileSystemElementLibrary
 from stage0_sim.application.characters import prepare_scenario
 from stage0_sim.application.navigation import RecursiveRoutePlanner
 from stage0_sim.application.scenario import (
@@ -10,6 +11,7 @@ from stage0_sim.application.scenario import (
     create_runner,
     load_scenario,
 )
+from stage0_sim.application.scenario_resolution import load_and_resolve_scenario
 from stage0_sim.domain.components import SpatialLocationComponent
 from stage0_sim.domain.world import (
     CityWorld,
@@ -34,8 +36,15 @@ CITY_SCENARIO_PATH = ROOT / "scenarios" / "sparse-city-car-demo.json"
 CHARACTER_DIRECTORY = ROOT / "characters"
 
 
+def _load_city_scenario() -> ScenarioDefinition:
+    return load_and_resolve_scenario(
+        CITY_SCENARIO_PATH,
+        FileSystemElementLibrary(ROOT / "elements"),
+    ).scenario
+
+
 def _city_runner(scenario: ScenarioDefinition | None = None):
-    scenario = scenario or load_scenario(CITY_SCENARIO_PATH)
+    scenario = scenario or _load_city_scenario()
     prepared = prepare_scenario(
         scenario,
         FileSystemCharacterLibrary(CHARACTER_DIRECTORY),
@@ -156,10 +165,11 @@ def test_sparse_graph_topology_matches_existing_transport_route() -> None:
 
 
 def test_city_registry_contains_all_entrances_and_destinations() -> None:
-    payload = load_scenario(CITY_SCENARIO_PATH).model_dump(mode="json")
+    payload = _load_city_scenario().model_dump(mode="json")
     payload["world"]["buildings"][0]["entrances"].append(
         {
             "id": "entrance-home-side",
+            "room_id": "building-home.interior",
             "local_coordinate": {"x": 2, "y": 0},
             "neighborhood_node_id": "node-home-entrance",
         }
@@ -168,15 +178,36 @@ def test_city_registry_contains_all_entrances_and_destinations() -> None:
     registry = runner.registry.get_resource(SpaceRegistry)
     city = runner.registry.get_resource(CityWorld)
 
-    assert [space.id for space in registry.spaces()] == [
+    assert [space.id for space in registry.spaces()] == sorted(
+        [
         "building-home",
         "building-office",
         city.id,
-    ]
+        "district-central",
+        "district-east",
+        "district-west",
+        "building-home.interior",
+        "building-office.interior",
+        ]
+    )
     assert [space.id for space in registry.child_spaces(city.id)] == [
+        "district-central",
+        "district-east",
+        "district-west",
+    ]
+    assert [
+        space.id for space in registry.child_spaces("district-west")
+    ] == [
         "building-home",
+    ]
+    assert [
+        space.id for space in registry.child_spaces("district-east")
+    ] == [
         "building-office",
     ]
+    assert [
+        space.id for space in registry.child_spaces("building-home")
+    ] == ["building-home.interior"]
     assert [transition.id for transition in registry.transitions()] == [
         "entrance-home",
         "entrance-home-side",
@@ -193,7 +224,7 @@ def test_city_registry_contains_all_entrances_and_destinations() -> None:
     assert {
         locator.space_id
         for locator in registry.destination_locators("building-home")
-    } == {"building-home"}
+    } == {"building-home.interior"}
     assert len(registry.destination_locators("building-home")) == 2
     outdoor = registry.destination_locators("place-central-square")
     assert len(outdoor) == 1
@@ -203,16 +234,16 @@ def test_city_registry_contains_all_entrances_and_destinations() -> None:
         "node_id": "node-central-junction",
     }
     assert registry.destination_locators("home-entry")
-    assert all(
-        locator.space_id == "building-home"
+    assert {
+        locator.space_id
         for locator in registry.destination_locators("home-entry")
-    )
+    } == {"building-home.interior"}
     spatial = runner.registry.get_component(
         "agent-001",
         SpatialLocationComponent,
     )
     assert spatial.locator == Locator(
-        "building-home",
+        "building-home.interior",
         {"kind": "coordinate", "x": 2, "y": 1},
     )
 

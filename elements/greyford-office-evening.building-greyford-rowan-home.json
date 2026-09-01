@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-rowan-home-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 5
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-rowan-home",
+  "kind": "building",
+  "name": "Rowan Terrace Apartments, Unit 5B",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "4b8edc89c211c1245767fa85cff3590882e8c52cb54b6c86ced47f545dcae541",
+        "id": "greyford-office-evening.map-greyford-rowan-home",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

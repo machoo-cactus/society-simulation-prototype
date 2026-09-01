@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
+from stage0_sim.adapters.elements import FileSystemElementLibrary
 from stage0_sim.adapters.llm import FakeEmbeddingProvider, ScriptedModelClient
 from stage0_sim.application.agents.contracts import (
     CharacterDecisionRequest,
@@ -22,8 +23,8 @@ from stage0_sim.application.navigation import (
 from stage0_sim.application.scenario import (
     ScenarioDefinition,
     create_runner,
-    load_scenario,
 )
+from stage0_sim.application.scenario_resolution import load_and_resolve_scenario
 from stage0_sim.domain.components import (
     ActionType,
     InformationNamespaceComponent,
@@ -56,6 +57,13 @@ from stage0_sim.domain.world import (
 ROOT = Path(__file__).parents[1]
 CITY_SCENARIO_PATH = ROOT / "scenarios" / "sparse-city-car-demo.json"
 CHARACTER_DIRECTORY = ROOT / "characters"
+
+
+def _load_city_scenario() -> ScenarioDefinition:
+    return load_and_resolve_scenario(
+        CITY_SCENARIO_PATH,
+        FileSystemElementLibrary(ROOT / "elements"),
+    ).scenario
 
 
 def _grid(space_id: str, width: int = 3) -> GridTopology:
@@ -115,14 +123,19 @@ def _city_runner(
 
 
 def _city_payload_without_plan() -> dict:
-    payload = load_scenario(CITY_SCENARIO_PATH).model_dump(mode="json")
+    payload = _load_city_scenario().model_dump(mode="json")
     payload["entities"][0]["components"]["plan"] = {"queue": []}
     return payload
 
 
 def _cross_building_navigation_payload() -> dict:
     payload = _city_payload_without_plan()
-    payload["world"]["local_maps"]["map-office"]["stations"] = [
+    office_room = next(
+        room
+        for room in payload["world"]["rooms"]
+        if room["building_id"] == "building-office"
+    )
+    office_room["world"]["stations"] = [
         {
             "id": "office-desk",
             "name": "Office Desk",
@@ -130,6 +143,16 @@ def _cross_building_navigation_payload() -> dict:
             "supported_actions": ["WORK"],
         }
     ]
+    payload["world"]["objects"].append(
+        {
+            "id": "office-desk",
+            "name": "Office Desk",
+            "object_kind": "affordance",
+            "building_id": "building-office",
+            "room_id": office_room["id"],
+            "position": {"x": 2, "y": 1},
+        }
+    )
     components = payload["entities"][0]["components"]
     components["plan"] = {
         "queue": [
@@ -152,7 +175,7 @@ def _cross_building_navigation_payload() -> dict:
                     "name": "Office Desk",
                     "locators": [
                         {
-                            "space_id": "building-office",
+                            "space_id": "building-office.interior",
                             "local_reference": {
                                 "kind": "coordinate",
                                 "x": 2,
@@ -274,7 +297,7 @@ def test_known_topology_hides_global_places_until_information_references_them() 
                     "name": "East Research Office",
                     "locators": [
                         {
-                            "space_id": "building-office",
+                            "space_id": "building-office.interior",
                             "local_reference": {
                                 "kind": "coordinate",
                                 "x": 1,
@@ -313,7 +336,7 @@ def test_known_topology_hides_global_places_until_information_references_them() 
 def test_known_topology_applies_character_visibility_before_projection() -> None:
     payload = _city_payload_without_plan()
     office_locator = {
-        "space_id": "building-office",
+        "space_id": "building-office.interior",
         "local_reference": {"kind": "coordinate", "x": 0, "y": 1},
     }
     payload["entities"][0]["components"]["information"] = {
@@ -607,7 +630,7 @@ def test_travel_to_alias_commits_navigation_instead_of_a_parallel_architecture()
                     "name": "East Research Office",
                     "locators": [
                         {
-                            "space_id": "building-office",
+                            "space_id": "building-office.interior",
                             "local_reference": {
                                 "kind": "coordinate",
                                 "x": 0,
@@ -687,7 +710,7 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
         NavigationPrimitiveKind.TRAVEL,
         NavigationPrimitiveKind.MOVE,
     ]
-    assert location.place_id == "building-office"
+    assert location.place_id == "building-office.interior"
     assert runner.registry.get_component(
         "agent-001",
         PositionComponent,
@@ -698,6 +721,19 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
     assert event_types.index("travel.arrived") < event_types.index(
         "navigation.arrived"
     )
+    started = next(
+        event
+        for event in runner.events.events
+        if event.event_type == "action.started"
+        and event.payload["action"] == "NAVIGATE"
+    )
+    for event_type in ("travel.requested", "travel.arrived", "navigation.arrived"):
+        event = next(
+            candidate
+            for candidate in runner.events.events
+            if candidate.event_type == event_type
+        )
+        assert event.payload["action_id"] == started.payload["action_id"]
     assert not any(
         event.event_type == "navigation.failed"
         for event in runner.events.events
@@ -722,7 +758,7 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
     assert learned.subject_ids == ("agent-001", "office-desk")
     assert learned.content["destination_id"] == "office-desk"
     assert learned.content["locator"] == {
-        "space_id": "building-office",
+        "space_id": "building-office.interior",
         "local_reference": {"kind": "coordinate", "x": 2, "y": 1},
     }
     assert learned.content["transition_ids"] == [
@@ -934,7 +970,7 @@ def test_sparse_navigation_cannot_use_an_unknown_road_edge() -> None:
                     "destination_id": "building-office",
                     "locators": [
                         {
-                            "space_id": "building-office",
+                            "space_id": "building-office.interior",
                             "local_reference": {
                                 "kind": "coordinate",
                                 "x": 0,
@@ -1033,6 +1069,7 @@ def test_navigation_uses_the_planned_outbound_entrance() -> None:
     payload["world"]["buildings"][0]["entrances"].append(
         {
             "id": "entrance-home-alt",
+            "room_id": "building-home.interior",
             "local_coordinate": {"x": 2, "y": 1},
             "neighborhood_node_id": "node-home-alt",
         }
@@ -1093,7 +1130,7 @@ def test_navigation_uses_the_planned_outbound_entrance() -> None:
                     "destination_id": "building-office",
                     "locators": [
                         {
-                            "space_id": "building-office",
+                            "space_id": "building-office.interior",
                             "local_reference": {
                                 "kind": "coordinate",
                                 "x": 0,

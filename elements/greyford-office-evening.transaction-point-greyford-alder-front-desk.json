@@ -1,0 +1,45 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {
+    "alder-room-keycard": 20
+  },
+  "id": "greyford-office-evening.transaction-point-greyford-alder-front-desk",
+  "kind": "object",
+  "name": "Alder Hotel Front Desk",
+  "npc_role": {
+    "content_hash": "a6a02dc9939c788e2e2399e0bf7eaf7d63f1502631ec8aaaefc8282a3330535c",
+    "id": "alder-receptionist",
+    "kind": "npc_role"
+  },
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "greyford-cent",
+          "quantity": 12500
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "alder-room-keycard",
+          "quantity": 1
+        }
+      ],
+      "duration": 20.0,
+      "id": "book-alder-room",
+      "name": "Book one room night"
+    }
+  ],
+  "operation": "STAFFED",
+  "request_timeout": 120.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

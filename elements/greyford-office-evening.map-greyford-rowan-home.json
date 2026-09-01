@@ -1,0 +1,208 @@
+{
+  "blocked": [
+    {
+      "x": 5,
+      "y": 0
+    },
+    {
+      "x": 5,
+      "y": 1
+    },
+    {
+      "x": 5,
+      "y": 2
+    },
+    {
+      "x": 5,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 6
+    },
+    {
+      "x": 5,
+      "y": 7
+    },
+    {
+      "x": 5,
+      "y": 9
+    },
+    {
+      "x": 5,
+      "y": 10
+    },
+    {
+      "x": 6,
+      "y": 5
+    },
+    {
+      "x": 7,
+      "y": 5
+    },
+    {
+      "x": 8,
+      "y": 5
+    },
+    {
+      "x": 11,
+      "y": 5
+    },
+    {
+      "x": 12,
+      "y": 5
+    },
+    {
+      "x": 13,
+      "y": 5
+    },
+    {
+      "x": 14,
+      "y": 5
+    },
+    {
+      "x": 14,
+      "y": 1
+    },
+    {
+      "x": 14,
+      "y": 2
+    },
+    {
+      "x": 7,
+      "y": 9
+    },
+    {
+      "x": 8,
+      "y": 9
+    }
+  ],
+  "description": "",
+  "height": 11,
+  "id": "greyford-office-evening.map-greyford-rowan-home",
+  "kind": "room",
+  "name": "Rowan Terrace Apartments, Unit 5B interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "5f15169e3d6c4e7bd3972d6b41f9749ed052665c793f9ae1d6f8f7907ced09c6",
+        "id": "greyford-office-evening.station-greyford-rowan-home-sofa",
+        "kind": "object"
+      },
+      "id": "station-greyford-rowan-home-sofa",
+      "key": "station-greyford-rowan-home-sofa",
+      "position": {
+        "x": 12,
+        "y": 7
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "78d2dcd9c1317162439f9d837caf84161147e563bc68054a8a5bd969842c3698",
+        "id": "greyford-office-evening.station-greyford-rowan-home-bed",
+        "kind": "object"
+      },
+      "id": "station-greyford-rowan-home-bed",
+      "key": "station-greyford-rowan-home-bed",
+      "position": {
+        "x": 12,
+        "y": 2
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "04d5dc6f4585f59fffb6d79e6202de89b3098ee27ff8cfdd18305053c9a8df32",
+        "id": "greyford-office-evening.station-greyford-rowan-home-dining-table",
+        "kind": "object"
+      },
+      "id": "station-greyford-rowan-home-dining-table",
+      "key": "station-greyford-rowan-home-dining-table",
+      "position": {
+        "x": 8,
+        "y": 3
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "61491e28a04041c7ef91f8b30174f67e70eae321612e7af747279d41fd349d50",
+        "id": "greyford-office-evening.station-greyford-rowan-home-study-desk",
+        "kind": "object"
+      },
+      "id": "station-greyford-rowan-home-study-desk",
+      "key": "station-greyford-rowan-home-study-desk",
+      "position": {
+        "x": 7,
+        "y": 8
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 16,
+  "zones": [
+    {
+      "bounds": {
+        "height": 5,
+        "width": 5,
+        "x": 0,
+        "y": 3
+      },
+      "id": "zone-greyford-rowan-home-entry",
+      "name": "Rowan Terrace Apartment Entry",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 5,
+        "width": 5,
+        "x": 6,
+        "y": 0
+      },
+      "id": "zone-greyford-rowan-home-kitchen",
+      "name": "Apartment Kitchen and Dining Nook",
+      "tiles": null,
+      "type": "HOME_KITCHEN"
+    },
+    {
+      "bounds": {
+        "height": 5,
+        "width": 5,
+        "x": 11,
+        "y": 0
+      },
+      "id": "zone-greyford-rowan-home-bedroom",
+      "name": "Primary Bedroom",
+      "tiles": null,
+      "type": "HOME_BEDROOM"
+    },
+    {
+      "bounds": {
+        "height": 5,
+        "width": 7,
+        "x": 9,
+        "y": 6
+      },
+      "id": "zone-greyford-rowan-home-living",
+      "name": "Apartment Living Room",
+      "tiles": null,
+      "type": "HOME_LIVING"
+    },
+    {
+      "bounds": {
+        "height": 5,
+        "width": 4,
+        "x": 5,
+        "y": 6
+      },
+      "id": "zone-greyford-rowan-home-study",
+      "name": "Small Study",
+      "tiles": null,
+      "type": "HOME_STUDY"
+    }
+  ]
+}

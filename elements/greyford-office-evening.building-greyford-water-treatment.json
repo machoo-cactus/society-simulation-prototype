@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-water-treatment-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-water-treatment",
+  "kind": "building",
+  "name": "Eastbank Water Treatment Works",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "a6ddf9a04045f66a74c18677860d0744bb8fc4539069fae0ffd5f28cc68fd806",
+        "id": "greyford-office-evening.map-greyford-water-treatment",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

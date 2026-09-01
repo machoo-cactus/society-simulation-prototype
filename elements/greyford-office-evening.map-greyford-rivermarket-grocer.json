@@ -1,0 +1,83 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-rivermarket-grocer",
+  "kind": "room",
+  "name": "Rivermarket Grocer and Convenience interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "fef37da8860d948a5345748519410965e69104d1abd1bcc68ea66c39fc1d82b8",
+        "id": "greyford-office-evening.station-greyford-rivermarket-grocer-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-rivermarket-grocer-primary",
+      "key": "station-greyford-rivermarket-grocer-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "10e72f022b01fe34d6e7cd193485d42b5f76491ce71859b650704a10e4a22636",
+        "id": "greyford-office-evening.transaction-point-greyford-rivermarket-checkout",
+        "kind": "object"
+      },
+      "id": "transaction-point-greyford-rivermarket-checkout",
+      "key": "transaction-point-greyford-rivermarket-checkout",
+      "position": {
+        "x": 4,
+        "y": 3
+      },
+      "staff_position": {
+        "x": 4,
+        "y": 2
+      }
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-rivermarket-grocer-entry",
+      "name": "Rivermarket Entrance and Basket Bay",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-rivermarket-grocer-main",
+      "name": "Rivermarket Grocery Aisles and Checkout",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

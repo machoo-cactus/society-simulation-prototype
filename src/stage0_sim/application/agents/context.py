@@ -5,6 +5,11 @@ from stage0_sim.application.agents.contracts import (
     CharacterObservation,
     EnvironmentObservation,
     ObservationFact,
+    ObservedGoal,
+    ObservedItemAmount,
+    ObservedOffer,
+    ObservedPossession,
+    ObservedServiceRequest,
     ObservedTarget,
 )
 from stage0_sim.application.environment import EnvironmentInformationService
@@ -17,16 +22,29 @@ from stage0_sim.domain.components import (
     ActivityComponent,
     CharacterProfileComponent,
     ControllerComponent,
+    GoalComponent,
     HomeostasisComponent,
+    NpcComponent,
     PerceptionComponent,
     PlannerComponent,
     PositionComponent,
+    PossessionsComponent,
     SpatialLocationComponent,
+    TransactionRequestComponent,
 )
+from stage0_sim.domain.economy import (
+    ItemAmount,
+    ItemCatalog,
+    TransactionOffer,
+    TransactionPointRegistry,
+    can_debit,
+)
+from stage0_sim.domain.ecs import Registry
+from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
-from stage0_sim.domain.world import CityWorld, TravelMode
+from stage0_sim.domain.world import CityWorld, TravelMode, WorldGrid, WorldMap
 
 
 def build_character_observation(
@@ -37,9 +55,22 @@ def build_character_observation(
     controller = registry.get_component(agent_id, ControllerComponent)
     position = registry.get_component(agent_id, PositionComponent)
     activity = registry.get_component(agent_id, ActivityComponent)
-    homeostasis = registry.get_component(agent_id, HomeostasisComponent)
     perception = registry.get_component(agent_id, PerceptionComponent)
     world = local_world_for_agent(registry, agent_id)
+    if world is None:
+        world = WorldMap(WorldGrid(1, 1))
+    if registry.has_component(agent_id, NpcComponent):
+        return _build_npc_observation(
+            context,
+            agent_id,
+            profile=profile,
+            controller=controller,
+            position=position,
+            activity=activity,
+            perception=perception,
+            world=world,
+        )
+    homeostasis = registry.get_component(agent_id, HomeostasisComponent)
     renderer = DeterministicPerceptionRenderer()
     known_characters = set(perception.visible_now) | set(perception.knowledge)
     navigation = registry.get_resource(NavigationService)
@@ -47,15 +78,51 @@ def build_character_observation(
         ObservedTarget(
             id=destination.id,
             kind=cast(
-                Literal["zone", "station", "building", "outdoor"],
+                Literal[
+                    "zone",
+                    "station",
+                    "transaction_point",
+                    "building",
+                    "outdoor",
+                ],
                 destination.kind,
             ),
             name=destination.name,
             supported_actions=destination.supported_actions,
+            offers=tuple(
+                ObservedOffer(
+                    id=offer.id,
+                    name=offer.name,
+                    character_gives=tuple(
+                        _observed_item_amount(registry, amount)
+                        for amount in offer.character_gives
+                    ),
+                    character_receives=tuple(
+                        _observed_item_amount(registry, amount)
+                        for amount in offer.character_receives
+                    ),
+                    duration=offer.duration,
+                    available=_offer_available(
+                        registry,
+                        agent_id,
+                        destination.id,
+                        offer,
+                    ),
+                )
+                for offer in destination.offers
+            ),
             available=destination.available,
         )
         for destination in navigation.known_topology.destinations(agent_id)
-        if destination.kind in {"zone", "station", "building", "outdoor"}
+        if destination.kind
+        in {
+            "room",
+            "zone",
+            "station",
+            "transaction_point",
+            "building",
+            "outdoor",
+        }
     ]
     available_travel_modes: tuple[str, ...] = (TravelMode.WALK.value,)
     spatial_payload: dict[str, JsonValue] | None = None
@@ -70,22 +137,7 @@ def build_character_observation(
         available_travel_modes = tuple(
             mode.value for mode in TravelMode if mode in available
         )
-    if registry.has_component(agent_id, SpatialLocationComponent):
-        location = registry.get_component(
-            agent_id, SpatialLocationComponent
-        ).location
-        spatial_payload = {
-            "scale": location.scale.value,
-            "place_id": location.place_id,
-            "local_coordinate": (
-                location.local_coordinate.to_payload()
-                if location.local_coordinate is not None
-                else None
-            ),
-            "network_node_id": location.network_node_id,
-            "edge_id": location.edge_id,
-            "edge_progress": location.edge_progress,
-        }
+    spatial_payload = _spatial_payload(registry, agent_id)
     for target_id in sorted(known_characters):
         target_profile = (
             registry.get_component(target_id, CharacterProfileComponent)
@@ -131,7 +183,13 @@ def build_character_observation(
                 str(target.id)
                 for target in targets
                 if target.kind
-                in {"zone", "station", "building", "outdoor"}
+                in {
+                    "zone",
+                    "station",
+                    "transaction_point",
+                    "building",
+                    "outdoor",
+                }
             ),
         )
         environment = EnvironmentObservation(
@@ -178,4 +236,252 @@ def build_character_observation(
         available_travel_modes=available_travel_modes,
         calendar_time=calendar_time,
         environment=environment,
+        possessions=_observed_possessions(registry, agent_id),
+        structured_goals=_observed_goals(registry, agent_id),
     )
+
+
+def _build_npc_observation(
+    context: SystemContext,
+    agent_id: str,
+    *,
+    profile: CharacterProfileComponent,
+    controller: ControllerComponent,
+    position: PositionComponent,
+    activity: ActivityComponent,
+    perception: PerceptionComponent,
+    world: object,
+) -> CharacterObservation:
+    from stage0_sim.domain.world import WorldMap
+
+    if not isinstance(world, WorldMap):
+        raise TypeError("NPC local world must be a WorldMap")
+    registry = context.registry
+    npc = registry.get_component(agent_id, NpcComponent)
+    point = world.transaction_point(npc.staffed_point_id)
+    available = point.available
+    if registry.has_resource(EnvironmentAvailabilityRegistry):
+        available = registry.get_resource(
+            EnvironmentAvailabilityRegistry
+        ).state(point.id, base_available=point.available).available
+    point_target = ObservedTarget(
+        id=point.id,
+        kind="transaction_point",
+        name=point.name,
+        available=available,
+        offers=tuple(
+            ObservedOffer(
+                id=offer.id,
+                name=offer.name,
+                character_gives=tuple(
+                    _observed_item_amount(registry, amount)
+                    for amount in offer.character_gives
+                ),
+                character_receives=tuple(
+                    _observed_item_amount(registry, amount)
+                    for amount in offer.character_receives
+                ),
+                duration=offer.duration,
+                available=available,
+            )
+            for offer in point.offers
+        ),
+    )
+    visible_targets = [
+        ObservedTarget(
+            id=target_id,
+            kind="character",
+            name=(
+                registry.get_component(
+                    target_id, CharacterProfileComponent
+                ).display_name
+                if registry.has_component(
+                    target_id, CharacterProfileComponent
+                )
+                else target_id
+            ),
+            last_observed_tick=(
+                perception.knowledge[target_id].observed_tick
+                if target_id in perception.knowledge
+                else None
+            ),
+        )
+        for target_id in sorted(
+            set(perception.visible_now) | set(perception.knowledge)
+        )
+    ]
+    service_requests = []
+    for customer_id, request in registry.query(
+        TransactionRequestComponent
+    ):
+        if (
+            request.operator_id != agent_id
+            or request.status != "awaiting_authorization"
+        ):
+            continue
+        offer = point.offer(request.offer_id)
+        service_requests.append(
+            ObservedServiceRequest(
+                request_id=request.request_id,
+                customer_id=customer_id,
+                customer_name=(
+                    registry.get_component(
+                        customer_id, CharacterProfileComponent
+                    ).display_name
+                    if registry.has_component(
+                        customer_id, CharacterProfileComponent
+                    )
+                    else customer_id
+                ),
+                point_id=point.id,
+                offer_id=offer.id,
+                offer_name=offer.name,
+                requested_at=request.requested_at,
+            )
+        )
+    renderer = DeterministicPerceptionRenderer()
+    facts = tuple(
+        ObservationFact(
+            fact_id=item.fact.fact_id,
+            fact_type=item.fact.fact_type,
+            text=renderer.render_fact(item),
+            tick=item.fact.tick,
+            subject_id=item.fact.subject_id,
+        )
+        for item in perception.inbox
+    )
+    perception.inbox.clear()
+    spatial_payload = _spatial_payload(registry, agent_id)
+    zone = world.zone_at(position.coordinate)
+    return CharacterObservation(
+        agent_id=agent_id,
+        display_name=profile.display_name,
+        goals=(),
+        current_priorities=(),
+        simulation_time=context.clock.simulation_time,
+        location_id=zone.id if zone is not None else None,
+        activity=activity.current.value,
+        satiety=None,
+        energy=None,
+        stress=None,
+        targets=(point_target, *visible_targets),
+        facts=facts,
+        recent_outcome=controller.last_outcome,
+        spatial_location=spatial_payload,
+        available_travel_modes=(),
+        possessions=(),
+        service_requests=tuple(
+            sorted(
+                service_requests,
+                key=lambda item: (item.requested_at, item.request_id),
+            )
+        ),
+        structured_goals=_observed_goals(registry, agent_id),
+    )
+
+
+def _spatial_payload(
+    registry: Registry,
+    agent_id: str,
+) -> dict[str, JsonValue] | None:
+    if not registry.has_component(agent_id, SpatialLocationComponent):
+        return None
+    location = registry.get_component(
+        agent_id, SpatialLocationComponent
+    ).location
+    room_id = None
+    building_id = None
+    city_zone_id = None
+    if registry.has_resource(CityWorld):
+        city = registry.get_resource(CityWorld)
+        try:
+            room = city.room(location.place_id)
+        except KeyError:
+            room = None
+        if room is not None:
+            building = city.building(room.building_id)
+            room_id = room.id
+            building_id = building.id
+            city_zone_id = building.district_id
+    return {
+        "scale": location.scale.value,
+        "place_id": location.place_id,
+        "room_id": room_id,
+        "building_id": building_id,
+        "city_zone_id": city_zone_id,
+        "local_coordinate": (
+            location.local_coordinate.to_payload()
+            if location.local_coordinate is not None
+            else None
+        ),
+        "network_node_id": location.network_node_id,
+        "edge_id": location.edge_id,
+        "edge_progress": location.edge_progress,
+    }
+
+
+def _observed_goals(
+    registry: Registry,
+    agent_id: str,
+) -> tuple[ObservedGoal, ...]:
+    if not registry.has_component(agent_id, GoalComponent):
+        return ()
+    return tuple(
+        ObservedGoal(
+            id=goal.definition.id,
+            description=goal.definition.description,
+            status=goal.status.value,
+            priority=goal.definition.priority,
+            tags=goal.definition.tags,
+        )
+        for goal in registry.get_component(agent_id, GoalComponent).goals
+    )
+
+
+def _observed_item_amount(
+    registry: Registry,
+    amount: ItemAmount,
+) -> ObservedItemAmount:
+    item = registry.get_resource(ItemCatalog).item(amount.item_id)
+    return ObservedItemAmount(
+        item_id=item.id,
+        item_name=item.name,
+        unit=item.unit,
+        quantity=amount.quantity,
+    )
+
+
+def _observed_possessions(
+    registry: Registry,
+    agent_id: str,
+) -> tuple[ObservedPossession, ...]:
+    if not registry.has_component(agent_id, PossessionsComponent):
+        return ()
+    catalog = registry.get_resource(ItemCatalog)
+    possessions = registry.get_component(agent_id, PossessionsComponent)
+    return tuple(
+        ObservedPossession(
+            item_id=item_id,
+            item_name=catalog.item(item_id).name,
+            unit=catalog.item(item_id).unit,
+            quantity=quantity,
+        )
+        for item_id, quantity in sorted(possessions.holdings.items())
+    )
+
+
+def _offer_available(
+    registry: Registry,
+    agent_id: str,
+    point_id: str,
+    offer: TransactionOffer,
+) -> bool:
+    if not registry.has_component(agent_id, PossessionsComponent):
+        return False
+    possessions = registry.get_component(agent_id, PossessionsComponent)
+    point_state = registry.get_resource(TransactionPointRegistry).state(
+        point_id
+    )
+    return can_debit(
+        possessions.holdings, offer.character_gives
+    ) and can_debit(point_state.holdings, offer.character_receives)

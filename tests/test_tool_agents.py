@@ -861,7 +861,7 @@ def test_manager_rejects_vital_mutation_while_step_is_waiting(
             SQLiteDatasetStore(tmp_path / "barrier.sqlite3"),
             model_client=_DelayedModelClient(),
         )
-        scenario_id = manager.add_scenario(_tool_scenario())
+        scenario_id = await manager.add_scenario(_tool_scenario())
         run_id = await manager.start_run(scenario_id, realtime=False)
         manager.pause(run_id)
         step = asyncio.create_task(manager.step(run_id))

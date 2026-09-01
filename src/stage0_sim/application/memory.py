@@ -1,9 +1,17 @@
+import hashlib
 import math
 from dataclasses import dataclass
 from functools import partial
 from typing import Protocol, runtime_checkable
 
 from stage0_sim.application.cognition import EmbeddingProvider
+from stage0_sim.application.data_capture import (
+    MemoryId,
+    RecordCategory,
+    RecordJoinIds,
+    RecordSource,
+    ResearchRecorder,
+)
 from stage0_sim.application.information import InformationPersistence, InformationStore
 from stage0_sim.application.information_context import InformationContextCapsule
 from stage0_sim.domain.events import JsonValue
@@ -89,6 +97,7 @@ class EpisodicMemoryStore:
         embedding_provider: EmbeddingProvider,
         configuration: MemoryConfiguration | None = None,
         information_store: InformationStore | None = None,
+        research_recorder: ResearchRecorder | None = None,
     ) -> None:
         self.embedding_provider = embedding_provider
         self.configuration = configuration or MemoryConfiguration()
@@ -97,10 +106,14 @@ class EpisodicMemoryStore:
         self._next_id = 1
         self._persistence: MemoryPersistence | None = None
         self._run_id: str | None = None
+        self.research_recorder = research_recorder
 
     @property
     def records(self) -> tuple[MemoryRecord, ...]:
         return tuple(self._records)
+
+    def bind_research_recorder(self, recorder: ResearchRecorder) -> None:
+        self.research_recorder = recorder
 
     def document(self, memory_id: str) -> InformationDocument:
         document = self.information_store.get(memory_id)
@@ -307,7 +320,29 @@ class EpisodicMemoryStore:
         if not 0 <= importance <= 1:
             raise ValueError("memory importance must be between 0 and 1")
         self._refresh_next_id()
-        embedding = self.embedding_provider.embed((text,))[0]
+        operation_id = f"memory-embedding:{agent_id}:{self._next_id:08d}"
+        self._record_embedding_request(
+            operation_id,
+            agent_id,
+            (text,),
+            "memory_generation",
+        )
+        try:
+            embedding = self.embedding_provider.embed((text,))[0]
+        except Exception as error:
+            self._record_embedding_error(
+                operation_id,
+                agent_id,
+                "memory_generation",
+                error,
+            )
+            raise
+        self._record_embedding_result(
+            operation_id,
+            agent_id,
+            (embedding,),
+            "memory_generation",
+        )
         record = MemoryRecord(
             id=f"memory-{self._next_id:08d}",
             agent_id=agent_id,
@@ -389,7 +424,50 @@ class EpisodicMemoryStore:
         candidates = [record for record in self._records if record.agent_id == agent_id]
         if not candidates:
             return ()
-        query_embedding = self.embedding_provider.embed((query,))[0]
+        operation_id = (
+            f"memory-query:{agent_id}:{simulation_time:.12g}:"
+            f"{len(candidates)}:{top_k}:"
+            f"{hashlib.sha256(query.encode('utf-8')).hexdigest()[:16]}"
+        )
+        if self.research_recorder is not None:
+            self.research_recorder.record(
+                "memory_retrieval_request",
+                {
+                    "operation_id": operation_id,
+                    "query": query,
+                    "simulation_time": simulation_time,
+                    "top_k": top_k,
+                    "candidate_memory_ids": [
+                        record.id for record in candidates
+                    ],
+                },
+                category=RecordCategory.MEMORY,
+                source=RecordSource.APPLICATION,
+                subject_id=agent_id,
+                correlation_id=operation_id,
+            )
+        self._record_embedding_request(
+            operation_id,
+            agent_id,
+            (query,),
+            "memory_query",
+        )
+        try:
+            query_embedding = self.embedding_provider.embed((query,))[0]
+        except Exception as error:
+            self._record_embedding_error(
+                operation_id,
+                agent_id,
+                "memory_query",
+                error,
+            )
+            raise
+        self._record_embedding_result(
+            operation_id,
+            agent_id,
+            (query_embedding,),
+            "memory_query",
+        )
         ranked: list[RetrievedMemory] = []
         for record in candidates:
             semantic = _cosine_similarity(query_embedding, record.embedding)
@@ -415,7 +493,107 @@ class EpisodicMemoryStore:
                 item.record.id,
             )
         )
-        return tuple(ranked[:top_k])
+        selected = tuple(ranked[:top_k])
+        if self.research_recorder is not None:
+            self.research_recorder.record(
+                "memory_retrieval_result",
+                {
+                    "operation_id": operation_id,
+                    "query": query,
+                    "selected": [
+                        {
+                            "memory_id": item.record.id,
+                            "score": item.score,
+                            "semantic_score": item.semantic_score,
+                            "recency_score": item.recency_score,
+                            "text": item.record.text,
+                        }
+                        for item in selected
+                    ],
+                },
+                category=RecordCategory.MEMORY,
+                source=RecordSource.APPLICATION,
+                subject_id=agent_id,
+                correlation_id=operation_id,
+                joins=RecordJoinIds(
+                    memory_id=(
+                        MemoryId(selected[0].record.id)
+                        if selected
+                        else None
+                    )
+                ),
+            )
+        return selected
+
+    def _record_embedding_request(
+        self,
+        operation_id: str,
+        agent_id: str,
+        texts: tuple[str, ...],
+        operation: str,
+    ) -> None:
+        if self.research_recorder is None:
+            return
+        self.research_recorder.record(
+            "embedding_request",
+            {
+                "operation_id": operation_id,
+                "operation": operation,
+                "provider": _provider_name(self.embedding_provider),
+                "texts": list(texts),
+            },
+            category=RecordCategory.MEMORY,
+            source=RecordSource.MODEL_PROVIDER,
+            subject_id=agent_id,
+            correlation_id=operation_id,
+        )
+
+    def _record_embedding_result(
+        self,
+        operation_id: str,
+        agent_id: str,
+        embeddings: tuple[tuple[float, ...], ...],
+        operation: str,
+    ) -> None:
+        if self.research_recorder is None:
+            return
+        self.research_recorder.record(
+            "embedding_result",
+            {
+                "operation_id": operation_id,
+                "operation": operation,
+                "provider": _provider_name(self.embedding_provider),
+                "embeddings": [list(value) for value in embeddings],
+            },
+            category=RecordCategory.MEMORY,
+            source=RecordSource.MODEL_PROVIDER,
+            subject_id=agent_id,
+            correlation_id=operation_id,
+        )
+
+    def _record_embedding_error(
+        self,
+        operation_id: str,
+        agent_id: str,
+        operation: str,
+        error: Exception,
+    ) -> None:
+        if self.research_recorder is None:
+            return
+        self.research_recorder.record(
+            "embedding_error",
+            {
+                "operation_id": operation_id,
+                "operation": operation,
+                "provider": _provider_name(self.embedding_provider),
+                "error_type": type(error).__name__,
+                "message": str(error),
+            },
+            category=RecordCategory.MEMORY,
+            source=RecordSource.MODEL_PROVIDER,
+            subject_id=agent_id,
+            correlation_id=operation_id,
+        )
 
 
 def memory_context_capsules(
@@ -439,6 +617,11 @@ def memory_context_capsules(
             )
         )
     return tuple(capsules)
+
+
+def _provider_name(provider: object) -> str:
+    value = getattr(provider, "provider_name", None)
+    return value if isinstance(value, str) else type(provider).__name__
 
 
 def _episode_document(record: MemoryRecord) -> InformationDocument:

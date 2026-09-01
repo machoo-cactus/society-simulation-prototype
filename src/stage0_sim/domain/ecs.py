@@ -34,6 +34,17 @@ class Registry:
     def entities(self) -> tuple[EntityId, ...]:
         return tuple(sorted(self._entities))
 
+    def component_types(self) -> tuple[type[object], ...]:
+        return tuple(sorted(self._components, key=_type_name))
+
+    def components(self, entity_id: EntityId) -> tuple[object, ...]:
+        self._require_entity(entity_id)
+        return tuple(
+            self._components[component_type][entity_id]
+            for component_type in self.component_types()
+            if entity_id in self._components[component_type]
+        )
+
     def add_component(self, entity_id: EntityId, component: object) -> None:
         self._require_entity(entity_id)
         component_type = type(component)
@@ -98,6 +109,16 @@ class Registry:
     def has_resource(self, resource_type: type[object]) -> bool:
         return resource_type in self._resources
 
+    def resource_items(self) -> tuple[tuple[type[object], object], ...]:
+        return tuple(
+            (resource_type, self._resources[resource_type])
+            for resource_type in sorted(self._resources, key=_type_name)
+        )
+
     def _require_entity(self, entity_id: EntityId) -> None:
         if entity_id not in self._entities:
             raise KeyError(f"unknown entity: {entity_id}")
+
+
+def _type_name(value: type[object]) -> str:
+    return f"{value.__module__}.{value.__qualname__}"

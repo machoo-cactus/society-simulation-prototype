@@ -42,6 +42,11 @@ class CharacterSituationComponent:
     slot_id: str
     label: str
     briefing: str = ""
+    description: str = ""
+    content_hash: str = ""
+    input_hash: str = ""
+    data: dict[str, JsonValue] = field(default_factory=dict)
+    generation: dict[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.slot_id or not self.label:
@@ -59,6 +64,7 @@ class ControllerComponent:
         "wait",
         "skip",
         "travel_to",
+        "transact",
     )
     state_revision: int = 0
     decision_sequence: int = 0

@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "A reusable compact restaurant with dining and staffed checkout service.",
+  "entrances": [
+    {
+      "id": null,
+      "key": "front",
+      "local_coordinate": {
+        "x": 0,
+        "y": 2
+      },
+      "room_key": "dining"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "standard-restaurant",
+  "kind": "building",
+  "name": "Standard Restaurant",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "1b266b20a6cebb3155f618effd53b78d9f1f1e5bf8019541f9b71444f1340538",
+        "id": "standard-restaurant-room",
+        "kind": "room"
+      },
+      "key": "dining",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

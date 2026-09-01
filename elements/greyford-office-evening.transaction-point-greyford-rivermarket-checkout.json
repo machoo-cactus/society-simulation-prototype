@@ -1,0 +1,63 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {
+    "greyford-cent": 10000,
+    "rivermarket-grocery-bag": 60
+  },
+  "id": "greyford-office-evening.transaction-point-greyford-rivermarket-checkout",
+  "kind": "object",
+  "name": "Rivermarket Bottle Return and Checkout",
+  "npc_role": {
+    "content_hash": "459012fc9417cdf8cc17c145970ab7f1e36aeb36c36a57cf2e9b930f7c9b281e",
+    "id": "quayside-cashier",
+    "kind": "npc_role"
+  },
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "returnable-glass-bottle",
+          "quantity": 1
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "greyford-cent",
+          "quantity": 25
+        }
+      ],
+      "duration": 5.0,
+      "id": "redeem-rivermarket-bottle",
+      "name": "Redeem one returnable bottle"
+    },
+    {
+      "character_gives": [
+        {
+          "item_id": "greyford-cent",
+          "quantity": 850
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "rivermarket-grocery-bag",
+          "quantity": 1
+        }
+      ],
+      "duration": 8.0,
+      "id": "buy-rivermarket-grocery-bag",
+      "name": "Buy one grocery bag"
+    }
+  ],
+  "operation": "STAFFED",
+  "request_timeout": 90.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

@@ -26,6 +26,17 @@ GENERAL_CHARACTER_CONTROLLER_PROMPT = (
     "reason, never hidden reasoning."
 )
 
+NPC_CONTROLLER_PROMPT = (
+    "You control one transient embodied service NPC in a deterministic "
+    "simulation. Use exactly one available tool. Your role briefing and "
+    "assigned service requests are your complete private context. Do not "
+    "invent customer balances, hidden plans, prices, stock, permissions, or "
+    "outcomes. Use serve_transaction only with a supplied request ID. The "
+    "simulation validates and applies every transaction. Use say only for "
+    "exact in-world words, wait for bounded physical idleness, and skip when "
+    "no service action is appropriate. Never answer only in prose."
+)
+
 
 def build_messages(request: CharacterDecisionRequest) -> tuple[ModelMessage, ...]:
     observation = request.observation
@@ -41,6 +52,10 @@ def build_messages(request: CharacterDecisionRequest) -> tuple[ModelMessage, ...
         f"template_version={request.profile_template_version}, "
         f"content_hash={request.profile_content_hash}"
     )
+    situation_metadata = (
+        f"content_hash={request.situation_content_hash or 'none'}, "
+        f"input_hash={request.situation_input_hash or 'none'}"
+    )
     if (
         request.retrieved_information
         or request.information_retrieval_performed
@@ -54,8 +69,13 @@ def build_messages(request: CharacterDecisionRequest) -> tuple[ModelMessage, ...
             f"Character description ({profile_metadata}):\n\n"
             f"{request.character_description}"
         )
+    system_prompt = (
+        NPC_CONTROLLER_PROMPT
+        if request.actor_kind == "npc"
+        else GENERAL_CHARACTER_CONTROLLER_PROMPT
+    )
     return (
-        ModelMessage(role="system", content=GENERAL_CHARACTER_CONTROLLER_PROMPT),
+        ModelMessage(role="system", content=system_prompt),
         ModelMessage(
             role="user",
             content=information_context,
@@ -63,7 +83,9 @@ def build_messages(request: CharacterDecisionRequest) -> tuple[ModelMessage, ...
         ModelMessage(
             role="user",
             content=(
-                "Scenario situation (temporary context, not stable identity):\n\n"
+                "Frozen character situation "
+                f"({situation_metadata}; temporary context, not stable "
+                "identity or simulation authority):\n\n"
                 f"{request.situation_description or '(no additional briefing)'}"
             ),
         ),

@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from stage0_sim.adapters.scenarios import FileSystemScenarioLibrary
 from stage0_sim.api.app import app
 from stage0_sim.api.scenarios import router as scenario_router
-from stage0_sim.application.scenario import ScenarioDefinition
+from stage0_sim.application.elements import ScenarioSourceDefinition
 from stage0_sim.application.scenarios import (
     ScenarioConflictError,
     ScenarioLibraryError,
@@ -22,9 +22,9 @@ def scenario(
     name: str = "Library scenario",
     *,
     world: dict[str, object] | None = None,
-) -> ScenarioDefinition:
+) -> ScenarioSourceDefinition:
     payload: dict[str, object] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "name": name,
         "entities": [
             {
@@ -35,7 +35,7 @@ def scenario(
     }
     if world is not None:
         payload["world"] = world
-    return ScenarioDefinition.model_validate(payload)
+    return ScenarioSourceDefinition.model_validate(payload)
 
 
 def test_filesystem_scenario_library_crud_and_stale_conflicts(
@@ -101,7 +101,7 @@ def test_scenario_library_reports_malformed_and_invalid_files(
     library = FileSystemScenarioLibrary(tmp_path)
     (tmp_path / "malformed.json").write_text("{", encoding="utf-8")
     (tmp_path / "invalid.json").write_text(
-        json.dumps({"name": ""}),
+        json.dumps({"schema_version": 3, "name": ""}),
         encoding="utf-8",
     )
 
@@ -122,8 +122,8 @@ def test_scenario_summaries_are_sorted_and_report_world_kind(
         "a-grid",
         scenario("Grid world", world={"width": 2, "height": 3}),
     )
-    city_source = Path("scenarios/sparse-city-car-demo.json")
-    city = ScenarioDefinition.model_validate_json(
+    city_source = Path("scenarios/reference-city-restaurants.json")
+    city = ScenarioSourceDefinition.model_validate_json(
         city_source.read_text(encoding="utf-8")
     )
     library.create("m-city", city)
@@ -133,7 +133,7 @@ def test_scenario_summaries_are_sorted_and_report_world_kind(
     assert [item.id for item in summaries] == ["a-grid", "m-city", "z-none"]
     assert [item.world_kind for item in summaries] == ["grid", "city", "none"]
     assert summaries[0].name == "Grid world"
-    assert summaries[0].schema_version == 2
+    assert summaries[0].schema_version == 3
     assert summaries[0].entity_count == 1
     assert summaries[0].content_hash == scenario_content_hash(
         library.get("a-grid")
@@ -172,6 +172,18 @@ def test_scenario_api_crud_statuses_and_payloads(tmp_path: Path) -> None:
             json={"id": "bad", "scenario": {"name": ""}},
         )
         assert invalid_request.status_code == 422
+        legacy_request = client.post(
+            "/scenarios",
+            json={
+                "id": "legacy",
+                "scenario": {
+                    "schema_version": 2,
+                    "name": "Legacy saved scenario",
+                },
+            },
+        )
+        assert legacy_request.status_code == 422
+        assert "Input should be 3" in legacy_request.text
 
         created = client.post(
             "/scenarios",
@@ -243,21 +255,43 @@ def test_scenario_api_crud_statuses_and_payloads(tmp_path: Path) -> None:
         assert malformed.status_code == 400
 
 
-def test_all_repository_scenarios_round_trip_without_semantic_change(
+def test_schema_v3_reference_scenario_round_trips_without_flattening(
     tmp_path: Path,
 ) -> None:
     library = FileSystemScenarioLibrary(tmp_path)
-    source_paths = sorted(Path("scenarios").glob("*.json"))
+    path = Path("scenarios/reference-city-restaurants.json")
+    original = ScenarioSourceDefinition.model_validate_json(
+        path.read_text(encoding="utf-8")
+    )
 
-    assert source_paths
-    for path in source_paths:
-        original = ScenarioDefinition.model_validate_json(
-            path.read_text(encoding="utf-8")
-        )
-        library.create(path.stem, original)
-        loaded = library.get(path.stem)
-        assert loaded.model_dump(mode="json") == original.model_dump(mode="json")
-        assert "id" not in loaded.model_dump(mode="json")
+    library.create(path.stem, original)
+    loaded = library.get(path.stem)
+
+    assert loaded.model_dump(mode="json") == original.model_dump(mode="json")
+    payload = loaded.model_dump(mode="json")
+    assert "city_zones" in payload["world"]
+    assert "local_maps" not in payload["world"]
+
+
+def test_schema_v2_saved_scenario_has_clear_validation_error(
+    tmp_path: Path,
+) -> None:
+    library = FileSystemScenarioLibrary(tmp_path)
+    (tmp_path / "legacy.json").write_text(
+        json.dumps({"schema_version": 2, "name": "Legacy"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ScenarioLibraryError,
+        match="schema version 3.*schema-version-2",
+    ):
+        library.get("legacy")
+    with pytest.raises(
+        ScenarioLibraryError,
+        match="schema version 3.*schema-version-2",
+    ):
+        library.list()
 
 
 def test_settings_reads_scenario_directory_environment(

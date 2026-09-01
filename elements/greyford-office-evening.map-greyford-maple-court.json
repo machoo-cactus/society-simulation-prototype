@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-maple-court",
+  "kind": "room",
+  "name": "Maple Court Mixed-Income Housing interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "d48ec597576ffc84d13be22eec7c0eae52624b080de59199e0240bb18c1a5a42",
+        "id": "greyford-office-evening.station-greyford-maple-court-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-maple-court-primary",
+      "key": "station-greyford-maple-court-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-maple-court-entry",
+      "name": "Maple Court Housing Entry and Reception",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-maple-court-main",
+      "name": "Maple Court Housing Main Interior",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

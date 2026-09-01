@@ -10,7 +10,6 @@ from stage0_sim.domain.environment import (
     WeatherRuntime,
 )
 from stage0_sim.domain.events import JsonValue
-from stage0_sim.domain.world import SpatialScale
 
 ENVIRONMENT_TOPICS = frozenset(
     {"time", "weather", "surface_conditions", "availability"}
@@ -123,7 +122,7 @@ class EnvironmentInformationService:
         location = self.registry.get_component(
             character_id, SpatialLocationComponent
         ).location
-        if location.scale is SpatialScale.BUILDING:
+        if location.local_coordinate is not None:
             return None
         if location.edge_id is not None:
             return f"edge:{location.edge_id}"

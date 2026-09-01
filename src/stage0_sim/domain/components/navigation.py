@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from stage0_sim.domain.components.planning import ActionInstance
 from stage0_sim.domain.world import Locator, Route, TravelMode
 
 
@@ -16,6 +17,7 @@ class NavigationStatus(StrEnum):
 
 class NavigationPrimitiveKind(StrEnum):
     MOVE = "MOVE"
+    TRANSITION = "TRANSITION"
     TRAVEL = "TRAVEL"
 
 
@@ -26,6 +28,7 @@ class NavigationPrimitive:
     destination: Locator
     route_leg_start: int
     route_leg_end: int
+    transition_id: str | None = None
     destination_id: str | None = None
     mode: TravelMode | None = None
     entrance_transition_id: str | None = None
@@ -53,8 +56,29 @@ class NavigationPrimitive:
                 raise ValueError(
                     "travel navigation route edge IDs must be unique"
                 )
+            if self.transition_id is not None:
+                raise ValueError(
+                    "travel navigation primitives cannot contain transition_id"
+                )
+        elif self.kind is NavigationPrimitiveKind.TRANSITION:
+            if self.transition_id is None:
+                raise ValueError(
+                    "transition navigation primitives require transition_id"
+                )
+            if (
+                self.destination_id is not None
+                or self.mode is not None
+                or self.entrance_transition_id is not None
+                or self.outbound_transition_id is not None
+                or self.origin_network_node_id is not None
+                or self.route_edge_ids
+            ):
+                raise ValueError(
+                    "transition navigation primitives cannot contain travel fields"
+                )
         elif (
-            self.destination_id is not None
+            self.transition_id is not None
+            or self.destination_id is not None
             or self.mode is not None
             or self.entrance_transition_id is not None
             or self.outbound_transition_id is not None
@@ -78,6 +102,7 @@ class NavigationComponent:
     status: NavigationStatus = NavigationStatus.IDLE
     correlation_id: str | None = None
     failure_reason: str | None = None
+    action_instance: ActionInstance | None = None
 
     def request(
         self,
@@ -85,6 +110,7 @@ class NavigationComponent:
         *,
         preferred_mode: TravelMode | None = None,
         reason: str | None = None,
+        action_instance: ActionInstance | None = None,
     ) -> None:
         if not target_id:
             raise ValueError("navigation target_id must not be empty")
@@ -98,6 +124,7 @@ class NavigationComponent:
         self.status = NavigationStatus.REQUESTED
         self.correlation_id = None
         self.failure_reason = None
+        self.action_instance = action_instance
 
     def clear(self, status: NavigationStatus = NavigationStatus.IDLE) -> None:
         self.target_id = None
@@ -110,3 +137,4 @@ class NavigationComponent:
         self.status = status
         self.correlation_id = None
         self.failure_reason = None
+        self.action_instance = None

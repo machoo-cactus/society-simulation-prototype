@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% block title %}Data Management · Stage 0 Simulation{% endblock %}
+{% block eyebrow %}Persisted research catalog and aggregate analysis{% endblock %}
+{% block heading %}Data Management{% endblock %}
+{% block page_targets %}#notice-region,#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region{% endblock %}
+{% block content %}
+<div class="data-management-layout">
+  <section id="data-catalog-region" class="panel" aria-labelledby="data-catalog-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="data-catalog-heading">Persisted run catalog</h2>
+        <p>Newest first from the configured shared API/UI database. {{ catalog.total_count }} matching runs.</p>
+      </div>
+    </header>
+
+    <form class="data-filter-form" method="get" action="/ui/data/" data-ui-targets="#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region">
+      <label>Search run or scenario
+        <input name="search" value="{{ filter_values.search }}">
+      </label>
+      <label>Live/effective status
+        <select name="status">
+          <option value="">All statuses</option>
+          {% for status in run_statuses %}
+            <option value="{{ status }}" {% if filter_values.status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Persisted status
+        <select name="persisted_status">
+          <option value="">All persisted statuses</option>
+          {% for status in run_statuses %}
+            <option value="{{ status }}" {% if filter_values.persisted_status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Scenario name
+        <input name="scenario" value="{{ filter_values.scenario }}">
+      </label>
+      <label>Dataset schema
+        <input name="schema" value="{{ filter_values.schema }}">
+      </label>
+      <label>Capture completeness
+        <select name="capture_complete">
+          <option value="">All capture states</option>
+          <option value="true" {% if filter_values.capture_complete == "true" %}selected{% endif %}>Complete</option>
+          <option value="false" {% if filter_values.capture_complete == "false" %}selected{% endif %}>Incomplete</option>
+        </select>
+      </label>
+      <label>Started on or after
+        <input type="date" name="started_after" value="{{ filter_values.started_after }}">
+      </label>
+      <label>Started before
+        <input type="date" name="started_before" value="{{ filter_values.started_before }}">
+      </label>
+      <label>Completed on or after
+        <input type="date" name="completed_after" value="{{ filter_values.completed_after }}">
+      </label>
+      <label>Completed before
+        <input type="date" name="completed_before" value="{{ filter_values.completed_before }}">
+      </label>
+      <label>Runs per page
+        <select name="limit">
+          {% for limit in (10, 25, 50, 100) %}
+            <option value="{{ limit }}" {% if filter_values.limit == limit|string %}selected{% endif %}>{{ limit }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="data-filter-actions">
+        <button class="primary" type="submit">Apply catalog filters</button>
+        <a href="/ui/data/" data-ui-link-targets="#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region">Clear filters</a>
+      </div>
+    </form>
+
+    <form method="post" action="/ui/data/selection" class="data-catalog-form" data-ui-targets="#notice-region,#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region">
+      <input type="hidden" name="return_to" value="{{ return_to }}">
+      {% for name in ("search", "persisted_status", "status", "scenario", "schema", "capture_complete", "started_after", "started_before", "completed_after", "completed_before", "limit") %}
+        <input type="hidden" name="{{ name }}" value="{{ filter_values[name] }}">
+      {% endfor %}
+      <div class="data-table-scroll">
+        <table class="data-catalog-table">
+          <thead>
+            <tr>
+              <th scope="col">Select</th>
+              <th scope="col">Run and scenario</th>
+              <th scope="col">Status</th>
+              <th scope="col">Schema / seed</th>
+              <th scope="col">Times</th>
+              <th scope="col">Final state</th>
+              <th scope="col">Capture</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for run in catalog.runs %}
+              <tr>
+                <td>
+                  <input type="hidden" name="page_run_id" value="{{ run.run_id }}">
+                  <input id="catalog-run-{{ loop.index }}" type="checkbox" name="run_id" value="{{ run.run_id }}" {% if run.run_id in selected_run_ids %}checked{% endif %}>
+                  <label for="catalog-run-{{ loop.index }}">Select {{ run.run_id }}</label>
+                </td>
+                <td><strong>{{ run.scenario_name }}</strong><br><code>{{ run.run_id }}</code></td>
+                <td>
+                  <span class="status-chip status-chip--{{ run.effective_status }}">{{ run.effective_status }}</span>
+                  <small>
+                    persisted {{ run.persisted_status }}
+                    {% if run.live %}
+                      · live cognition {{ run.live_cognition_phase }}
+                      · {{ "finalized" if run.deletion_ready else "not fully finalized" }}
+                    {% else %}
+                      · historical
+                    {% endif %}
+                  </small>
+                </td>
+                <td>{{ run.dataset_schema_version }}<br>{{ run.world_schema_version }}<br>seed {{ run.seed }}</td>
+                <td>Started {{ run.started_at.isoformat() }}<br>Completed {{ run.completed_at.isoformat() if run.completed_at else "Not completed" }}</td>
+                <td>Tick {{ run.final_tick if run.final_tick is not none else "—" }}<br>Time {{ run.final_simulation_time if run.final_simulation_time is not none else "—" }}</td>
+                <td>{{ run.record_count }} records<br>{{ "Complete" if run.capture_complete else "Incomplete" }}</td>
+                <td class="data-row-actions">
+                  <a href="/ui/datasets/{{ run.run_id }}/">Explore dataset</a>
+                  <a href="/simulation/runs/{{ run.run_id }}/export">Download run dataset</a>
+                  <button class="danger" type="submit" form="delete-run-{{ loop.index }}">Delete this run</button>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="8">No persisted runs match these filters.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="data-selection-actions">
+        <button type="submit" name="action" value="add">Add checked runs</button>
+        <button type="submit" name="action" value="remove">Remove checked runs</button>
+        <button type="submit" name="action" value="add_page">Add current page</button>
+        <button type="submit" name="action" value="remove_page">Remove current page</button>
+        <button type="submit" name="action" value="select_all">Select all filtered runs</button>
+        <button type="submit" name="action" value="clear">Clear selection</button>
+      </div>
+    </form>
+    {% for run in catalog.runs %}
+      <form id="delete-run-{{ loop.index }}" method="post" action="/ui/data/deletion-preview" data-ui-targets="#notice-region,#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region">
+        <input type="hidden" name="run_id" value="{{ run.run_id }}">
+        <input type="hidden" name="selection_fingerprint" value="{{ row_selection_fingerprints[run.run_id] }}">
+        <input type="hidden" name="return_to" value="{{ return_to }}">
+      </form>
+    {% endfor %}
+    <nav class="data-pagination" aria-label="Run catalog pages">
+      <a href="{{ first_page_url }}" data-ui-link-targets="#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region">First page</a>
+      {% if next_page_url %}
+        <a href="{{ next_page_url }}" data-ui-link-targets="#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region">Next page</a>
+      {% endif %}
+    </nav>
+  </section>
+
+  <section id="data-selection-region" class="panel" aria-labelledby="data-selection-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="data-selection-heading">Selected runs</h2>
+        {% set selected_count = selection.run_ids|length if selection else 0 %}
+        <p>{{ selected_count }} {{ "run" if selected_count == 1 else "runs" }} selected across catalog pages.</p>
+      </div>
+    </header>
+    {% if selection %}
+      <ul class="selected-run-list">
+        {% for run in aggregate.per_run %}
+          <li><a href="/ui/datasets/{{ run.run_id }}/">{{ run.scenario_name }} — {{ run.run_id }}</a></li>
+        {% endfor %}
+      </ul>
+      <form method="post" action="/ui/data/deletion-preview" data-ui-targets="#notice-region,#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region">
+        {% for run_id in selection.run_ids %}<input type="hidden" name="run_id" value="{{ run_id }}">{% endfor %}
+        <input type="hidden" name="selection_fingerprint" value="{{ selection.fingerprint }}">
+        <input type="hidden" name="return_to" value="{{ return_to }}">
+        <button class="danger" type="submit">Delete selected runs</button>
+      </form>
+    {% else %}
+      <p class="empty-state">Select persisted runs to calculate aggregate data or permanently delete them.</p>
+    {% endif %}
+  </section>
+
+  <section id="aggregate-data-region" class="panel" aria-labelledby="aggregate-data-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="aggregate-data-heading">Aggregate data</h2>
+        <p>Every result retains run identity; pooled observations and macro per-run values are separate.</p>
+      </div>
+    </header>
+    {% if aggregate %}
+      <form class="private-derived-control" method="get" action="/ui/data/" data-ui-targets="#aggregate-data-region,#data-selection-region,#deletion-region">
+        {% for name in ("search", "persisted_status", "status", "scenario", "schema", "capture_complete", "started_after", "started_before", "completed_after", "completed_before", "cursor", "limit") %}
+          <input type="hidden" name="{{ name }}" value="{{ filter_values[name] }}">
+        {% endfor %}
+        <input type="hidden" name="privacy_setting" value="1">
+        <label class="check">
+          <input type="checkbox" name="exclude_private_derived" value="true" {% if not include_private_derived %}checked{% endif %}>
+          Exclude private-derived aggregates
+        </label>
+        <button type="submit">Apply aggregate privacy setting</button>
+      </form>
+      {% if aggregate.private_derived_warning %}
+        <div class="private-derived-warning" role="alert">
+          {{ aggregate.private_derived_warning }} Raw private payloads are never rendered here.
+        </div>
+      {% endif %}
+      <div class="aggregate-cards">
+        <article><strong>{{ aggregate.per_run|length }}</strong><span>selected runs</span></article>
+        <article><strong>{{ aggregate.compatibility_groups|length }}</strong><span>compatibility groups</span></article>
+        <article><strong>{{ aggregate.metrics|length }}</strong><span>numeric metrics</span></article>
+        <article><strong>{{ aggregate.distributions|length }}</strong><span>distributions</span></article>
+      </div>
+      <section class="aggregate-warnings" aria-labelledby="compatibility-heading">
+        <h3 id="compatibility-heading">Compatibility warnings and groups</h3>
+        {% if aggregate.compatibility_warnings %}
+          <ul>{% for warning in aggregate.compatibility_warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
+        {% else %}
+          <p>No mixed-run compatibility warnings.</p>
+        {% endif %}
+        {% for group in aggregate.compatibility_groups %}
+          <details>
+            <summary>Group {{ loop.index }} — {{ group.scenario_name }} / {{ group.dataset_schema_version }} ({{ group.run_ids|length }} runs)</summary>
+            <p>World {{ group.world_schema_version }}; capture {{ "complete" if group.capture_complete else "incomplete" }}; cognition {{ group.cognition_execution_mode or "unknown" }}.</p>
+            <p>{{ group.run_ids|join(", ") }}</p>
+          </details>
+        {% endfor %}
+      </section>
+      <section class="aggregate-comparison" aria-labelledby="comparison-heading">
+        <h3 id="comparison-heading">Per-run comparison</h3>
+        <div class="data-table-scroll"><table>
+          <thead><tr><th scope="col">Run</th><th scope="col">Scenario</th><th scope="col">Status</th><th scope="col">Records</th><th scope="col">Final tick / time</th><th scope="col">Capture</th></tr></thead>
+          <tbody>{% for run in aggregate.per_run %}
+            <tr>
+              <td><a href="/ui/datasets/{{ run.run_id }}/">{{ run.run_id }}</a></td>
+              <td>{{ run.scenario_name }}</td><td>{{ run.effective_status }}</td><td>{{ run.record_count }}</td>
+              <td>{{ run.final_tick if run.final_tick is not none else "—" }} / {{ run.final_simulation_time if run.final_simulation_time is not none else "—" }}</td>
+              <td>{{ "Complete" if run.capture_complete else "Incomplete" }}</td>
+            </tr>
+          {% endfor %}</tbody>
+        </table></div>
+      </section>
+      <p class="weighting-definition"><strong>Pooled:</strong> {{ aggregate.weighting_definitions.pooled }} <strong>Macro per run:</strong> {{ aggregate.weighting_definitions.macro_per_run }}</p>
+      {% for section in aggregate_sections %}
+        <details class="aggregate-section" {% if loop.first %}open{% endif %}>
+          <summary>{{ section.title }}</summary>
+          {% for name, values in section.distributions %}
+            <h4>{{ name }}</h4>
+            <dl class="facts">{% for value, count in values.items() %}<div><dt>{{ value }}</dt><dd>{{ count }}</dd></div>{% endfor %}</dl>
+          {% endfor %}
+          {% for metric in section.metrics %}
+            <h4>{{ metric.name }}{% if metric.unit %} ({{ metric.unit }}){% endif %}</h4>
+            <div class="metric-comparison">
+              <dl class="facts"><div><dt>Pooled count</dt><dd>{{ metric.pooled.count }}</dd></div><div><dt>Pooled minimum</dt><dd>{{ metric.pooled.minimum if metric.pooled.minimum is not none else "—" }}</dd></div><div><dt>Pooled maximum</dt><dd>{{ metric.pooled.maximum if metric.pooled.maximum is not none else "—" }}</dd></div><div><dt>Pooled mean</dt><dd>{{ metric.pooled.mean if metric.pooled.mean is not none else "—" }}</dd></div><div><dt>Pooled median</dt><dd>{{ metric.pooled.median if metric.pooled.median is not none else "—" }}</dd></div></dl>
+              <dl class="facts"><div><dt>Macro run count</dt><dd>{{ metric.macro_per_run.count }}</dd></div><div><dt>Macro minimum</dt><dd>{{ metric.macro_per_run.minimum if metric.macro_per_run.minimum is not none else "—" }}</dd></div><div><dt>Macro maximum</dt><dd>{{ metric.macro_per_run.maximum if metric.macro_per_run.maximum is not none else "—" }}</dd></div><div><dt>Macro mean</dt><dd>{{ metric.macro_per_run.mean if metric.macro_per_run.mean is not none else "—" }}</dd></div><div><dt>Macro median</dt><dd>{{ metric.macro_per_run.median if metric.macro_per_run.median is not none else "—" }}</dd></div></dl>
+            </div>
+          {% endfor %}
+          {% if not section.distributions and not section.metrics %}<p>No captured rows in this section.</p>{% endif %}
+        </details>
+      {% endfor %}
+      <div class="aggregate-downloads">
+        <a class="button-link" href="{{ export_json_url }}">Download aggregate JSON</a>
+        <a class="button-link" href="{{ export_csv_url }}">Download aggregate CSV</a>
+      </div>
+    {% else %}
+      <p class="empty-state">Aggregate summaries appear after selecting one or more runs.</p>
+    {% endif %}
+  </section>
+
+  <section id="deletion-region" class="panel danger-zone data-deletion" aria-labelledby="deletion-heading">
+    <header class="panel__header">
+      <div><h2 id="deletion-heading">Permanent deletion</h2><p>Deletion is atomic and does not run VACUUM.</p></div>
+    </header>
+    {% if deletion_preview and pending_deletion %}
+      <div role="alert" class="deletion-warning">This permanently deletes the exact runs and all listed persisted rows. SQLite may reuse freed pages; the file is not compacted automatically.</div>
+      <ul>
+        {% for run in deletion_preview.runs %}
+          <li><strong>{{ run.scenario_name }}</strong> — {{ run.run_id }} — {{ run.effective_status }} — {{ run.record_count }} records</li>
+        {% endfor %}
+      </ul>
+      <details open>
+        <summary>Affected table counts</summary>
+        <dl class="facts">{% for table, count in deletion_preview.table_counts.items() %}<div><dt>{{ table }}</dt><dd>{{ count }}</dd></div>{% endfor %}</dl>
+      </details>
+      {% if deletion_preview.eligible %}
+        <form method="post" action="/ui/data/delete" data-ui-targets="#notice-region,#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region">
+          {% for run_id in deletion_preview.selection.run_ids %}<input type="hidden" name="run_id" value="{{ run_id }}">{% endfor %}
+          <input type="hidden" name="selection_fingerprint" value="{{ deletion_preview.selection.fingerprint }}">
+          <input type="hidden" name="confirmation_token" value="{{ deletion_preview.confirmation_token }}">
+          <input type="hidden" name="return_to" value="{{ return_to }}">
+          <label class="check"><input type="checkbox" name="confirmed" value="yes" required> Confirm permanent deletion</label>
+          <label>Type {{ pending_deletion.phrase }} to confirm
+            <input name="confirmation_phrase" required pattern="{{ pending_deletion.phrase }}" autocomplete="off">
+          </label>
+          <button class="danger" type="submit">Permanently delete {{ deletion_preview.runs|length }} runs</button>
+        </form>
+      {% else %}
+        <p role="alert">Deletion is blocked for: {{ deletion_preview.ineligible_run_ids|join(", ") }}.</p>
+      {% endif %}
+    {% else %}
+      <p class="empty-state">Preview selected-run deletion to begin the required two-step confirmation.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

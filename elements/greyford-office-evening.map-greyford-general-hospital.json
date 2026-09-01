@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 8,
+  "id": "greyford-office-evening.map-greyford-general-hospital",
+  "kind": "room",
+  "name": "Greyford General Hospital interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "6106c5d69494119e108393b8ae2ffc7cb3ef0047ed183a3c14562c9de0bacfdb",
+        "id": "greyford-office-evening.station-greyford-general-hospital-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-general-hospital-primary",
+      "key": "station-greyford-general-hospital-primary",
+      "position": {
+        "x": 8,
+        "y": 4
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 10,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-general-hospital-entry",
+      "name": "Greyford General Hospital Entry and Reception",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 8,
+        "width": 7,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-general-hospital-main",
+      "name": "Greyford General Hospital Main Interior",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

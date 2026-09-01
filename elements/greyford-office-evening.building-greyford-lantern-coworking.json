@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-lantern-coworking-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-lantern-coworking",
+  "kind": "building",
+  "name": "Lantern Coworking House",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "e3bd7169f0205bccd1932df521028e9d1afbc1c1efa8a47b58482bf597823111",
+        "id": "greyford-office-evening.map-greyford-lantern-coworking",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

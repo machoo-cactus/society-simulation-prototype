@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-river-library",
+  "kind": "room",
+  "name": "Greyford River Library and Community Rooms interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "c6c141610ce84d69d070501bd5a35122dc742366729808a6c0c3643242a47ca4",
+        "id": "greyford-office-evening.station-greyford-river-library-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-river-library-primary",
+      "key": "station-greyford-river-library-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-river-library-entry",
+      "name": "River Library Welcome and Returns",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-river-library-main",
+      "name": "River Library Stacks and Reading Room",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

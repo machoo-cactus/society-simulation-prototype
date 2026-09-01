@@ -7,6 +7,10 @@ from stage0_sim.domain.components import (
     TravelComponent,
 )
 from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.lineage import (
+    action_lineage_payload,
+    emit_action_lifecycle,
+)
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.spatial_context import (
     local_world_for_agent,
@@ -67,7 +71,6 @@ class PathfindingSystem:
                 in {"ROUTE_PLANNED", "TRAVELLING"}
             ):
                 continue
-            world = local_world_for_agent(context.registry, agent_id)
             occupied = frozenset(
                 coordinate
                 for other_id, coordinate in positions.items()
@@ -77,6 +80,25 @@ class PathfindingSystem:
             movement = context.registry.get_component(agent_id, MovementComponent)
             destination = movement.destination
             if destination is None:
+                continue
+            world = local_world_for_agent(context.registry, agent_id)
+            if world is None:
+                movement.retry_after_tick = (
+                    context.clock.tick + self.retry_interval_ticks
+                )
+                _emit_for_agent(
+                    context,
+                    "path.failed",
+                    agent_id,
+                    {
+                        "origin": position.coordinate.to_payload(),
+                        "destination": destination.to_payload(),
+                        "reason": "local_space_unavailable",
+                        "retry_at_tick": movement.retry_after_tick,
+                        **action_lineage_payload(movement.action_instance),
+                    },
+                    correlation_id=movement.path_correlation_id,
+                )
                 continue
             if position.coordinate == destination:
                 self._complete_path(context, agent_id, movement)
@@ -109,6 +131,7 @@ class PathfindingSystem:
                 {
                     "origin": position.coordinate.to_payload(),
                     "destination": destination.to_payload(),
+                    **action_lineage_payload(movement.action_instance),
                 },
                 correlation_id=correlation_id,
             )
@@ -132,6 +155,7 @@ class PathfindingSystem:
                         "destination": destination.to_payload(),
                         "reason": "no_path",
                         "retry_at_tick": movement.retry_after_tick,
+                        **action_lineage_payload(movement.action_instance),
                     },
                     causation_id=request_id,
                     correlation_id=correlation_id,
@@ -148,6 +172,7 @@ class PathfindingSystem:
                     "destination": destination.to_payload(),
                     "length": len(path),
                     "path": [coordinate.to_payload() for coordinate in path],
+                    **action_lineage_payload(movement.action_instance),
                 },
                 causation_id=request_id,
                 correlation_id=correlation_id,
@@ -166,12 +191,16 @@ class PathfindingSystem:
             context,
             "path.completed",
             agent_id,
-            {"destination": destination.to_payload()},
+            {
+                "destination": destination.to_payload(),
+                **action_lineage_payload(movement.action_instance),
+            },
             correlation_id=movement.path_correlation_id,
         )
         movement.destination = None
         movement.path = ()
         movement.path_correlation_id = None
+        movement.action_instance = None
 
     @staticmethod
     def _invalidate_path(
@@ -184,7 +213,10 @@ class PathfindingSystem:
             context,
             "path.invalidated",
             agent_id,
-            {"reason": reason},
+            {
+                "reason": reason,
+                **action_lineage_payload(movement.action_instance),
+            },
             correlation_id=movement.path_correlation_id,
         )
         movement.path = ()
@@ -209,7 +241,6 @@ class MovementSystem:
                 in {"ROUTE_PLANNED", "TRAVELLING"}
             ):
                 continue
-            world = local_world_for_agent(context.registry, agent_id)
             occupied = {
                 coordinate: other_id
                 for other_id, coordinate in positions.items()
@@ -218,6 +249,21 @@ class MovementSystem:
             position = context.registry.get_component(agent_id, PositionComponent)
             movement = context.registry.get_component(agent_id, MovementComponent)
             if not movement.path:
+                continue
+            world = local_world_for_agent(context.registry, agent_id)
+            if world is None:
+                _emit_for_agent(
+                    context,
+                    "path.invalidated",
+                    agent_id,
+                    {
+                        "reason": "local_space_unavailable",
+                        **action_lineage_payload(movement.action_instance),
+                    },
+                    correlation_id=movement.path_correlation_id,
+                )
+                movement.path = ()
+                movement.retry_after_tick = context.clock.tick + 1
                 continue
             next_coordinate = movement.path[0]
             blocking_agent = occupied.get(next_coordinate)
@@ -230,6 +276,7 @@ class MovementSystem:
                         "reason": "movement_conflict",
                         "blocked_by": blocking_agent,
                         "coordinate": next_coordinate.to_payload(),
+                        **action_lineage_payload(movement.action_instance),
                     },
                     correlation_id=movement.path_correlation_id,
                 )
@@ -244,6 +291,7 @@ class MovementSystem:
                     {
                         "reason": "tile_not_walkable",
                         "coordinate": next_coordinate.to_payload(),
+                        **action_lineage_payload(movement.action_instance),
                     },
                     correlation_id=movement.path_correlation_id,
                 )
@@ -262,7 +310,7 @@ class MovementSystem:
                 spatial = context.registry.get_component(
                     agent_id, SpatialLocationComponent
                 )
-                if spatial.location.scale.value == "BUILDING":
+                if spatial.location.local_coordinate is not None:
                     from dataclasses import replace
 
                     spatial.location = replace(
@@ -277,9 +325,22 @@ class MovementSystem:
                 {
                     "from": previous.to_payload(),
                     "to": next_coordinate.to_payload(),
+                    **action_lineage_payload(movement.action_instance),
                 },
                 correlation_id=movement.path_correlation_id,
             )
+            if movement.action_instance is not None:
+                emit_action_lifecycle(
+                    context,
+                    "action.progressed",
+                    agent_id,
+                    movement.action_instance,
+                    {
+                        "from": previous.to_payload(),
+                        "to": next_coordinate.to_payload(),
+                        "remaining_path_steps": len(movement.path),
+                    },
+                )
 
             if movement.destination == next_coordinate and not movement.path:
                 PathfindingSystem._complete_path(context, agent_id, movement)

@@ -10,7 +10,10 @@
     <title>{% block title %}Stage 0 Simulation{% endblock %}</title>
     <link rel="stylesheet" href="/ui/assets/styles.css">
   </head>
-  <body data-live-refresh="{{ 'true' if auto_refresh else 'false' }}">
+  <body
+    data-live-refresh="{{ 'true' if auto_refresh else 'false' }}"
+    data-ui-page-targets="{% block page_targets %}#notice-region,#simulation-controls,#world-panel,#inspector-panel,#events-panel,#transcript-panel,#dataset-panel{% endblock %}"
+  >
     <a class="skip-link" href="#main">Skip to main content</a>
     <header class="topbar">
       <div>
@@ -20,7 +23,9 @@
       <nav class="page-nav" aria-label="Application">
         <a href="/ui/" {% if request.url.path == "/ui/" %}aria-current="page"{% endif %}>Simulation</a>
         <a href="/ui/scenarios/" {% if request.url.path.startswith("/ui/scenarios") %}aria-current="page"{% endif %}>Scenarios</a>
+        <a href="/ui/elements/" {% if request.url.path.startswith("/ui/elements") %}aria-current="page"{% endif %}>Elements</a>
         <a href="/ui/characters/" {% if request.url.path.startswith("/ui/characters") %}aria-current="page"{% endif %}>Characters</a>
+        <a href="/ui/data/" {% if request.url.path.startswith("/ui/data") or request.url.path.startswith("/ui/datasets") %}aria-current="page"{% endif %}>Data</a>
         <a href="/docs">API</a>
       </nav>
     </header>

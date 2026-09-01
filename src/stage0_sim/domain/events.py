@@ -43,7 +43,7 @@ class DomainEvent:
             "simulation_tick": self.simulation_tick,
             "simulation_time": self.simulation_time,
             "event_type": self.event_type,
-            "payload": dict(self.payload),
+            "payload": self._canonical_value(dict(self.payload)),
         }
         if self.agent_id is not None:
             content["agent_id"] = self.agent_id
@@ -58,6 +58,18 @@ class DomainEvent:
         if reference.startswith(run_prefix):
             return f"event-{reference.removeprefix(run_prefix)}"
         return reference
+
+    def _canonical_value(self, value: JsonValue) -> JsonValue:
+        if isinstance(value, str):
+            return self._canonical_reference(value)
+        if isinstance(value, list):
+            return [self._canonical_value(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: self._canonical_value(item)
+                for key, item in value.items()
+            }
+        return value
 
 
 class EventBus:

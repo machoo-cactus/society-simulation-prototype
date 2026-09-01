@@ -199,3 +199,18 @@ def test_scripted_plan_can_execute_station_affordance() -> None:
     assert sum(
         event.event_type == "affordance.completed" for event in runner.events.events
     ) == 1
+    action_started = next(
+        event
+        for event in runner.events.events
+        if event.event_type == "action.started"
+        and event.payload["action"] == "EAT"
+    )
+    affordance_completed = next(
+        event
+        for event in runner.events.events
+        if event.event_type == "affordance.completed"
+    )
+    assert (
+        affordance_completed.payload["action_id"]
+        == action_started.payload["action_id"]
+    )

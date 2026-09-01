@@ -1,9 +1,12 @@
 from stage0_sim.domain.components import SpatialLocationComponent
 from stage0_sim.domain.ecs import Registry
-from stage0_sim.domain.world import CityWorld, SpatialScale, WorldMap
+from stage0_sim.domain.world import CityWorld, WorldMap
 
 
-def local_world_for_agent(registry: Registry, agent_id: str) -> WorldMap:
+def local_world_for_agent(
+    registry: Registry,
+    agent_id: str,
+) -> WorldMap | None:
     if (
         registry.has_resource(CityWorld)
         and registry.has_component(agent_id, SpatialLocationComponent)
@@ -11,10 +14,9 @@ def local_world_for_agent(registry: Registry, agent_id: str) -> WorldMap:
         location = registry.get_component(
             agent_id, SpatialLocationComponent
         ).location
-        if location.scale is SpatialScale.BUILDING:
-            return registry.get_resource(CityWorld).local_map_for_building(
-                location.place_id
-            )
+        if location.local_coordinate is not None:
+            return registry.get_resource(CityWorld).room_world(location.place_id)
+        return None
     return registry.get_resource(WorldMap)
 
 
@@ -37,7 +39,7 @@ def shares_local_map(
         second_id, SpatialLocationComponent
     ).location
     return (
-        first.scale is SpatialScale.BUILDING
-        and second.scale is SpatialScale.BUILDING
+        first.local_coordinate is not None
+        and second.local_coordinate is not None
         and first.place_id == second.place_id
     )

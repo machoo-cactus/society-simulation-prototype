@@ -6,6 +6,39 @@
   {% endif %}
 {%- endmacro %}
 
+{% macro render_focused_node(node) -%}
+  {% if node.schema.kind == "model" %}
+    <fieldset id="{{ node.control_id }}" class="scenario-group scenario-focused-group" tabindex="-1">
+      <legend>{{ node.schema.label }}</legend>
+      {{ field_errors(node) }}
+      <div class="scenario-fields">
+        {% for child in node.children if child.schema.kind == "scalar" %}
+          {{ render_node(child, 1) }}
+        {% endfor %}
+      </div>
+      {% for child in node.children if child.schema.kind != "scalar" %}
+        <details {% if child.errors %}open{% endif %}>
+          <summary>{{ child.schema.label }}{% if child.errors %} · needs attention{% endif %}</summary>
+          {{ render_node(child, 1) }}
+        </details>
+      {% endfor %}
+    </fieldset>
+  {% elif node.schema.kind == "components" %}
+    <fieldset id="{{ node.control_id }}" class="scenario-group scenario-focused-group" tabindex="-1">
+      <legend>{{ node.schema.label }}</legend>
+      {{ field_errors(node) }}
+      {% for child in node.children %}
+        <details {% if child.errors %}open{% endif %}>
+          <summary>{{ child.schema.label }}{% if child.errors %} · needs attention{% endif %}</summary>
+          {{ render_node(child, 1) }}
+        </details>
+      {% endfor %}
+    </fieldset>
+  {% else %}
+    {{ render_node(node) }}
+  {% endif %}
+{%- endmacro %}
+
 {% macro render_node(node, depth=0, validate=true) -%}
   {% set schema = node.schema %}
   {% if schema.kind == "scalar" %}

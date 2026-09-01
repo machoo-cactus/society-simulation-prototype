@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from stage0_sim.domain.components.physiology import ActivityType
+from stage0_sim.domain.components.planning import ActionInstance
 from stage0_sim.domain.world.model import AffordanceAction
 
 
@@ -11,6 +12,7 @@ class AffordanceRequestComponent:
     source: str
     status: str = "requested"
     failure_reason: str | None = None
+    action_instance: ActionInstance | None = None
 
 
 @dataclass(slots=True)
@@ -24,3 +26,4 @@ class AffordanceExecutionComponent:
     previous_activity: ActivityType
     correlation_id: str
     source: str = "system1"
+    action_instance: ActionInstance | None = None

@@ -13,6 +13,8 @@ class IntentKind(StrEnum):
     SKIP = "skip"
     TRAVEL = "travel"
     NAVIGATE = "navigate"
+    TRANSACT = "transact"
+    SERVE_TRANSACTION = "serve_transaction"
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,3 +65,14 @@ class TravelIntent(CharacterIntent):
 class NavigationIntent(CharacterIntent):
     target_id: str = ""
     preferred_mode: TravelMode | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionIntent(CharacterIntent):
+    point_id: str = ""
+    offer_id: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ServeTransactionIntent(CharacterIntent):
+    request_id: str = ""

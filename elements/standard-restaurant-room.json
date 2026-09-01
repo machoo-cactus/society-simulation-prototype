@@ -1,0 +1,54 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 3
+    }
+  ],
+  "description": "A compact dining room with a table and staffed checkout.",
+  "height": 5,
+  "id": "standard-restaurant-room",
+  "kind": "room",
+  "name": "Restaurant Dining Room",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "3119f555c3c0e05fb218ead6c993a01137b1ce87bef1f3710b1fa39dcb5754e5",
+        "id": "dining-table",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "table",
+      "position": {
+        "x": 2,
+        "y": 2
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "834bc68012a48a2c17a241aec8a790d834e9855bd2bb812ba8bac03362bcf9ee",
+        "id": "restaurant-checkout",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "checkout",
+      "position": {
+        "x": 5,
+        "y": 2
+      },
+      "staff_position": {
+        "x": 5,
+        "y": 1
+      }
+    }
+  ],
+  "room_type": "DINING",
+  "schema_version": 1,
+  "width": 7,
+  "zones": null
+}

@@ -1,8 +1,15 @@
+import hashlib
+import json
 import math
 import re
 from dataclasses import dataclass, replace
 
 from stage0_sim.application.cognition import EmbeddingError, EmbeddingProvider
+from stage0_sim.application.data_capture import (
+    RecordCategory,
+    RecordSource,
+    ResearchRecorder,
+)
 from stage0_sim.application.information.store import InformationStore
 from stage0_sim.application.information_context import InformationContextCapsule
 from stage0_sim.domain.events import JsonValue
@@ -25,6 +32,7 @@ class InformationQuery:
     simulation_time: float = 0.0
     source_scope: tuple[str, ...] | None = None
     token_budget: int = 512
+    operation_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.character_id.strip():
@@ -67,9 +75,11 @@ class InformationRetriever:
         self,
         store: InformationStore,
         embedding_provider: EmbeddingProvider | None = None,
+        research_recorder: ResearchRecorder | None = None,
     ) -> None:
         self.store = store
         self.embedding_provider = embedding_provider
+        self.research_recorder = research_recorder
         self._anchors: dict[
             tuple[str, int, str],
             tuple[_Anchor, ...],
@@ -83,13 +93,33 @@ class InformationRetriever:
         self,
         query: InformationQuery,
     ) -> tuple[RetrievedInformation, ...]:
+        operation_id = query.operation_id or (
+            f"information-query:{query.character_id}:"
+            f"{query.simulation_time:.12g}"
+        )
+        if self.research_recorder is not None:
+            self.research_recorder.record(
+                "information_retrieval_request",
+                {
+                    "operation_id": operation_id,
+                    "query": query,
+                    "provider": _provider_name(self.embedding_provider),
+                },
+                category=RecordCategory.INFORMATION,
+                source=RecordSource.APPLICATION,
+                subject_id=query.character_id,
+                correlation_id=operation_id,
+            )
         namespace_id = character_information_namespace_id(query.character_id)
         query_terms = _terms(query.text)
         query_references = frozenset(
             (*query.referenced_entity_ids, *query.referenced_place_ids)
         )
         query_embedding = (
-            self._embed((query.text,))[0]
+            self._embed(
+                (query.text,),
+                operation_id=f"{operation_id}:query",
+            )[0]
             if self.embedding_provider is not None and query.text.strip()
             else None
         )
@@ -106,7 +136,10 @@ class InformationRetriever:
             for document in documents
         )
         if query_embedding is not None:
-            self._cache_missing_anchor_embeddings(document_anchors)
+            self._cache_missing_anchor_embeddings(
+                document_anchors,
+                operation_id=f"{operation_id}:anchors",
+            )
         ranked: dict[tuple[str, str | None], RetrievedInformation] = {}
         for document, anchors in document_anchors:
             for anchor in anchors:
@@ -184,7 +217,26 @@ class InformationRetriever:
             used_tokens += estimated_tokens
             if used_tokens >= query.token_budget:
                 break
-        return tuple(selected)
+        selected_results = tuple(selected)
+        if self.research_recorder is not None:
+            self.research_recorder.record(
+                "information_retrieval_result",
+                {
+                    "operation_id": operation_id,
+                    "query": query,
+                    "candidate_count": len(ordered),
+                    "selected": selected_results,
+                    "used_token_estimate": used_tokens,
+                },
+                category=RecordCategory.INFORMATION,
+                source=RecordSource.APPLICATION,
+                subject_id=query.character_id,
+                correlation_id=operation_id,
+            )
+        return selected_results
+
+    def bind_research_recorder(self, recorder: ResearchRecorder) -> None:
+        self.research_recorder = recorder
 
     def _document_anchors(
         self,
@@ -203,6 +255,8 @@ class InformationRetriever:
             tuple[InformationDocument, tuple[_Anchor, ...]],
             ...,
         ],
+        *,
+        operation_id: str,
     ) -> None:
         if self.embedding_provider is None:
             return
@@ -219,7 +273,10 @@ class InformationRetriever:
                     missing.append((key, anchor.text))
         if not missing:
             return
-        embeddings = self._embed(tuple(text for _, text in missing))
+        embeddings = self._embed(
+            tuple(text for _, text in missing),
+            operation_id=operation_id,
+        )
         for (key, _), embedding in zip(missing, embeddings, strict=True):
             self._anchor_embeddings[key] = embedding
 
@@ -239,14 +296,67 @@ class InformationRetriever:
     def _embed(
         self,
         texts: tuple[str, ...],
+        *,
+        operation_id: str | None = None,
     ) -> tuple[tuple[float, ...], ...]:
         if self.embedding_provider is None:
             return ()
+        digest = hashlib.sha256(
+            json.dumps(
+                texts,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()[:16]
+        operation_id = operation_id or (
+            f"information-embedding:{len(texts)}:{digest}"
+        )
+        if self.research_recorder is not None:
+            self.research_recorder.record(
+                "embedding_request",
+                {
+                    "operation_id": operation_id,
+                    "operation": "information_retrieval",
+                    "provider": _provider_name(self.embedding_provider),
+                    "texts": list(texts),
+                },
+                category=RecordCategory.INFORMATION,
+                source=RecordSource.MODEL_PROVIDER,
+                correlation_id=operation_id,
+            )
         try:
             embeddings = self.embedding_provider.embed(texts)
-        except EmbeddingError:
+        except EmbeddingError as error:
+            if self.research_recorder is not None:
+                self.research_recorder.record(
+                    "embedding_error",
+                    {
+                        "operation_id": operation_id,
+                        "operation": "information_retrieval",
+                        "provider": _provider_name(self.embedding_provider),
+                        "error_type": type(error).__name__,
+                        "message": str(error),
+                    },
+                    category=RecordCategory.INFORMATION,
+                    source=RecordSource.MODEL_PROVIDER,
+                    correlation_id=operation_id,
+                )
             raise
         except Exception as error:
+            if self.research_recorder is not None:
+                self.research_recorder.record(
+                    "embedding_error",
+                    {
+                        "operation_id": operation_id,
+                        "operation": "information_retrieval",
+                        "provider": _provider_name(self.embedding_provider),
+                        "error_type": type(error).__name__,
+                        "message": str(error),
+                    },
+                    category=RecordCategory.INFORMATION,
+                    source=RecordSource.MODEL_PROVIDER,
+                    correlation_id=operation_id,
+                )
             raise EmbeddingError(
                 f"information retrieval embedding failed: {error}"
             ) from error
@@ -255,7 +365,27 @@ class InformationRetriever:
                 "information retrieval embedding provider returned "
                 "an unexpected result count"
             )
+        if self.research_recorder is not None:
+            self.research_recorder.record(
+                "embedding_result",
+                {
+                    "operation_id": operation_id,
+                    "operation": "information_retrieval",
+                    "provider": _provider_name(self.embedding_provider),
+                    "embeddings": [list(value) for value in embeddings],
+                },
+                category=RecordCategory.INFORMATION,
+                source=RecordSource.MODEL_PROVIDER,
+                correlation_id=operation_id,
+            )
         return embeddings
+
+
+def _provider_name(provider: object | None) -> str | None:
+    if provider is None:
+        return None
+    value = getattr(provider, "provider_name", None)
+    return value if isinstance(value, str) else type(provider).__name__
 
 
 def _derive_anchors(content: JsonValue) -> tuple[_Anchor, ...]:

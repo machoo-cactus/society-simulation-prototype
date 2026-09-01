@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from stage0_sim.domain.components.planning import ActionType
+from stage0_sim.domain.components.planning import ActionInstance, ActionType
 
 
 class DriveType(StrEnum):
@@ -98,3 +98,5 @@ class DriveComponent:
     active_drive: DriveType | None = None
     target_station_id: str | None = None
     critical_drives: frozenset[DriveType] = frozenset()
+    correction_action: ActionInstance | None = None
+    correction_action_started: bool = False

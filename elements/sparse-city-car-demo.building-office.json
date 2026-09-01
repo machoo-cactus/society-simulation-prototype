@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-office",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 1
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "sparse-city-car-demo.building-office",
+  "kind": "building",
+  "name": "East Research Office",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "8be363c779a4a301ef06207aaf8d76500b493539a9056f4139289d1991eed0d3",
+        "id": "sparse-city-car-demo.map-office",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

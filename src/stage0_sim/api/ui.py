@@ -2,9 +2,10 @@ import json
 import math
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import quote
+from urllib.parse import quote, urlencode, urlsplit
 from uuid import uuid4
 
 from fastapi import APIRouter, Request
@@ -20,7 +21,22 @@ from stage0_sim.application.characters import (
     CharacterSummary,
     character_constraint_violations,
     character_content_hash,
+    character_summary,
 )
+from stage0_sim.application.data_capture import (
+    DatasetQueryFilter,
+    DatasetRecordFilter,
+    RecordCategory,
+    RecordVisibility,
+)
+from stage0_sim.application.data_management import (
+    AggregateDatasetSummary,
+    PersistedRunFilter,
+    RunDeletionPreview,
+    RunSelection,
+)
+from stage0_sim.application.element_library import ElementLibrary
+from stage0_sim.application.elements import ScenarioSourceDefinition
 from stage0_sim.application.manager import (
     ManagedRun,
     SimulationConflictError,
@@ -31,8 +47,13 @@ from stage0_sim.application.runner import RunnerStatus
 from stage0_sim.application.scenario import (
     CharacterSlotDefinition,
     CityWorldDefinition,
+    RoomDefinition,
     ScenarioDefinition,
     WorldDefinition,
+)
+from stage0_sim.application.scenario_resolution import (
+    ScenarioResolutionError,
+    resolve_scenario,
 )
 from stage0_sim.application.scenarios import ScenarioLibrary, ScenarioLibraryError
 from stage0_sim.application.telemetry import (
@@ -49,12 +70,15 @@ SESSION_COOKIE = "stage0_operator_session"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 MIN_MAP_ZOOM = 0.5
 MAX_MAP_ZOOM = 3.0
-NEIGHBORHOOD_ZOOM = 1.5
-BUILDING_ZOOM = 2.5
+ROOM_ZOOM = 2.5
+BUILDING_ZOOM = 1.75
+CITY_ZONE_ZOOM = 1.2
 
 EVENT_FILTERS: dict[str, re.Pattern[str]] = {
     "system1": re.compile(r"^(system1\.|threshold\.breached$)"),
-    "actions": re.compile(r"^(plan|planner|affordance|activity|agent|path)\."),
+    "actions": re.compile(
+        r"^(plan|planner|affordance|transaction|activity|agent|path)\."
+    ),
     "dialogue": re.compile(r"^(dialogue|speech)\."),
     "cognition": re.compile(r"^(cognition|tool)\."),
     "perception": re.compile(r"^perception\."),
@@ -66,16 +90,96 @@ EVENT_FILTERS: dict[str, re.Pattern[str]] = {
     "ui": re.compile(r"^simulation\."),
 }
 
+DATASET_VIEW_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("summary", "Run summary"),
+    ("records", "Raw records"),
+    ("goals", "Goals timeline"),
+    ("decisions", "Decisions timeline"),
+    ("actions", "Actions timeline"),
+    ("interactions", "Interactions timeline"),
+    ("transitions", "State transitions"),
+    ("population", "Population aggregates"),
+    ("resource_samples", "Resource samples"),
+    ("resource_flows", "Resource flows"),
+    ("schema", "Schema and data dictionary"),
+)
+DATASET_TABLE_VIEWS: dict[str, str] = {
+    "goals": "goals",
+    "decisions": "decisions",
+    "actions": "actions",
+    "interactions": "interactions",
+    "transitions": "transitions",
+    "population": "population",
+    "resource_samples": "resource_samples",
+    "resource_flows": "resource_flows",
+}
+DATASET_DOMAIN_FILTERS: tuple[tuple[str, str], ...] = (
+    ("goal_id", "Goal ID"),
+    ("plan_id", "Plan ID"),
+    ("action_id", "Action ID"),
+    ("decision_id", "Decision ID"),
+    ("model_request_id", "Model request ID"),
+    ("tool_call_id", "Tool call ID"),
+    ("interaction_id", "Interaction ID"),
+    ("perception_fact_id", "Perception fact ID"),
+    ("memory_id", "Memory ID"),
+    ("transaction_request_id", "Transaction request ID"),
+    ("operator_intervention_id", "Operator intervention ID"),
+)
+DATASET_FILTER_KEYS: tuple[str, ...] = (
+    "record_type",
+    "category",
+    "schema_id",
+    "schema_version",
+    "entity_id",
+    "related_entity_id",
+    "minimum_tick",
+    "maximum_tick",
+    "minimum_time",
+    "maximum_time",
+    "visibility",
+    *(name for name, _ in DATASET_DOMAIN_FILTERS),
+    "status",
+    "outcome",
+    "include_private",
+    "limit",
+)
+DATA_RUN_STATUSES = (
+    "created",
+    "running",
+    "paused",
+    "completed",
+    "stopped",
+    "failed",
+    "capture_failed",
+    "interrupted",
+)
+
 CHARACTER_SECTIONS: tuple[dict[str, Any], ...] = (
     {
         "id": "identity",
         "title": "Identity",
         "fields": (
             ("display_name", "Display name", "text", True),
-            ("age", "Age", "number", False),
+            ("birth_date", "Birth date", "date", False),
             ("gender", "Gender", "text", False),
             ("pronouns", "Pronouns", "text", False),
             ("occupation", "Occupation", "text", False),
+        ),
+    },
+    {
+        "id": "body_measurements",
+        "title": "Body measurements",
+        "fields": (
+            ("measured_on", "Measured on", "date", False),
+            ("height_cm", "Height (cm)", "decimal", False),
+            ("weight_kg", "Weight (kg)", "decimal", False),
+            ("chest_cm", "Chest circumference (cm)", "decimal", False),
+            ("waist_cm", "Waist circumference (cm)", "decimal", False),
+            ("hips_cm", "Hip circumference (cm)", "decimal", False),
+            ("inseam_cm", "Inseam (cm)", "decimal", False),
+            ("shoe_size_system", "Shoe size system", "text", False),
+            ("shoe_size_value", "Shoe size", "decimal", False),
         ),
     },
     {
@@ -83,17 +187,38 @@ CHARACTER_SECTIONS: tuple[dict[str, Any], ...] = (
         "title": "Appearance",
         "fields": (
             ("summary", "Summary", "textarea", False),
-            ("height", "Height", "text", False),
             ("build", "Build", "text", False),
             ("hair", "Hair", "text", False),
             ("eyes", "Eyes", "text", False),
-            ("clothing", "Clothing", "textarea", False),
+            (
+                "clothing",
+                "Legacy exact clothing (prefer Presentation style)",
+                "textarea",
+                False,
+            ),
             (
                 "distinguishing_features",
                 "Distinguishing features",
                 "list",
                 False,
             ),
+        ),
+    },
+    {
+        "id": "health",
+        "title": "Stable health facts",
+        "fields": (
+            ("as_of_date", "Health facts as of", "date", False),
+            ("blood_type", "Blood type", "text", False),
+            ("conditions", "Conditions (JSON records)", "json_array", False),
+            ("allergies", "Allergies (JSON records)", "json_array", False),
+            ("medications", "Medications (JSON records)", "json_array", False),
+            ("disabilities", "Disabilities", "list", False),
+            ("vision", "Vision", "text", False),
+            ("hearing", "Hearing", "text", False),
+            ("mobility", "Mobility", "text", False),
+            ("past_procedures", "Past procedures", "list", False),
+            ("dietary_restrictions", "Dietary restrictions", "list", False),
         ),
     },
     {
@@ -117,6 +242,22 @@ CHARACTER_SECTIONS: tuple[dict[str, Any], ...] = (
             ("residence", "Residence", "text", False),
             ("education", "Education", "textarea", False),
             ("history", "History", "textarea", False),
+        ),
+    },
+    {
+        "id": "financial_situation",
+        "title": "Financial situation",
+        "fields": (
+            ("as_of_date", "Financial facts as of", "date", False),
+            ("currency", "Currency code", "text", False),
+            ("annual_gross_income", "Annual gross income", "money", False),
+            ("income_band", "Income band", "text", False),
+            ("liquid_assets", "Liquid assets", "money", False),
+            ("total_assets", "Total assets", "money", False),
+            ("total_debt", "Total debt", "money", False),
+            ("monthly_fixed_expenses", "Monthly fixed expenses", "money", False),
+            ("housing_tenure", "Housing tenure", "text", False),
+            ("financial_dependents", "Financial dependents", "number", False),
         ),
     },
     {
@@ -147,7 +288,117 @@ CHARACTER_SECTIONS: tuple[dict[str, Any], ...] = (
             ("routines", "Routines", "list", False),
         ),
     },
+    {
+        "id": "presentation",
+        "title": "Stable presentation style",
+        "fields": (
+            ("aesthetic_identity", "Aesthetic identity", "textarea", False),
+            ("wardrobe_palette", "Wardrobe palette", "list", False),
+            ("preferred_silhouettes", "Preferred silhouettes", "list", False),
+            ("preferred_fabrics", "Preferred fabrics", "list", False),
+            ("formality_range", "Formality range", "textarea", False),
+            ("comfort_priorities", "Comfort priorities", "list", False),
+            ("grooming_norms", "Grooming norms", "list", False),
+            ("usual_accessories", "Usual accessories", "list", False),
+            ("practical_constraints", "Practical constraints", "list", False),
+            ("purchase_habits", "Purchase habits", "list", False),
+            ("context_variations", "Context variations", "list", False),
+        ),
+    },
+    {
+        "id": "dispositions",
+        "title": "Usual dispositions",
+        "fields": (
+            ("summary", "Summary", "textarea", False),
+            ("emotional_baseline", "Emotional baseline", "textarea", False),
+            ("sociability", "Sociability", "textarea", False),
+            ("assertiveness", "Assertiveness", "textarea", False),
+            ("patience", "Patience", "textarea", False),
+            ("conscientiousness", "Conscientiousness", "textarea", False),
+            ("openness", "Openness", "textarea", False),
+            ("adaptability", "Adaptability", "textarea", False),
+            ("risk_tolerance", "Risk tolerance", "textarea", False),
+            ("ambiguity_tolerance", "Ambiguity tolerance", "textarea", False),
+            ("impulse_control", "Impulse control", "textarea", False),
+            ("conflict_style", "Conflict style", "textarea", False),
+            ("cooperation_style", "Cooperation style", "textarea", False),
+            ("trust_formation", "Trust formation", "textarea", False),
+            ("boundary_setting", "Boundary setting", "textarea", False),
+            ("help_seeking", "Help seeking", "textarea", False),
+            ("pressure_response", "Pressure response", "textarea", False),
+            ("fatigue_response", "Fatigue response", "textarea", False),
+            ("novelty_response", "Novelty response", "textarea", False),
+            ("authority_response", "Authority response", "textarea", False),
+            ("crowd_response", "Crowd response", "textarea", False),
+        ),
+    },
+    {
+        "id": "communication",
+        "title": "Communication and manner",
+        "fields": (
+            ("cadence", "Cadence", "textarea", False),
+            ("vocabulary", "Vocabulary", "textarea", False),
+            ("directness", "Directness", "textarea", False),
+            ("politeness", "Politeness", "textarea", False),
+            ("humor", "Humor", "textarea", False),
+            ("gesture", "Gesture", "textarea", False),
+            ("posture", "Posture", "textarea", False),
+            ("facial_expressiveness", "Facial expressiveness", "textarea", False),
+            ("listening_style", "Listening style", "textarea", False),
+            ("disagreement_style", "Disagreement style", "textarea", False),
+            ("apology_style", "Apology style", "textarea", False),
+            ("with_intimates", "With intimates", "textarea", False),
+            ("with_colleagues", "With colleagues", "textarea", False),
+            ("with_strangers", "With strangers", "textarea", False),
+            ("with_authority", "With authority", "textarea", False),
+        ),
+    },
+    {
+        "id": "decision_coping",
+        "title": "Decision and coping patterns",
+        "fields": (
+            ("information_seeking", "Information seeking", "textarea", False),
+            ("planning_horizon", "Planning horizon", "textarea", False),
+            ("default_heuristics", "Default heuristics", "list", False),
+            ("error_sensitivity", "Error sensitivity", "textarea", False),
+            ("persistence", "Persistence", "textarea", False),
+            ("recovery_habits", "Recovery habits", "list", False),
+            ("self_soothing", "Self-soothing", "list", False),
+            ("stress_signals", "Stress signals", "list", False),
+            ("disposition_shifts", "Disposition shifts", "list", False),
+        ),
+    },
+    {
+        "id": "life_structure",
+        "title": "Life structure",
+        "fields": (
+            ("household", "Household", "textarea", False),
+            ("recurring_obligations", "Recurring obligations", "list", False),
+            ("material_habits", "Material habits", "list", False),
+            ("typical_possessions", "Typical possessions", "list", False),
+            ("cultural_practices", "Cultural practices", "list", False),
+            ("interests", "Interests", "list", False),
+            ("social_patterns", "Social patterns", "list", False),
+        ),
+    },
+    {
+        "id": "family",
+        "title": "Family facts",
+        "fields": (
+            ("members", "Family members (JSON records)", "json_array", False),
+        ),
+    },
 )
+
+
+@dataclass(slots=True)
+class PendingRunDeletion:
+    run_ids: tuple[str, ...]
+    selection_fingerprint: str
+    filters: PersistedRunFilter | None
+    confirmation_token: str
+    total_records: int
+    phrase: str
 
 
 @dataclass(slots=True)
@@ -175,6 +426,10 @@ class OperatorSession:
     )
     live_refresh: bool = True
     event_start_index: int = 0
+    selected_data_run_ids: tuple[str, ...] = ()
+    selected_data_filters: PersistedRunFilter | None = None
+    include_private_derived: bool = True
+    pending_run_deletion: PendingRunDeletion | None = None
     message: str = ""
     error: str = ""
 
@@ -201,6 +456,24 @@ class OperatorSessionStore:
         self._sessions[next_id] = session
         return next_id, session
 
+    def remove_deleted_run_ids(self, run_ids: tuple[str, ...]) -> None:
+        deleted = frozenset(run_ids)
+        for session in self._sessions.values():
+            session.selected_data_run_ids = tuple(
+                run_id
+                for run_id in session.selected_data_run_ids
+                if run_id not in deleted
+            )
+            if not session.selected_data_run_ids:
+                session.selected_data_filters = None
+            if session.run_id in deleted:
+                session.run_id = None
+                session.selected_agent_id = None
+                session.follow_selected = False
+            pending = session.pending_run_deletion
+            if pending is not None and deleted.intersection(pending.run_ids):
+                session.pending_run_deletion = None
+
 
 def _manager(request: Request) -> SimulationManager:
     return cast(SimulationManager, request.app.state.simulation_manager)
@@ -212,6 +485,28 @@ def _library(request: Request) -> CharacterLibrary:
 
 def _scenario_library(request: Request) -> ScenarioLibrary:
     return cast(ScenarioLibrary, request.app.state.scenario_library)
+
+
+def _element_library(request: Request) -> ElementLibrary:
+    return cast(ElementLibrary, request.app.state.element_library)
+
+
+def _parse_operator_scenario(
+    request: Request,
+    content: str | bytes,
+) -> tuple[
+    ScenarioDefinition,
+    dict[str, JsonValue] | None,
+    dict[str, JsonValue],
+]:
+    raw = json.loads(content)
+    source = ScenarioSourceDefinition.model_validate(raw)
+    resolved = resolve_scenario(source, _element_library(request))
+    return (
+        resolved.scenario,
+        source.model_dump(mode="json"),
+        resolved.provenance_payload(),
+    )
 
 
 def _session(request: Request) -> tuple[str, OperatorSession]:
@@ -251,20 +546,34 @@ def _validation_message(error: ValidationError) -> str:
     return "; ".join(problems)
 
 
-def _stage_scenario(
+async def _stage_scenario(
     manager: SimulationManager,
     session: OperatorSession,
     scenario: ScenarioDefinition,
     source: str,
     character_assignments: dict[str, str] | None = None,
+    *,
+    scenario_source: dict[str, JsonValue] | None = None,
+    resolved_elements: dict[str, JsonValue] | None = None,
 ) -> None:
-    session.scenario = scenario
-    session.scenario_id = None
-    session.scenario_source = source
-    session.character_assignments = {}
-    scenario_id = manager.add_scenario(scenario, character_assignments)
+    try:
+        scenario_id = await manager.add_scenario(
+            scenario,
+            character_assignments,
+            scenario_source=scenario_source,
+            resolved_elements=resolved_elements,
+        )
+    except ValueError:
+        if session.scenario is not scenario:
+            session.scenario = scenario
+            session.scenario_id = None
+            session.scenario_source = source
+            session.character_assignments = {}
+        raise
     prepared = manager.get_scenario(scenario_id)
+    session.scenario = scenario
     session.scenario_id = scenario_id
+    session.scenario_source = source
     session.scenario_warnings = ()
     session.character_assignments = dict(prepared.assignments)
     session.selected_agent_id = None
@@ -285,6 +594,11 @@ async def operator_page(request: Request) -> Response:
             session.follow_selected = False
     manager = _manager(request)
     managed = _managed_run(manager, session)
+    prepared = (
+        manager.get_scenario(session.scenario_id)
+        if session.scenario_id is not None
+        else None
+    )
     snapshot: dict[str, JsonValue] | None = None
     bootstrap: dict[str, JsonValue] | None = None
     agents: list[dict[str, JsonValue]] = []
@@ -332,13 +646,20 @@ async def operator_page(request: Request) -> Response:
             error=True,
         )
         saved_scenarios = ()
-    message, error = session.consume_notice()
+    message, page_error = session.consume_notice()
+    dataset_summary: dict[str, JsonValue] | None = None
+    if session.run_id is not None:
+        try:
+            dataset_summary = manager.data_query.summary(session.run_id)
+        except KeyError:
+            dataset_summary = None
     response = templates.TemplateResponse(
         request,
         "simulation.html",
         {
             "session": session,
             "scenario": session.scenario,
+            "prepared": prepared,
             "saved_scenarios": saved_scenarios,
             "characters": _library(request).list(),
             "slot_characters": _slot_character_options(
@@ -377,8 +698,9 @@ async def operator_page(request: Request) -> Response:
             "selected_event": selected_event,
             "transcript": _transcript(events, agents),
             "recent_perceptions": _recent_perceptions(events, session.selected_agent_id, agents),
+            "dataset_summary": dataset_summary,
             "message": message,
-            "error": error,
+            "error": page_error,
             "refresh_url": str(request.url),
             "auto_refresh": (
                 managed is not None
@@ -387,6 +709,388 @@ async def operator_page(request: Request) -> Response:
             ),
         },
     )
+    return _with_session(response, session_id)
+
+
+@router.get("/datasets/{run_id}/", response_class=HTMLResponse)
+async def dataset_explorer(request: Request, run_id: str) -> Response:
+    session_id, session = _session(request)
+    manager = _manager(request)
+    message, session_error = session.consume_notice()
+    view = request.query_params.get("view", "summary").strip() or "summary"
+    summary: dict[str, JsonValue] | None = None
+    schema: dict[str, JsonValue] | None = None
+    entries: list[dict[str, Any]] = []
+    next_cursor: str | None = None
+    explorer_error = session_error
+    filter_values = _dataset_filter_values(request)
+    include_private = _dataset_include_private(request)
+    query_filter: DatasetQueryFilter | None = None
+    record_filter: DatasetRecordFilter | None = None
+    try:
+        if view not in {value for value, _ in DATASET_VIEW_OPTIONS}:
+            raise ValueError(f"unknown dataset view: {view}")
+        summary = manager.data_query.summary(run_id)
+        query_filter, record_filter = _dataset_filters(
+            request,
+            raw_records=view == "records",
+        )
+        if view == "records":
+            record_page = manager.data_query.records(run_id, record_filter)
+            entries = [
+                _dataset_entry(view, record.to_dict(), index)
+                for index, record in enumerate(record_page.records, start=1)
+            ]
+            next_cursor = (
+                str(record_page.next_cursor)
+                if record_page.next_cursor is not None
+                else None
+            )
+        elif view in DATASET_TABLE_VIEWS:
+            table_page = manager.data_query.table(
+                run_id,
+                DATASET_TABLE_VIEWS[view],
+                query_filter,
+            )
+            entries = [
+                _dataset_entry(view, row, index)
+                for index, row in enumerate(table_page.rows, start=1)
+            ]
+            next_cursor = table_page.next_cursor
+        elif view == "schema":
+            schema = manager.data_query.schema(run_id)
+    except (KeyError, ValueError) as error:
+        explorer_error = str(error).strip("'")
+
+    route = f"/ui/datasets/{quote(run_id, safe='')}/"
+    current_params = _dataset_preserved_params(request, view=view)
+    first_page_url = _dataset_url(route, current_params, remove=("cursor",))
+    next_page_url = (
+        _dataset_url(route, current_params, updates={"cursor": next_cursor})
+        if next_cursor is not None
+        else None
+    )
+    view_links = [
+        {
+            "value": value,
+            "label": label,
+            "url": _dataset_url(
+                route,
+                current_params,
+                updates={"view": value},
+                remove=("cursor",),
+            ),
+        }
+        for value, label in DATASET_VIEW_OPTIONS
+    ]
+    export_params = {
+        key: value
+        for key, value in current_params.items()
+        if key not in {"view", "cursor", "limit"} and value != ""
+    }
+    export_query = urlencode(export_params)
+    export_suffix = f"?{export_query}" if export_query else ""
+    response = templates.TemplateResponse(
+        request,
+        "dataset.html",
+        {
+            "run_id": run_id,
+            "summary": summary,
+            "schema": schema,
+            "entries": entries,
+            "view": view,
+            "view_label": dict(DATASET_VIEW_OPTIONS).get(view, view),
+            "view_options": DATASET_VIEW_OPTIONS,
+            "view_links": view_links,
+            "filter_values": filter_values,
+            "record_categories": tuple(category.value for category in RecordCategory),
+            "record_visibilities": tuple(
+                visibility.value for visibility in RecordVisibility
+            ),
+            "domain_filters": DATASET_DOMAIN_FILTERS,
+            "include_private": include_private,
+            "next_page_url": next_page_url,
+            "first_page_url": first_page_url,
+            "filtered_records_url": (
+                f"/simulation/runs/{quote(run_id, safe='')}"
+                f"/exports/records{export_suffix}"
+            ),
+            "analysis_bundle_url": (
+                f"/simulation/runs/{quote(run_id, safe='')}"
+                f"/exports/bundle{export_suffix}"
+            ),
+            "message": message,
+            "error": "",
+            "explorer_error": explorer_error,
+            "refresh_url": str(request.url),
+            "auto_refresh": False,
+        },
+    )
+    return _with_session(response, session_id)
+
+
+@router.get("/data/", response_class=HTMLResponse)
+async def data_management_page(request: Request) -> Response:
+    session_id, session = _session(request)
+    manager = _manager(request)
+    if "privacy_setting" in request.query_params:
+        session.include_private_derived = (
+            request.query_params.get("exclude_private_derived") != "true"
+        )
+    try:
+        filters = _data_run_filters(request.query_params)
+        catalog = manager.persisted_runs(filters)
+    except ValueError as error:
+        filters = PersistedRunFilter()
+        catalog = manager.persisted_runs(filters)
+        session.notify(str(error), error=True)
+
+    selection = _current_data_selection(manager, session)
+    aggregate: AggregateDatasetSummary | None = None
+    if selection is not None:
+        try:
+            aggregate = manager.aggregate_persisted_runs(
+                selection,
+                include_private_derived=session.include_private_derived,
+            )
+        except (KeyError, ValueError) as error:
+            session.selected_data_run_ids = ()
+            session.pending_run_deletion = None
+            session.notify(str(error).strip("'"), error=True)
+            selection = None
+
+    deletion_preview: RunDeletionPreview | None = None
+    pending = session.pending_run_deletion
+    if pending is not None:
+        try:
+            pending_selection = RunSelection(
+                run_ids=pending.run_ids,
+                fingerprint=pending.selection_fingerprint,
+                filters=pending.filters,
+            )
+            deletion_preview = manager.preview_persisted_run_deletion(
+                pending_selection
+            )
+            if deletion_preview.confirmation_token != pending.confirmation_token:
+                raise ValueError("deletion preview is stale")
+        except (KeyError, ValueError) as error:
+            session.pending_run_deletion = None
+            session.notify(str(error).strip("'"), error=True)
+
+    filter_values = _data_filter_values(request)
+    preserved = {
+        key: value
+        for key, value in filter_values.items()
+        if value != ""
+    }
+    first_page_url = _data_management_url(preserved, remove=("cursor",))
+    next_page_url = (
+        _data_management_url(
+            preserved,
+            updates={"cursor": catalog.next_cursor},
+        )
+        if catalog.next_cursor is not None
+        else None
+    )
+    export_urls = _aggregate_export_urls(
+        selection,
+        session.include_private_derived,
+    )
+    message, page_error = session.consume_notice()
+    response = templates.TemplateResponse(
+        request,
+        "data_management.html",
+        {
+            "catalog": catalog,
+            "filters": filters,
+            "filter_values": filter_values,
+            "run_statuses": DATA_RUN_STATUSES,
+            "selection": selection,
+            "selected_run_ids": frozenset(session.selected_data_run_ids),
+            "row_selection_fingerprints": {
+                run.run_id: manager.data_management.selection(
+                    (run.run_id,)
+                ).fingerprint
+                for run in catalog.runs
+            },
+            "aggregate": aggregate,
+            "aggregate_sections": (
+                _aggregate_sections(aggregate) if aggregate is not None else ()
+            ),
+            "include_private_derived": session.include_private_derived,
+            "export_json_url": export_urls[0],
+            "export_csv_url": export_urls[1],
+            "first_page_url": first_page_url,
+            "next_page_url": next_page_url,
+            "return_to": str(request.url),
+            "deletion_preview": deletion_preview,
+            "pending_deletion": session.pending_run_deletion,
+            "message": message,
+            "error": page_error,
+            "refresh_url": str(request.url),
+            "auto_refresh": False,
+        },
+    )
+    return _with_session(response, session_id)
+
+
+@router.post("/data/selection")
+async def update_data_selection(request: Request) -> Response:
+    session_id, session = _session(request)
+    manager = _manager(request)
+    form = await request.form()
+    action = str(form.get("action", ""))
+    current = list(session.selected_data_run_ids)
+    checked = [str(value) for value in form.getlist("run_id") if str(value)]
+    page_run_ids = [
+        str(value) for value in form.getlist("page_run_id") if str(value)
+    ]
+    try:
+        if action == "add":
+            current.extend(checked)
+        elif action == "remove":
+            remove = frozenset(checked)
+            current = [run_id for run_id in current if run_id not in remove]
+        elif action == "add_page":
+            current.extend(page_run_ids)
+        elif action == "remove_page":
+            remove = frozenset(page_run_ids)
+            current = [run_id for run_id in current if run_id not in remove]
+        elif action == "select_all":
+            selected = manager.data_management.select_all(_data_run_filters(form))
+            current = list(selected.run_ids)
+        elif action == "clear":
+            current = []
+        else:
+            raise ValueError("unknown data selection action")
+        if current:
+            selected_filters = (
+                selected.filters if action == "select_all" else None
+            )
+            resolved = manager.data_management.selection(
+                current,
+                selected_filters,
+            )
+            session.selected_data_run_ids = resolved.run_ids
+            session.selected_data_filters = resolved.filters
+        else:
+            session.selected_data_run_ids = ()
+            session.selected_data_filters = None
+        session.pending_run_deletion = None
+        session.notify(
+            f"{len(session.selected_data_run_ids)} persisted run"
+            f"{'' if len(session.selected_data_run_ids) == 1 else 's'} selected."
+        )
+    except (KeyError, ValueError) as error:
+        session.notify(str(error).strip("'"), error=True)
+    response = _redirect(_safe_data_return_to(form.get("return_to")))
+    return _with_session(response, session_id)
+
+
+@router.post("/data/deletion-preview")
+async def preview_data_deletion(request: Request) -> Response:
+    session_id, session = _session(request)
+    manager = _manager(request)
+    form = await request.form()
+    requested_ids = tuple(
+        str(value) for value in form.getlist("run_id") if str(value)
+    )
+    run_ids = requested_ids or session.selected_data_run_ids
+    try:
+        submitted_fingerprint = str(form.get("selection_fingerprint", ""))
+        candidates = [
+            manager.data_management.selection(run_ids),
+        ]
+        if (
+            tuple(run_ids) == session.selected_data_run_ids
+            and session.selected_data_filters is not None
+        ):
+            candidates.append(
+                manager.data_management.selection(
+                    run_ids,
+                    session.selected_data_filters,
+                )
+            )
+        selection = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.fingerprint == submitted_fingerprint
+            ),
+            None,
+        )
+        if selection is None:
+            raise ValueError("stale or invalid run selection fingerprint")
+        preview = manager.preview_persisted_run_deletion(selection)
+        phrase = f"DELETE {len(selection.run_ids)} RUNS"
+        session.selected_data_run_ids = selection.run_ids
+        session.pending_run_deletion = PendingRunDeletion(
+            run_ids=selection.run_ids,
+            selection_fingerprint=selection.fingerprint,
+            filters=selection.filters,
+            confirmation_token=preview.confirmation_token,
+            total_records=preview.total_records,
+            phrase=phrase,
+        )
+        if not preview.eligible:
+            session.notify(
+                "Deletion is blocked because these runs are active or not fully "
+                "finalized: "
+                + ", ".join(preview.ineligible_run_ids),
+                error=True,
+            )
+        else:
+            session.notify("Review the exact permanent deletion impact.")
+    except (KeyError, ValueError) as error:
+        session.pending_run_deletion = None
+        session.notify(str(error).strip("'"), error=True)
+    response = _redirect(_safe_data_return_to(form.get("return_to")))
+    return _with_session(response, session_id)
+
+
+@router.post("/data/delete")
+async def confirm_data_deletion(request: Request) -> Response:
+    session_id, session = _session(request)
+    manager = _manager(request)
+    form = await request.form()
+    pending = session.pending_run_deletion
+    try:
+        if pending is None:
+            raise ValueError("deletion confirmation expired; preview it again")
+        submitted_ids = tuple(
+            str(value) for value in form.getlist("run_id") if str(value)
+        )
+        if submitted_ids != pending.run_ids:
+            raise ValueError("selected runs changed after deletion preview")
+        if tuple(session.selected_data_run_ids) != pending.run_ids:
+            raise ValueError("session selection changed after deletion preview")
+        if str(form.get("selection_fingerprint", "")) != pending.selection_fingerprint:
+            raise ValueError("stale or invalid run selection fingerprint")
+        if str(form.get("confirmation_token", "")) != pending.confirmation_token:
+            raise ValueError("stale deletion preview or confirmation token")
+        if form.get("confirmed") != "yes":
+            raise ValueError("confirm permanent deletion must be checked")
+        if str(form.get("confirmation_phrase", "")) != pending.phrase:
+            raise ValueError(f"confirmation phrase must exactly match {pending.phrase}")
+        selection = RunSelection(
+            run_ids=pending.run_ids,
+            fingerprint=pending.selection_fingerprint,
+            filters=pending.filters,
+        )
+        result = manager.delete_persisted_runs(
+            selection,
+            pending.confirmation_token,
+        )
+        store = cast(OperatorSessionStore, request.app.state.operator_sessions)
+        store.remove_deleted_run_ids(result.run_ids)
+        session.notify(
+            f"Permanently deleted {len(result.run_ids)} run"
+            f"{'' if len(result.run_ids) == 1 else 's'} and "
+            f"{result.deleted_record_count} records."
+        )
+    except (KeyError, ValueError, SimulationConflictError) as error:
+        session.notify(str(error).strip("'"), error=True)
+    response = _redirect(_safe_data_return_to(form.get("return_to")))
     return _with_session(response, session_id)
 
 
@@ -409,13 +1113,58 @@ async def bundled_demo() -> FileResponse:
 async def load_example(request: Request) -> Response:
     session_id, session = _session(request)
     try:
-        scenario = ScenarioDefinition.model_validate_json(
-            (WEB_DIRECTORY / "demo.json").read_text(encoding="utf-8")
+        scenario, source_payload, resolved_elements = _parse_operator_scenario(
+            request,
+            (WEB_DIRECTORY / "demo.json").read_text(encoding="utf-8"),
         )
-        _stage_scenario(_manager(request), session, scenario, "bundled example")
-    except (OSError, ValidationError, ValueError) as error:
+        await _stage_scenario(
+            _manager(request),
+            session,
+            scenario,
+            "bundled example",
+            scenario_source=source_payload,
+            resolved_elements=resolved_elements,
+        )
+    except (
+        OSError,
+        json.JSONDecodeError,
+        ValidationError,
+        ScenarioResolutionError,
+        ValueError,
+    ) as error:
         message = _validation_message(error) if isinstance(error, ValidationError) else str(error)
         session.notify(f"Could not load example: {message}", error=True)
+    return _with_session(_redirect(), session_id)
+
+
+@router.post("/scenario/situations/regenerate")
+async def regenerate_character_situations(request: Request) -> Response:
+    session_id, session = _session(request)
+    if session.scenario is None or session.scenario_id is None:
+        session.notify(
+            "Stage a complete scenario before regenerating character situations.",
+            error=True,
+        )
+        return _with_session(_redirect(), session_id)
+    if session.run_id is not None:
+        session.notify(
+            "Character situations cannot be regenerated after a run starts.",
+            error=True,
+        )
+        return _with_session(_redirect(), session_id)
+    try:
+        manager = _manager(request)
+        scenario_id = await manager.add_scenario(
+            session.scenario,
+            session.character_assignments,
+        )
+        session.scenario_id = scenario_id
+        session.notify("Character situations were regenerated and staged.")
+    except ValueError as error:
+        session.notify(
+            f"Could not regenerate character situations: {error}",
+            error=True,
+        )
     return _with_session(_redirect(), session_id)
 
 
@@ -432,16 +1181,23 @@ async def upload_scenario(request: Request) -> Response:
         session.notify("Scenario files must be 5 MB or smaller.", error=True)
         return _with_session(_redirect(), session_id)
     try:
-        scenario = ScenarioDefinition.model_validate_json(content)
-        _stage_scenario(
+        scenario, source_payload, resolved_elements = _parse_operator_scenario(
+            request,
+            content,
+        )
+        await _stage_scenario(
             _manager(request),
             session,
             scenario,
             upload.filename,
+            scenario_source=source_payload,
+            resolved_elements=resolved_elements,
         )
     except ValidationError as error:
         session.notify(f"Scenario is invalid: {_validation_message(error)}", error=True)
-    except ValueError as error:
+    except json.JSONDecodeError as error:
+        session.notify(f"Scenario is invalid JSON: {error}", error=True)
+    except (ScenarioResolutionError, ValueError) as error:
         session.notify(f"Scenario is invalid: {error}", error=True)
     return _with_session(_redirect(), session_id)
 
@@ -462,7 +1218,7 @@ async def assign_characters(request: Request) -> Response:
             if not character_id:
                 raise ValueError(f"Select a character for {entity.id}")
             assignments[entity.id] = character_id
-        _stage_scenario(
+        await _stage_scenario(
             _manager(request),
             session,
             session.scenario,
@@ -483,20 +1239,28 @@ def _slot_character_options(
     if scenario is None:
         return {}
     summaries = library.list()
+    reference_date = (
+        scenario.calendar.start_datetime.date()
+        if scenario.calendar is not None
+        else None
+    )
     options: dict[str, tuple[CharacterSummary, ...]] = {}
     for entity in scenario.entities:
         raw_slot = entity.components.get("character_slot")
         if raw_slot is None:
             continue
         slot = CharacterSlotDefinition.model_validate(raw_slot)
-        options[entity.id] = tuple(
-            summary
-            for summary in summaries
-            if not character_constraint_violations(
-                library.get(summary.id),
+        eligible: list[CharacterSummary] = []
+        for summary in summaries:
+            character = library.get(summary.id)
+            if character_constraint_violations(
+                character,
                 slot,
-            )
-        )
+                reference_date=reference_date,
+            ):
+                continue
+            eligible.append(character_summary(character, reference_date))
+        options[entity.id] = tuple(eligible)
     return options
 
 
@@ -514,10 +1278,12 @@ async def start_run(request: Request) -> Response:
     form = await request.form()
     try:
         speed = float(str(form.get("speed", session.scenario.speed if session.scenario else 1)))
+        npc_control_mode = str(form.get("npc_control_mode", "")).strip() or None
         session.run_id = await manager.start_run(
             session.scenario_id,
             realtime=True,
             speed=speed,
+            npc_control_mode=npc_control_mode,
         )
         session.event_start_index = 0
         session.notify("Simulation started.")
@@ -612,8 +1378,10 @@ async def update_view(request: Request) -> Response:
     if form.get("selected_agent_present") == "yes":
         selected_agent = str(form.get("selected_agent", "")).strip()
         session.selected_agent_id = selected_agent or None
+        if session.selected_agent_id is None:
+            session.follow_selected = False
     level = str(form.get("view_level", session.view_level)).lower()
-    if level in {"auto", "building", "neighborhood", "city"}:
+    if level in {"auto", "room", "building", "city_zone", "city"}:
         session.view_level = level
     if form.get("follow_present") == "yes":
         session.follow_selected = (
@@ -836,7 +1604,7 @@ def _character_from_form(
     raw: dict[str, Any]
     if current is None:
         raw = {
-            "schema_version": 1,
+            "schema_version": 2,
             "id": str(form.get("id", "")).strip(),
             "template_id": str(form.get("template_id", "human-v1")).strip(),
             "identity": {},
@@ -856,6 +1624,14 @@ def _character_from_form(
                 values[field_name] = [line.strip() for line in text.splitlines() if line.strip()]
             elif field_type == "number":
                 values[field_name] = int(text) if text else None
+            elif field_type == "decimal":
+                values[field_name] = float(text) if text else None
+            elif field_type == "money":
+                values[field_name] = int(text) if text else None
+            elif field_type == "json_array":
+                values[field_name] = _parse_json_array(text, field_name.replace("_", " ").title())
+            elif field_type == "date":
+                values[field_name] = text or None
             else:
                 values[field_name] = text
     raw["relationships"] = _parse_json_array(str(form.get("relationships", "[]")), "Relationships")
@@ -891,6 +1667,12 @@ def _character_field_values(
             value = section_values.get(field_name)
             if field_type == "list":
                 values[f"{section_id}.{field_name}"] = "\n".join(value or [])
+            elif field_type == "json_array":
+                values[f"{section_id}.{field_name}"] = json.dumps(
+                    value or [],
+                    ensure_ascii=False,
+                    indent=2,
+                )
             elif value is not None:
                 values[f"{section_id}.{field_name}"] = str(value)
     values["relationships"] = json.dumps(raw.get("relationships", []), ensure_ascii=False, indent=2)
@@ -939,6 +1721,430 @@ def _filter_events(events: list[DomainEvent], event_filter: str, search: str) ->
     return filtered
 
 
+def _dataset_include_private(request: Request) -> bool:
+    return request.query_params.get("include_private", "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _data_run_filters(values: Any) -> PersistedRunFilter:
+    def optional(name: str) -> str | None:
+        value = values.get(name)
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    capture_value = optional("capture_complete")
+    if capture_value not in {None, "true", "false"}:
+        raise ValueError("capture completeness must be true or false")
+    try:
+        limit = int(optional("limit") or "25")
+    except ValueError as error:
+        raise ValueError("runs per page must be an integer") from error
+
+    def parsed_datetime(name: str) -> datetime | None:
+        value = optional(name)
+        if value is None:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError as error:
+            label = name.replace("_", " ")
+            raise ValueError(f"{label} is not a valid date") from error
+
+    persisted_status = optional("persisted_status")
+    effective_status = optional("status")
+    return PersistedRunFilter(
+        search_text=optional("search"),
+        persisted_statuses=(persisted_status,) if persisted_status else (),
+        effective_statuses=(effective_status,) if effective_status else (),
+        scenario_name=optional("scenario"),
+        dataset_schema_version=optional("schema"),
+        capture_complete=(
+            capture_value == "true" if capture_value is not None else None
+        ),
+        started_at_or_after=parsed_datetime("started_after"),
+        started_before=parsed_datetime("started_before"),
+        completed_at_or_after=parsed_datetime("completed_after"),
+        completed_before=parsed_datetime("completed_before"),
+        cursor=optional("cursor"),
+        limit=limit,
+    )
+
+
+def _data_filter_values(request: Request) -> dict[str, str]:
+    values = {
+        name: request.query_params.get(name, "")
+        for name in (
+            "search",
+            "persisted_status",
+            "status",
+            "scenario",
+            "schema",
+            "capture_complete",
+            "started_after",
+            "started_before",
+            "completed_after",
+            "completed_before",
+            "cursor",
+            "limit",
+        )
+    }
+    values["limit"] = values["limit"] or "25"
+    return values
+
+
+def _current_data_selection(
+    manager: SimulationManager,
+    session: OperatorSession,
+) -> RunSelection | None:
+    if not session.selected_data_run_ids:
+        return None
+    try:
+        selection = manager.data_management.selection(
+            session.selected_data_run_ids,
+            session.selected_data_filters,
+        )
+    except KeyError:
+        available: list[str] = []
+        for run_id in session.selected_data_run_ids:
+            try:
+                manager.data_management.selection((run_id,))
+            except KeyError:
+                continue
+            available.append(run_id)
+        session.selected_data_run_ids = tuple(available)
+        session.pending_run_deletion = None
+        session.selected_data_filters = None
+        if not session.selected_data_run_ids:
+            return None
+        selection = manager.data_management.selection(
+            session.selected_data_run_ids,
+            session.selected_data_filters,
+        )
+    session.selected_data_run_ids = selection.run_ids
+    return selection
+
+
+def _data_management_url(
+    params: dict[str, str],
+    *,
+    updates: dict[str, str | None] | None = None,
+    remove: tuple[str, ...] = (),
+) -> str:
+    resolved = dict(params)
+    for key in remove:
+        resolved.pop(key, None)
+    if updates is not None:
+        for key, value in updates.items():
+            if value is None:
+                resolved.pop(key, None)
+            else:
+                resolved[key] = value
+    query = urlencode([(key, value) for key, value in resolved.items() if value])
+    return f"/ui/data/{'?' + query if query else ''}"
+
+
+def _aggregate_export_urls(
+    selection: RunSelection | None,
+    include_private_derived: bool,
+) -> tuple[str | None, str | None]:
+    if selection is None:
+        return None, None
+    parameters = [
+        ("run_id", run_id) for run_id in selection.run_ids
+    ] + [
+        ("selection_fingerprint", selection.fingerprint),
+        (
+            "include_private_derived",
+            str(include_private_derived).lower(),
+        ),
+    ]
+    if selection.filters is not None:
+        parameters.append(
+            (
+                "selection_filters",
+                json.dumps(
+                    selection.filters.to_dict(),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+        )
+    query = urlencode(parameters)
+    return (
+        f"/simulation/data/aggregate.json?{query}",
+        f"/simulation/data/aggregate.csv?{query}",
+    )
+
+
+def _aggregate_sections(
+    aggregate: AggregateDatasetSummary,
+) -> tuple[dict[str, Any], ...]:
+    specs = (
+        ("Outcomes and records", ("run.", "record."), ("records.", "run.")),
+        ("Models and tools", ("model_", "tool_"), ("models.", "tools.")),
+        ("Goals", ("goals.",), ("goals.",)),
+        ("Actions", ("actions.",), ("actions.",)),
+        ("Interactions", ("interactions.",), ("interactions.",)),
+        ("Population", ("population.",), ("population.",)),
+        (
+            "Transitions and opportunities",
+            ("transitions.", "opportunities."),
+            ("transitions.", "opportunities."),
+        ),
+        ("Resources", ("resource_",), ("resources.",)),
+    )
+    sections: list[dict[str, Any]] = []
+    for title, distribution_prefixes, metric_prefixes in specs:
+        distributions = tuple(
+            (name, values)
+            for name, values in aggregate.distributions.items()
+            if name.startswith(distribution_prefixes)
+        )
+        metrics = tuple(
+            metric
+            for metric in aggregate.metrics
+            if metric.name.startswith(metric_prefixes)
+        )
+        sections.append(
+            {
+                "id": re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-"),
+                "title": title,
+                "distributions": distributions,
+                "metrics": metrics,
+            }
+        )
+    return tuple(sections)
+
+
+def _safe_data_return_to(value: object) -> str:
+    parsed = urlsplit(str(value or "/ui/data/"))
+    if parsed.path != "/ui/data/":
+        return "/ui/data/"
+    return parsed.path + (f"?{parsed.query}" if parsed.query else "")
+
+
+def _dataset_filter_values(request: Request) -> dict[str, str]:
+    values = {
+        key: request.query_params.get(key, "")
+        for key in DATASET_FILTER_KEYS
+    }
+    values["limit"] = values["limit"] or "25"
+    return values
+
+
+def _dataset_optional_value(request: Request, name: str) -> str | None:
+    value = request.query_params.get(name, "").strip()
+    return value or None
+
+
+def _dataset_optional_int(request: Request, name: str) -> int | None:
+    value = _dataset_optional_value(request, name)
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer") from error
+    if parsed < 0:
+        raise ValueError(f"{name} must not be negative")
+    return parsed
+
+
+def _dataset_optional_float(request: Request, name: str) -> float | None:
+    value = _dataset_optional_value(request, name)
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a number") from error
+    if not math.isfinite(parsed) or parsed < 0:
+        raise ValueError(f"{name} must be a finite non-negative number")
+    return parsed
+
+
+def _dataset_filters(
+    request: Request,
+    *,
+    raw_records: bool,
+) -> tuple[DatasetQueryFilter, DatasetRecordFilter]:
+    category_value = _dataset_optional_value(request, "category")
+    visibility_value = _dataset_optional_value(request, "visibility")
+    try:
+        category = (
+            RecordCategory(category_value)
+            if category_value is not None
+            else None
+        )
+    except ValueError as error:
+        raise ValueError(f"unknown record category: {category_value}") from error
+    try:
+        visibility = (
+            RecordVisibility(visibility_value)
+            if visibility_value is not None
+            else None
+        )
+    except ValueError as error:
+        raise ValueError(
+            f"unknown record visibility: {visibility_value}"
+        ) from error
+    include_private = _dataset_include_private(request)
+    if (
+        visibility is RecordVisibility.PRIVATE_RESEARCH
+        and not include_private
+    ):
+        raise ValueError(
+            "Select “Include private research data” before filtering for "
+            "PRIVATE_RESEARCH."
+        )
+    raw_limit = _dataset_optional_value(request, "limit") or "25"
+    try:
+        limit = int(raw_limit)
+    except ValueError as error:
+        raise ValueError("limit must be an integer") from error
+    if not 1 <= limit <= 100:
+        raise ValueError("limit must be between 1 and 100")
+    minimum_tick = _dataset_optional_int(request, "minimum_tick")
+    maximum_tick = _dataset_optional_int(request, "maximum_tick")
+    minimum_time = _dataset_optional_float(request, "minimum_time")
+    maximum_time = _dataset_optional_float(request, "maximum_time")
+    domain_ids = {
+        name: _dataset_optional_value(request, name)
+        for name, _ in DATASET_DOMAIN_FILTERS
+    }
+    common: dict[str, Any] = {
+        "record_type": _dataset_optional_value(request, "record_type"),
+        "category": category,
+        "schema_id": _dataset_optional_value(request, "schema_id"),
+        "schema_version": _dataset_optional_value(request, "schema_version"),
+        "related_entity_id": _dataset_optional_value(
+            request,
+            "related_entity_id",
+        ),
+        "minimum_tick": minimum_tick,
+        "maximum_tick": maximum_tick,
+        "minimum_time": minimum_time,
+        "maximum_time": maximum_time,
+        "visibility": visibility,
+        **domain_ids,
+        "status": _dataset_optional_value(request, "status"),
+        "outcome": _dataset_optional_value(request, "outcome"),
+        "include_private": include_private,
+        "limit": limit,
+    }
+    query_filter = DatasetQueryFilter(
+        **common,
+        primary_entity_id=_dataset_optional_value(request, "entity_id"),
+        cursor=_dataset_optional_value(request, "cursor"),
+    )
+    after_sequence = (
+        _dataset_optional_int(request, "cursor") if raw_records else None
+    )
+    record_filter = DatasetRecordFilter(
+        **common,
+        subject_id=_dataset_optional_value(request, "entity_id"),
+        after_sequence=after_sequence,
+    )
+    return query_filter, record_filter
+
+
+def _dataset_preserved_params(
+    request: Request,
+    *,
+    view: str,
+) -> dict[str, str]:
+    values = {
+        key: request.query_params.get(key, "")
+        for key in (*DATASET_FILTER_KEYS, "cursor")
+        if request.query_params.get(key, "") != ""
+    }
+    values["view"] = view
+    if "limit" not in values:
+        values["limit"] = "25"
+    if _dataset_include_private(request):
+        values["include_private"] = "true"
+    else:
+        values.pop("include_private", None)
+    return values
+
+
+def _dataset_url(
+    route: str,
+    values: dict[str, str],
+    *,
+    updates: dict[str, str | None] | None = None,
+    remove: tuple[str, ...] = (),
+) -> str:
+    parameters = dict(values)
+    for key in remove:
+        parameters.pop(key, None)
+    for key, value in (updates or {}).items():
+        if value is None or value == "":
+            parameters.pop(key, None)
+        else:
+            parameters[key] = value
+    query = urlencode(parameters)
+    return f"{route}?{query}" if query else route
+
+
+def _dataset_entry(
+    view: str,
+    data: dict[str, JsonValue],
+    index: int,
+) -> dict[str, Any]:
+    if view == "records":
+        sequence = data.get("sequence", index)
+        record_type = data.get("record_type", "record")
+        title = f"Sequence {sequence} · {record_type}"
+        visibility = data.get("visibility", "")
+        tick = data.get("simulation_tick")
+    else:
+        sequence = data.get("record_sequence", index)
+        identifier = next(
+            (
+                str(data[key])
+                for key in (
+                    "goal_id",
+                    "decision_id",
+                    "action_id",
+                    "interaction_id",
+                    "transition_id",
+                    "population_sample_id",
+                    "resource_sample_id",
+                    "resource_flow_id",
+                )
+                if data.get(key) is not None
+            ),
+            f"row {index}",
+        )
+        status = next(
+            (
+                str(data[key])
+                for key in ("status", "terminal_status", "to_status")
+                if data.get(key) is not None
+            ),
+            "",
+        )
+        title = f"Sequence {sequence} · {identifier}"
+        if status:
+            title = f"{title} · {status}"
+        visibility = data.get("record_visibility", "")
+        tick = data.get("record_simulation_tick")
+    return {
+        "title": title,
+        "visibility": str(visibility),
+        "tick": tick,
+        "data": data,
+    }
+
+
 def event_summary(event: DomainEvent) -> str:
     preferred = (
         "text",
@@ -948,6 +2154,8 @@ def event_summary(event: DomainEvent) -> str:
         "recipient_ids",
         "drive",
         "station_id",
+        "point_id",
+        "offer_id",
         "reason",
         "current",
         "message",
@@ -1042,10 +2250,12 @@ def _bounded_fraction(value: object, default: float) -> float:
 def _effective_view_level(session: OperatorSession) -> str:
     if session.view_level != "auto":
         return session.view_level
+    if session.zoom >= ROOM_ZOOM:
+        return "room"
     if session.zoom >= BUILDING_ZOOM:
         return "building"
-    if session.zoom >= NEIGHBORHOOD_ZOOM:
-        return "neighborhood"
+    if session.zoom >= CITY_ZONE_ZOOM:
+        return "city_zone"
     return "city"
 
 
@@ -1074,6 +2284,30 @@ def _camera_building_id(
     return str(closest["id"])
 
 
+def _camera_room(
+    rooms: list[RoomDefinition],
+    session: OperatorSession,
+) -> RoomDefinition:
+    width = max(room.offset.x + room.world.width for room in rooms)
+    height = max(room.offset.y + room.world.height for room in rooms)
+    target_x = session.camera_x * max(1, width)
+    target_y = session.camera_y * max(1, height)
+    return min(
+        rooms,
+        key=lambda room: (
+            (
+                room.offset.x + room.world.width / 2 - target_x
+            )
+            ** 2
+            + (
+                room.offset.y + room.world.height / 2 - target_y
+            )
+            ** 2,
+            room.id,
+        ),
+    )
+
+
 def _location_city_point(
     city: dict[str, Any], location: dict[str, JsonValue]
 ) -> tuple[float, float] | None:
@@ -1100,7 +2334,7 @@ def _location_city_point(
     if node is not None:
         point = node["position"]
         return float(point["x"]), float(point["y"])
-    place_id = location.get("place_id")
+    place_id = location.get("building_id") or location.get("place_id")
     place = next(
         (
             item
@@ -1171,18 +2405,50 @@ def _world_view(
     )
     overlays = _world_overlays(agents, events, session.selected_agent_id)
     city_world_value = scenario.world if scenario is not None else None
-    if level == "building" and isinstance(city_world_value, CityWorldDefinition):
+    if level in {"room", "building"} and isinstance(
+        city_world_value,
+        CityWorldDefinition,
+    ):
         city_world = city_world_value
-        place_id = _camera_building_id(city_world, session)
+        building_id = _camera_building_id(city_world, session)
+        selected_room = None
         if session.follow_selected and selected_location.get("place_id"):
-            place_id = str(selected_location["place_id"])
+            selected_place_id = str(selected_location["place_id"])
+            selected_room = next(
+                (
+                    item
+                    for item in city_world.rooms
+                    if item.id == selected_place_id
+                ),
+                None,
+            )
+            if selected_room is not None:
+                building_id = selected_room.building_id
+            elif any(
+                item.id == selected_place_id
+                for item in city_world.buildings
+            ):
+                building_id = selected_place_id
         building = next(
-            (item for item in city_world.buildings if item.id == place_id),
+            (item for item in city_world.buildings if item.id == building_id),
             None,
         )
         if building is not None:
+            building_rooms = [
+                item
+                for item in city_world.rooms
+                if item.building_id == building.id
+            ]
+            if not building_rooms:
+                return None
+            room = (
+                selected_room
+                if selected_room is not None
+                and selected_room.building_id == building.id
+                else _camera_room(building_rooms, session)
+            )
             local_world = _apply_runtime_environment(
-                city_world.local_maps[building.local_map_id].model_dump(mode="json"),
+                room.world.model_dump(mode="json"),
                 snapshot,
             )
             local_agents = [
@@ -1190,14 +2456,18 @@ def _world_view(
                 for agent in agents
                 if isinstance(agent.get("spatial_location"), dict)
                 and cast(dict[str, JsonValue], agent["spatial_location"]).get("place_id")
-                == building.id
+                == room.id
             ]
+            title = f"Building view · {building.name} · {room.name}"
+            if level == "room":
+                title = f"Room view · {room.name} · {building.name}"
             return _grid_view(
                 local_world,
                 local_agents,
                 session,
-                f"Building view · {building.name}",
+                title,
                 overlays,
+                semantic_level=level,
             )
     if level == "building" and isinstance(static_world, dict):
         return _grid_view(
@@ -1215,7 +2485,7 @@ def _world_view(
                     city, followed_point
                 )
         city_payload = _apply_runtime_environment(
-            _neighborhood_payload(city, session) if level == "neighborhood" else city
+            _city_zone_payload(city, session) if level == "city_zone" else city
             ,
             snapshot,
         )
@@ -1262,6 +2532,17 @@ def _apply_runtime_environment(
         for item in raw_surfaces
         if isinstance(item, dict) and "surface_id" in item
     } if isinstance(raw_surfaces, list) else {}
+    runtime_world = snapshot.get("world")
+    raw_point_states = (
+        runtime_world.get("transaction_point_states")
+        if isinstance(runtime_world, dict)
+        else None
+    )
+    point_states = {
+        str(item["id"]): item
+        for item in raw_point_states
+        if isinstance(item, dict) and "id" in item
+    } if isinstance(raw_point_states, list) else {}
 
     def annotate(
         items: list[dict[str, Any]],
@@ -1284,6 +2565,16 @@ def _apply_runtime_environment(
     return {
         **world,
         "stations": annotate(list(world.get("stations", []))),
+        "transaction_points": [
+            {
+                **item,
+                "environment_availability": availability.get(
+                    str(item.get("id"))
+                ),
+                "runtime": point_states.get(str(item.get("id"))),
+            }
+            for item in world.get("transaction_points", [])
+        ],
         "buildings": annotate(list(world.get("buildings", []))),
         "outdoor_places": annotate(
             list(world.get("outdoor_places", [])),
@@ -1349,6 +2640,8 @@ def _grid_view(
     session: OperatorSession,
     title: str,
     overlays: dict[str, dict[str, Any]],
+    *,
+    semantic_level: str = "building",
 ) -> dict[str, Any]:
     width = max(1, int(world.get("width", 1)))
     height = max(1, int(world.get("height", 1)))
@@ -1376,6 +2669,7 @@ def _grid_view(
                 {
                     "id": agent["id"],
                     "name": _agent_name(agent),
+                    "actor_kind": agent.get("actor_kind", "character"),
                     "x": position.get("x", 0),
                     "y": position.get("y", 0),
                     "selected": agent["id"] == session.selected_agent_id,
@@ -1418,13 +2712,14 @@ def _grid_view(
         "view_box": f"0 0 {width} {height}",
         "base_display_width": width * 72,
         "display_width": width * 72 * session.zoom,
-        "semantic_level": "building",
+        "semantic_level": semantic_level,
         "follow_selected": session.follow_selected,
         "camera_x": session.camera_x,
         "camera_y": session.camera_y,
         "zones": zones,
         "blocked": world.get("blocked", []),
         "stations": world.get("stations", []),
+        "transaction_points": world.get("transaction_points", []),
         "agents": rendered_agents,
         "paths": paths,
     }
@@ -1467,6 +2762,14 @@ def _city_view(
         str(node["id"]): project(cast(dict[str, Any], node["position"]))
         for node in city.get("nodes", [])
     }
+    projected_nodes = [
+        {
+            **node,
+            "px": nodes[str(node["id"])][0],
+            "py": nodes[str(node["id"])][1],
+        }
+        for node in city.get("nodes", [])
+    ]
     edges = []
     edge_points: dict[str, list[tuple[float, float]]] = {}
     for edge in city.get("edges", []):
@@ -1492,9 +2795,9 @@ def _city_view(
         if point is None:
             point = nodes.get(str(location.get("network_node_id")))
         if point is None:
-            point = building_points.get(str(location.get("place_id"))) or place_points.get(
-                str(location.get("place_id"))
-            )
+            point = building_points.get(
+                str(location.get("building_id") or location.get("place_id"))
+            ) or place_points.get(str(location.get("place_id")))
         if point is None:
             unplaced_agent_ids.append(str(agent["id"]))
             continue
@@ -1506,6 +2809,7 @@ def _city_view(
             {
                 "id": agent["id"],
                 "name": _agent_name(agent),
+                "actor_kind": agent.get("actor_kind", "character"),
                 "px": point[0] + offset_x,
                 "py": point[1] + offset_y,
                 "selected": agent["id"] == session.selected_agent_id,
@@ -1554,6 +2858,7 @@ def _city_view(
         "districts": districts,
         "buildings": buildings,
         "places": places,
+        "nodes": projected_nodes,
         "edges": edges,
         "agents": rendered_agents,
         "vehicles": rendered_vehicles,
@@ -1739,7 +3044,7 @@ def _world_overlays(
     return overlays
 
 
-def _neighborhood_payload(
+def _city_zone_payload(
     city: dict[str, Any], session: OperatorSession
 ) -> dict[str, Any]:
     bounds = cast(dict[str, float], city["bounds"])
@@ -1783,6 +3088,118 @@ def _neighborhood_payload(
         "nodes": nodes,
         "edges": edges,
     }
+
+
+def _room_payload(
+    world: dict[str, Any],
+    session: OperatorSession,
+) -> tuple[dict[str, Any], str]:
+    zones = list(world.get("zones", []))
+    if not zones:
+        return world, "Unpartitioned interior"
+    width = max(1, int(world.get("width", 1)))
+    height = max(1, int(world.get("height", 1)))
+    target_x = session.camera_x * width
+    target_y = session.camera_y * height
+    selected = min(
+        zones,
+        key=lambda zone: (
+            min(
+                (
+                    (float(point["x"]) - target_x) ** 2
+                    + (float(point["y"]) - target_y) ** 2
+                    for point in _zone_tiles(zone)
+                ),
+                default=float("inf"),
+            ),
+            str(zone.get("id", "")),
+        ),
+    )
+    tiles = {
+        (int(point["x"]), int(point["y"]))
+        for point in _zone_tiles(selected)
+    }
+    blocked = {
+        (int(point["x"]), int(point["y"]))
+        for point in world.get("blocked", [])
+    }
+    blocked.update(
+        (x, y)
+        for y in range(height)
+        for x in range(width)
+        if (x, y) not in tiles
+    )
+    return (
+        {
+            **world,
+            "blocked": [
+                {"x": x, "y": y}
+                for x, y in sorted(
+                    blocked,
+                    key=lambda item: (item[1], item[0]),
+                )
+            ],
+            "zones": [selected],
+            "stations": [
+                item
+                for item in world.get("stations", [])
+                if (
+                    int(item["position"]["x"]),
+                    int(item["position"]["y"]),
+                )
+                in tiles
+            ],
+            "transaction_points": [
+                item
+                for item in world.get("transaction_points", [])
+                if (
+                    int(item["position"]["x"]),
+                    int(item["position"]["y"]),
+                )
+                in tiles
+            ],
+        },
+        str(selected.get("name", selected.get("id", "Room"))),
+    )
+
+
+def _agent_is_in_room(
+    agent: dict[str, JsonValue],
+    world: dict[str, Any],
+) -> bool:
+    position = agent.get("position")
+    if not isinstance(position, dict):
+        return False
+    return any(
+        point.get("x") == position.get("x")
+        and point.get("y") == position.get("y")
+        for zone in world.get("zones", [])
+        for point in _zone_tiles(zone)
+    )
+
+
+def _zone_tiles(zone: dict[str, Any]) -> list[dict[str, int]]:
+    raw_tiles = zone.get("tiles")
+    if isinstance(raw_tiles, list):
+        return [
+            cast(dict[str, int], point)
+            for point in raw_tiles
+            if isinstance(point, dict)
+        ]
+    bounds = zone.get("bounds")
+    if not isinstance(bounds, dict):
+        return []
+    return [
+        {"x": x, "y": y}
+        for y in range(
+            int(bounds["y"]),
+            int(bounds["y"]) + int(bounds["height"]),
+        )
+        for x in range(
+            int(bounds["x"]),
+            int(bounds["x"]) + int(bounds["width"]),
+        )
+    ]
 
 
 def _interpolate_points(

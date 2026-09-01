@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-maple-court-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-maple-court",
+  "kind": "building",
+  "name": "Maple Court Mixed-Income Housing",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "f9730f76eb1706019b9ab8ab0b8557ee1a96586ac86936ef48dbdac8dd34840f",
+        "id": "greyford-office-evening.map-greyford-maple-court",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

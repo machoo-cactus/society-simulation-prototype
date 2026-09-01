@@ -2,8 +2,9 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from datetime import date
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import Field, model_validator
 
@@ -11,9 +12,15 @@ from stage0_sim.application.scenario import (
     CharacterProfileDefinition,
     CharacterSlotDefinition,
     ResolvedCharacterProfile,
+    ResolvedCharacterSituation,
     ScenarioDefinition,
 )
 from stage0_sim.domain.events import JsonValue
+
+if TYPE_CHECKING:
+    from stage0_sim.application.character_synthesis import (
+        CharacterSituationArtifact,
+    )
 
 CHARACTER_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 WINDOWS_RESERVED_NAMES = {
@@ -56,7 +63,7 @@ class CharacterConflictError(CharacterLibraryError):
 
 
 class CharacterDefinition(CharacterProfileDefinition):
-    schema_version: int = Field(default=1, ge=1)
+    schema_version: int = Field(default=2, ge=1)
     id: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -66,6 +73,17 @@ class CharacterDefinition(CharacterProfileDefinition):
             raise ValueError(
                 f"unsupported character template: {self.template_id}"
             )
+        if self.schema_version >= 2:
+            if self.identity.age is not None:
+                raise ValueError(
+                    "character schema version 2 uses identity.birth_date; "
+                    "identity.age is legacy version-1 data"
+                )
+            if self.appearance.height.strip():
+                raise ValueError(
+                    "character schema version 2 uses "
+                    "body_measurements.height_cm; appearance.height is legacy"
+                )
         return self
 
     def profile(self) -> CharacterProfileDefinition:
@@ -84,6 +102,7 @@ class CharacterSummary:
     template_id: str
     schema_version: int
     content_hash: str
+    birth_date: date | None
     age: int | None
     gender: str
 
@@ -94,6 +113,11 @@ class CharacterSummary:
             "template_id": self.template_id,
             "schema_version": self.schema_version,
             "content_hash": self.content_hash,
+            "birth_date": (
+                self.birth_date.isoformat()
+                if self.birth_date is not None
+                else None
+            ),
             "age": self.age,
             "gender": self.gender,
         }
@@ -128,6 +152,9 @@ class PreparedScenario:
     scenario: ScenarioDefinition
     assignments: Mapping[str, str]
     characters: Mapping[str, CharacterDefinition]
+    situations: Mapping[str, "CharacterSituationArtifact"]
+    scenario_source: Mapping[str, JsonValue] | None = None
+    resolved_elements: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def dataset_payload(self) -> dict[str, JsonValue]:
         scenario_payload = self.scenario.model_dump(mode="json")
@@ -143,7 +170,33 @@ class PreparedScenario:
         scenario_payload["character_assignments"] = dict(
             sorted(self.assignments.items())
         )
+        scenario_payload["resolved_character_situations"] = {
+            entity_id: artifact.model_dump(
+                mode="json",
+                exclude={
+                    "generation": {
+                        "request",
+                        "result",
+                    }
+                },
+            )
+            for entity_id, artifact in sorted(self.situations.items())
+        }
+        if self.scenario_source is not None:
+            scenario_payload["source_scenario"] = dict(self.scenario_source)
+        if self.resolved_elements:
+            scenario_payload["resolved_elements"] = dict(
+                sorted(self.resolved_elements.items())
+            )
         return scenario_payload
+
+    def private_research_provenance(self) -> dict[str, JsonValue]:
+        return {
+            "resolved_character_situations": {
+                entity_id: artifact.model_dump(mode="json")
+                for entity_id, artifact in sorted(self.situations.items())
+            }
+        }
 
     def runtime_characters(self) -> dict[str, ResolvedCharacterProfile]:
         return {
@@ -152,6 +205,23 @@ class PreparedScenario:
                 profile=self.characters[character_id].profile(),
             )
             for entity_id, character_id in self.assignments.items()
+        }
+
+    def runtime_situations(self) -> dict[str, ResolvedCharacterSituation]:
+        return {
+            entity_id: ResolvedCharacterSituation(
+                character_id=artifact.character_id,
+                profile_content_hash=artifact.profile_content_hash,
+                input_hash=artifact.input_hash,
+                content_hash=artifact.content_hash,
+                description=artifact.description,
+                data=artifact.data.model_dump(mode="json"),
+                generation=artifact.generation.model_dump(
+                    mode="json",
+                    exclude={"request", "result"},
+                ),
+            )
+            for entity_id, artifact in self.situations.items()
         }
 
     def entity_summaries(self) -> tuple[dict[str, JsonValue], ...]:
@@ -196,7 +266,35 @@ def character_content_hash(character: CharacterDefinition) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def character_summary(character: CharacterDefinition) -> CharacterSummary:
+def age_on(birth_date: date, reference_date: date) -> int:
+    if birth_date > reference_date:
+        raise ValueError("birth date is after the reference date")
+    return (
+        reference_date.year
+        - birth_date.year
+        - (
+            (reference_date.month, reference_date.day)
+            < (birth_date.month, birth_date.day)
+        )
+    )
+
+
+def character_age(
+    character: CharacterDefinition,
+    reference_date: date | None,
+) -> int | None:
+    identity = character.identity
+    if identity.birth_date is not None:
+        if reference_date is None:
+            return None
+        return age_on(identity.birth_date, reference_date)
+    return identity.age
+
+
+def character_summary(
+    character: CharacterDefinition,
+    reference_date: date | None = None,
+) -> CharacterSummary:
     identity = character.identity
     if identity is None:
         raise CharacterLibraryError(
@@ -208,7 +306,8 @@ def character_summary(character: CharacterDefinition) -> CharacterSummary:
         template_id=character.template_id,
         schema_version=character.schema_version,
         content_hash=character_content_hash(character),
-        age=identity.age,
+        birth_date=identity.birth_date,
+        age=character_age(character, reference_date),
         gender=identity.gender,
     )
 
@@ -228,6 +327,11 @@ def prepare_scenario(
         )
     effective: dict[str, str] = {}
     resolved: dict[str, CharacterDefinition] = {}
+    reference_date = (
+        scenario.calendar.start_datetime.date()
+        if scenario.calendar is not None
+        else None
+    )
     for entity in scenario.entities:
         if "character_slot" not in entity.components:
             raise CharacterLibraryError(
@@ -242,7 +346,11 @@ def prepare_scenario(
                 f"character slot {entity.id} has no assignment or default"
             )
         character = library.get(character_id)
-        violations = character_constraint_violations(character, slot)
+        violations = character_constraint_violations(
+            character,
+            slot,
+            reference_date=reference_date,
+        )
         if violations:
             raise CharacterLibraryError(
                 f"character {character_id} is ineligible for slot {entity.id}: "
@@ -254,29 +362,54 @@ def prepare_scenario(
         scenario=scenario,
         assignments=effective,
         characters=resolved,
+        situations={},
     )
 
 
 def character_constraint_violations(
     character: CharacterDefinition,
     slot: CharacterSlotDefinition,
+    *,
+    reference_date: date | None = None,
 ) -> tuple[str, ...]:
     constraints = slot.constraints
     identity = character.identity
     violations: list[str] = []
-    if constraints.minimum_age is not None:
-        if identity.age is None:
-            violations.append("age is required by the slot")
-        elif identity.age < constraints.minimum_age:
+    constrained_age: int | None = None
+    if (
+        constraints.minimum_age is not None
+        or constraints.maximum_age is not None
+    ):
+        if identity.birth_date is not None and reference_date is None:
             violations.append(
-                f"age {identity.age} is below minimum {constraints.minimum_age}"
+                "scenario calendar is required to evaluate birth-date age"
+            )
+        else:
+            try:
+                constrained_age = character_age(character, reference_date)
+            except ValueError as error:
+                violations.append(str(error))
+    if constraints.minimum_age is not None:
+        if constrained_age is None and not violations:
+            violations.append("age is required by the slot")
+        elif (
+            constrained_age is not None
+            and constrained_age < constraints.minimum_age
+        ):
+            violations.append(
+                f"age {constrained_age} is below minimum "
+                f"{constraints.minimum_age}"
             )
     if constraints.maximum_age is not None:
-        if identity.age is None:
+        if constrained_age is None and not violations:
             violations.append("age is required by the slot")
-        elif identity.age > constraints.maximum_age:
+        elif (
+            constrained_age is not None
+            and constrained_age > constraints.maximum_age
+        ):
             violations.append(
-                f"age {identity.age} exceeds maximum {constraints.maximum_age}"
+                f"age {constrained_age} exceeds maximum "
+                f"{constraints.maximum_age}"
             )
     allowed_genders = {
         value.casefold() for value in constraints.allowed_genders

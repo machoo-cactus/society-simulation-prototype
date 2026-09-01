@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-rivermarket-grocer-demo",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-rivermarket-exchange.building-greyford-rivermarket-grocer-demo",
+  "kind": "building",
+  "name": "Rivermarket Grocer and Convenience",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "3ef3410f9e58bb4b2c6cad3696a9f92300b9e0d9920794238db7b2e712735f13",
+        "id": "greyford-rivermarket-exchange.map-greyford-rivermarket-grocer-demo",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

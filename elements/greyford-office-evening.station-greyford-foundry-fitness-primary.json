@@ -1,0 +1,34 @@
+{
+  "actions": [
+    {
+      "action": "RELAX",
+      "duration": 600.0,
+      "effect": {
+        "energy_delta": -2.0,
+        "energy_target": null,
+        "satiety_delta": 0.0,
+        "satiety_target": null,
+        "stress_delta": -15.0,
+        "stress_target": null
+      }
+    }
+  ],
+  "available": true,
+  "capacity": 4,
+  "description": "",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "greyford-office-evening.station-greyford-foundry-fitness-primary",
+  "kind": "object",
+  "name": "Foundry Fitness Cool-down Bench",
+  "npc_role": null,
+  "object_type": "affordance",
+  "offers": [],
+  "operation": "AUTOMATED",
+  "request_timeout": 60.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

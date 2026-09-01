@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-foundry-fitness-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-foundry-fitness",
+  "kind": "building",
+  "name": "Foundry Fitness Club",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "f547a8be9a75c30b6caa47b16ceb30a3a8e9814fce2c51347c59777200f46826",
+        "id": "greyford-office-evening.map-greyford-foundry-fitness",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

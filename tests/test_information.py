@@ -341,6 +341,73 @@ def test_retrieval_expands_relevant_anchor_to_coherent_parent() -> None:
     assert '"traffic_preference":"avoids dense traffic"' in first[0].rendered_content
 
 
+@pytest.mark.parametrize(
+    ("query", "expected_path", "expected_text"),
+    [
+        ("birth date", "$.identity", '"birth_date":"1990-02-14"'),
+        ("waist", "$.body_measurements", '"waist_cm":78.0'),
+        ("debt", "$.financial_situation", '"total_debt":18000'),
+        ("Mei sister", "$.family.members[0]", '"relationship":"Sister"'),
+        ("pollen allergy", "$.health.allergies[0]", '"substance":"Pollen"'),
+    ],
+)
+def test_retrieval_returns_coherent_hard_fact_capsules(
+    query: str,
+    expected_path: str,
+    expected_text: str,
+) -> None:
+    information = InformationStore()
+    information.register(
+        _document(
+            content={
+                "identity": {
+                    "display_name": "Alex Chen",
+                    "birth_date": "1990-02-14",
+                },
+                "body_measurements": {
+                    "measured_on": "2026-08-12",
+                    "height_cm": 178.0,
+                    "waist_cm": 78.0,
+                },
+                "financial_situation": {
+                    "as_of_date": "2026-08-31",
+                    "currency": "CAD",
+                    "total_debt": 18000,
+                },
+                "family": {
+                    "members": [
+                        {
+                            "member_id": "mei",
+                            "display_name": "Mei Chen",
+                            "relationship": "Sister",
+                        }
+                    ]
+                },
+                "health": {
+                    "allergies": [
+                        {
+                            "substance": "Pollen",
+                            "reaction": "Rhinitis",
+                            "severity": "mild",
+                        }
+                    ]
+                },
+            },
+        )
+    )
+
+    results = InformationRetriever(information).retrieve(
+        InformationQuery(
+            character_id="agent-001",
+            text=query,
+            token_budget=128,
+        )
+    )
+
+    assert results[0].source_path == expected_path
+    assert expected_text in results[0].rendered_content
+
+
 def test_retrieval_supports_references_and_opt_in_embeddings() -> None:
     information = InformationStore()
     information.register(
@@ -780,7 +847,7 @@ def test_sqlite_v3_migrates_v2_and_persists_information_documents(
     version = int(version_connection.execute("PRAGMA user_version").fetchone()[0])
     version_connection.close()
 
-    assert version == 3
+    assert version == 7
     assert loaded_documents == (document,)
     assert loaded_memories == (legacy_memory,)
     document_connection = sqlite3.connect(database)

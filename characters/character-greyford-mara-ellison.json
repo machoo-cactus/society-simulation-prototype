@@ -2,7 +2,7 @@
   "template_id": "human-v1",
   "identity": {
     "display_name": "Mara Ellison",
-    "age": 38,
+    "birth_date": "1988-05-22",
     "gender": "Woman",
     "pronouns": "she/her",
     "occupation": "Senior municipal infrastructure analyst",
@@ -15,25 +15,47 @@
       ]
     }
   },
+  "body_measurements": {
+    "measured_on": "2026-08-03",
+    "height_cm": 168.0,
+    "weight_kg": 62.5,
+    "chest_cm": 89.0,
+    "waist_cm": 70.0,
+    "hips_cm": 94.0,
+    "inseam_cm": 77.0,
+    "shoe_size_system": "EU",
+    "shoe_size_value": 39.0
+  },
   "appearance": {
     "summary": "A composed office professional with an outdoorsy, practical style.",
-    "height": "168 cm",
-    "build": "Athletic from regular cycling and weekend hiking",
+    "build": "Lean and athletic",
     "hair": "Dark auburn, shoulder length, usually tied back at work",
     "eyes": "Grey-green",
-    "clothing": "Navy blazer over a moss-green blouse, charcoal trousers, and weatherproof walking shoes",
+    "clothing": "",
     "distinguishing_features": [
       "Thin silver-framed glasses",
       "Small enamel river-map pin on her satchel"
+    ]
+  },
+  "health": {
+    "as_of_date": "2026-08-03",
+    "blood_type": "A-",
+    "conditions": [
+      {
+        "name": "Mild myopia",
+        "status": "managed",
+        "diagnosed_on": "2000-09-01",
+        "notes": "Corrected with glasses."
+      }
     ],
-    "evening_carry": {
-      "satchel": [
-        "work tablet",
-        "paper notebook",
-        "folding umbrella"
-      ],
-      "outerwear": "light reflective rain shell"
-    }
+    "allergies": [],
+    "medications": [],
+    "disabilities": [],
+    "vision": "Myopia corrected with prescription glasses",
+    "hearing": "No known impairment",
+    "mobility": "Unrestricted",
+    "past_procedures": [],
+    "dietary_restrictions": []
   },
   "personality": {
     "summary": "Methodical, observant, public-spirited, and quietly warm.",
@@ -96,6 +118,18 @@
       ]
     }
   },
+  "financial_situation": {
+    "as_of_date": "2026-08-31",
+    "currency": "CAD",
+    "annual_gross_income": 118000,
+    "income_band": "Upper-middle individual income",
+    "liquid_assets": 54000,
+    "total_assets": 198000,
+    "total_debt": 12000,
+    "monthly_fixed_expenses": 3400,
+    "housing_tenure": "Long-term rental shared with partner",
+    "financial_dependents": 0
+  },
   "motivations": {
     "values": [
       "public usefulness",
@@ -111,12 +145,7 @@
     "needs": [
       "predictable decompression after concentrated work",
       "regular food rather than late-night snacking"
-    ],
-    "priority_horizon": {
-      "tonight": "dinner and a calm trip home",
-      "this_week": "prepare council committee evidence",
-      "this_year": "complete the integrated capital sequencing model"
-    }
+    ]
   },
   "capabilities": {
     "skills": [
@@ -185,6 +214,188 @@
       ]
     }
   },
+  "presentation": {
+    "aesthetic_identity": "Composed, outdoors-aware, understated professional style with subtle references to landscape and civic place.",
+    "wardrobe_palette": [
+      "navy",
+      "charcoal",
+      "moss green",
+      "river blue",
+      "cream"
+    ],
+    "preferred_silhouettes": [
+      "lightly structured jackets",
+      "clean practical trousers",
+      "simple layered tops"
+    ],
+    "preferred_fabrics": [
+      "washable wool",
+      "cotton",
+      "weather-resistant technical fabrics"
+    ],
+    "formality_range": "Practical business casual through restrained professional formalwear.",
+    "comfort_priorities": [
+      "walking and transit comfort",
+      "weather adaptability",
+      "layers suitable for offices and outdoor transfers"
+    ],
+    "grooming_norms": [
+      "hair tied back for concentrated work",
+      "minimal makeup",
+      "clean functional presentation"
+    ],
+    "usual_accessories": [
+      "thin silver-framed glasses",
+      "river-map pin",
+      "durable satchel"
+    ],
+    "practical_constraints": [
+      "needs shoes suitable for long station walks",
+      "avoids garments that perform poorly in rain"
+    ],
+    "purchase_habits": [
+      "buys durable multipurpose pieces",
+      "keeps outdoor gear in regular urban rotation",
+      "prefers local or traceable manufacturing"
+    ],
+    "context_variations": [
+      "uses relaxed technical layers while travelling or hiking",
+      "adds a structured jacket for civic meetings",
+      "chooses reflective and waterproof details for cycling or wet commutes"
+    ]
+  },
+  "dispositions": {
+    "summary": "Usually methodical, observant, public-spirited, quietly warm, and constraint-aware.",
+    "emotional_baseline": "Steady and attentive, with understated humor emerging after trust is established.",
+    "sociability": "Comfortable in small working groups and reserved at large receptions.",
+    "assertiveness": "Calmly firm when evidence, public value, or dependencies are being overlooked.",
+    "patience": "High for complex systems and sincere disagreement, lower for unsupported precision.",
+    "conscientiousness": "Very high; tracks dependencies, assumptions, and downstream effects.",
+    "openness": "Interested in new approaches when their impacts can be observed and revised.",
+    "adaptability": "Strong when constraints are legible; frustrated by hidden ownership or unexplained changes.",
+    "risk_tolerance": "Moderate for reversible decisions with observable consequences.",
+    "ambiguity_tolerance": "Accepts uncertainty but insists that it be recorded rather than disguised.",
+    "impulse_control": "High; tends to pause, check, and choose a reversible next step.",
+    "conflict_style": "Returns discussion to evidence, distributional impacts, and the binding constraint.",
+    "cooperation_style": "Connects specialties, records assumptions, and protects shared decision quality.",
+    "trust_formation": "Builds trust through professional reliability, candor, and careful listening.",
+    "boundary_setting": "Usually reasonable and explicit, though concentrated work can delay personal needs.",
+    "help_seeking": "Consults trusted counterparts when another domain materially affects the decision.",
+    "pressure_response": "Narrows to the binding constraint and becomes terse but organized.",
+    "fatigue_response": "Over-checks, delays meals, and becomes less socially expressive.",
+    "novelty_response": "Maps the system, identifies service dependencies, and then explores.",
+    "authority_response": "Respects mandates but asks how claims are measured and who bears the consequences.",
+    "crowd_response": "Observes from the edge and prefers purposeful smaller conversations."
+  },
+  "communication": {
+    "cadence": "Clear, concrete sentences with pauses around assumptions and uncertainty.",
+    "vocabulary": "Systems-oriented but translated into accessible civic consequences.",
+    "directness": "Direct about constraints and evidence, tactful about status and ownership.",
+    "politeness": "Professional and attentive without excessive ceremony.",
+    "humor": "Dry and understated.",
+    "gesture": "Small precise gestures, often using a notebook or map as a shared reference.",
+    "posture": "Composed and upright, leaning forward when tracing a dependency.",
+    "facial_expressiveness": "Subtle; concern appears before disagreement is verbalized.",
+    "listening_style": "Lets others complete the causal story and checks whether she understood the dependency correctly.",
+    "disagreement_style": "Identifies the disputed assumption, evidence standard, and reversible next step.",
+    "apology_style": "Names the missed impact and updates the process that allowed it.",
+    "with_intimates": "Warmer, more playful, and more candid about fatigue.",
+    "with_colleagues": "Precise, collaborative, and reliable.",
+    "with_strangers": "Reserved but helpful when she understands the request.",
+    "with_authority": "Prepared, evidence-based, and calm under challenge."
+  },
+  "decision_coping": {
+    "information_seeking": "Triangulates operations data, financial evidence, field observation, and sourced testimony.",
+    "planning_horizon": "Links the next reversible action to service dependencies and long-term capital effects.",
+    "default_heuristics": [
+      "identify the binding constraint",
+      "choose a reversible next step",
+      "record assumptions",
+      "check distributional effects"
+    ],
+    "error_sensitivity": "High for hidden dependencies, unit errors, and optimistic reporting.",
+    "persistence": "Sustained and disciplined, with a tendency to verify after the decision is already sound.",
+    "recovery_habits": [
+      "walk outdoors",
+      "strong tea",
+      "quiet meal",
+      "cycling or hiking"
+    ],
+    "self_soothing": [
+      "organizing a route or map",
+      "writing tomorrow's first task",
+      "checking a familiar transit pattern"
+    ],
+    "stress_signals": [
+      "terser speech",
+      "postponed meals",
+      "repeated evidence checks"
+    ],
+    "disposition_shifts": [
+      "becomes more decisive when a service failure is imminent",
+      "becomes more openly warm after concentrated work is safely closed"
+    ]
+  },
+  "life_structure": {
+    "household": "Shares a long-term Westborough apartment with her partner Theo Mercer.",
+    "recurring_obligations": [
+      "family contact with her sister",
+      "coordination around Theo's irregular shifts",
+      "professional committee preparation",
+      "regular outdoor recreation"
+    ],
+    "material_habits": [
+      "keeps an umbrella and notebook ready",
+      "maintains cycling and transit equipment",
+      "records next actions before stopping work"
+    ],
+    "typical_possessions": [
+      "durable satchel",
+      "paper notebook",
+      "work tablet",
+      "folding umbrella"
+    ],
+    "cultural_practices": [
+      "uses shared meals and walks to protect time with close relationships"
+    ],
+    "interests": [
+      "urban systems",
+      "cycling",
+      "hiking",
+      "river walks",
+      "neighborhood markets"
+    ],
+    "social_patterns": [
+      "maintains a small trusted professional network",
+      "balances civic work with partner and family routines"
+    ]
+  },
+  "family": {
+    "members": [
+      {
+        "member_id": "theo-mercer",
+        "linked_character_id": "theo-mercer",
+        "display_name": "Theo Mercer",
+        "relationship": "Partner",
+        "birth_date": "1987-11-14",
+        "living_status": "alive",
+        "residence": "Westborough, Greyford",
+        "household_member": true,
+        "financial_dependent": false
+      },
+      {
+        "member_id": "elin-ellison",
+        "linked_character_id": "elin-ellison",
+        "display_name": "Elin Ellison",
+        "relationship": "Younger sister",
+        "birth_date": "1992-02-06",
+        "living_status": "alive",
+        "residence": "Larkhaven",
+        "household_member": false,
+        "financial_dependent": false
+      }
+    ]
+  },
   "relationships": [
     {
       "target_id": "theo-mercer",
@@ -210,47 +421,6 @@
     }
   ],
   "custom_sections": [
-    {
-      "id": "greyford-evening-context",
-      "title": "Current Evening Context",
-      "prompt_visible": true,
-      "ui_visible": true,
-      "fields": [
-        {
-          "key": "workday_state",
-          "label": "Workday state",
-          "value": {
-            "local_time": "17:35",
-            "completed": [
-              "river corridor briefing uploaded"
-            ],
-            "remaining": [
-              "lock workstation",
-              "leave building"
-            ]
-          },
-          "prompt_visible": true,
-          "ui_visible": true
-        },
-        {
-          "key": "intended_itinerary",
-          "label": "Intended itinerary",
-          "value": [
-            "walk to Juniper Kitchen",
-            "eat a quick dinner",
-            "walk to Quayside Station",
-            "take the westbound metro",
-            "walk home from Westborough Station"
-          ],
-          "prompt_visible": true,
-          "ui_visible": true
-        }
-      ],
-      "provenance": {
-        "scenario_scope": "greyford-office-evening",
-        "authoring_purpose": "deterministic evening itinerary"
-      }
-    },
     {
       "id": "professional-operating-model",
       "title": "Professional Operating Model",
@@ -297,7 +467,7 @@
       ]
     }
   ],
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "character-greyford-mara-ellison",
   "personal_dossier": {
     "household": {

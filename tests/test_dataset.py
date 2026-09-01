@@ -12,10 +12,18 @@ from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.api.app import app
 from stage0_sim.application.collection import RunDataCollector
+from stage0_sim.application.data_capture import DatasetQueryFilter
 from stage0_sim.application.dataset import (
     DATASET_SCHEMA_VERSION,
     AgentStateProjector,
     DatasetRecord,
+    DatasetRecordFilter,
+    RecordCategory,
+    RecordJoinIds,
+    RecordRelation,
+    RecordSource,
+    RecordVisibility,
+    RunnerPhase,
 )
 from stage0_sim.application.manager import SimulationManager
 from stage0_sim.application.scenario import (
@@ -154,6 +162,418 @@ def test_unknown_payload_fields_survive_sqlite_restart(tmp_path: Path) -> None:
     }
 
 
+def test_v2_record_envelope_round_trips_all_research_metadata() -> None:
+    record = DatasetRecord(
+        run_id="round-trip",
+        sequence=7,
+        record_type="decision",
+        simulation_tick=3,
+        simulation_time=1.5,
+        agent_id="agent-001",
+        payload={"choice": "wait"},
+        source_event_id="event-7",
+        schema_id="stage0.decision.v1",
+        schema_version="1",
+        category=RecordCategory.DECISION,
+        source=RecordSource.APPLICATION,
+        phase=RunnerPhase.TICK_POST_COGNITION,
+        wall_time="2026-09-01T00:00:00+00:00",
+        visibility=RecordVisibility.PRIVATE_RESEARCH,
+        subject_id="agent-001",
+        related_entity_ids=("agent-002", "place-1"),
+        causation_id="cause-1",
+        correlation_id="correlation-1",
+        joins=RecordJoinIds(
+            goal_id="goal-1",
+            decision_id="decision-1",
+            model_request_id="request-1",
+            tool_call_id="tool-1",
+        ),
+        source_metadata={"provider": "fake"},
+    )
+
+    restored = DatasetRecord.from_dict(record.to_dict())
+
+    assert restored == record
+    assert record.record_id == "round-trip:record:00000007"
+    assert record.to_dict()["decision_id"] == "decision-1"
+
+
+def test_v1_style_dataset_record_constructor_remains_compatible() -> None:
+    record = DatasetRecord(
+        "legacy",
+        1,
+        "event",
+        2,
+        2.5,
+        "agent-001",
+        {"event_type": "legacy.event"},
+    )
+
+    assert record.agent_id == "agent-001"
+    assert record.subject_id == "agent-001"
+    assert record.schema_version == DATASET_SCHEMA_VERSION
+    assert record.to_dict()["payload"] == {"event_type": "legacy.event"}
+
+
+def test_user_version_3_migrates_forward_and_survives_restart(tmp_path: Path) -> None:
+    database = tmp_path / "v3.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.executescript(
+        """
+        CREATE TABLE runs (
+            run_id TEXT PRIMARY KEY,
+            schema_version TEXT NOT NULL,
+            seed INTEGER NOT NULL,
+            dt REAL NOT NULL,
+            initial_speed REAL NOT NULL,
+            scenario_json TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'running',
+            final_tick INTEGER,
+            final_simulation_time REAL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT
+        );
+        CREATE TABLE records (
+            run_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            schema_version TEXT NOT NULL,
+            record_type TEXT NOT NULL,
+            simulation_tick INTEGER NOT NULL,
+            simulation_time REAL NOT NULL,
+            agent_id TEXT,
+            source_event_id TEXT,
+            payload_json TEXT NOT NULL,
+            PRIMARY KEY (run_id, sequence),
+            FOREIGN KEY (run_id) REFERENCES runs(run_id)
+        );
+        CREATE TABLE episodic_memories (
+            run_id TEXT NOT NULL,
+            memory_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            simulation_time REAL NOT NULL,
+            importance REAL NOT NULL,
+            text TEXT NOT NULL,
+            embedding_json TEXT NOT NULL,
+            metadata_json TEXT NOT NULL,
+            PRIMARY KEY (run_id, memory_id)
+        );
+        CREATE TABLE information_documents (
+            run_id TEXT NOT NULL,
+            document_id TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            namespace_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            document_json TEXT NOT NULL,
+            PRIMARY KEY (run_id, document_id, revision)
+        );
+        INSERT INTO runs (
+            run_id, schema_version, seed, dt, initial_speed, scenario_json,
+            started_at
+        ) VALUES (
+            'legacy-run', 'stage0.dataset.v1', 1, 1.0, 1.0,
+            '{"name":"legacy"}', '2026-01-01T00:00:00+00:00'
+        );
+        INSERT INTO records (
+            run_id, sequence, schema_version, record_type, simulation_tick,
+            simulation_time, agent_id, source_event_id, payload_json
+        ) VALUES (
+            'legacy-run', 1, 'stage0.dataset.v1', 'event', 1, 1.0,
+            'agent-001', 'event-1', '{"legacy":true}'
+        );
+        PRAGMA user_version = 3;
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    migrated = SQLiteDatasetStore(database)
+    first = migrated.query_records("legacy-run").records[0]
+    migrated.close()
+    reopened = SQLiteDatasetStore(database)
+    second = reopened.query_records("legacy-run").records[0]
+    reopened.close()
+
+    connection = sqlite3.connect(database)
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    connection.close()
+    assert version == 7
+    assert first == second
+    assert first.record_id == "legacy-run:record:00000001"
+    assert first.schema_id == "stage0.record.event"
+    assert first.subject_id == "agent-001"
+    assert first.payload == {"legacy": True}
+
+
+def test_relational_foundation_tables_and_explicit_projection_writes(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "relations.sqlite3"
+    store = SQLiteDatasetStore(database)
+    store.begin_run(
+        run_id="relations",
+        seed=1,
+        dt=1,
+        initial_speed=1,
+        scenario={"name": "relations"},
+    )
+    record = DatasetRecord(
+        run_id="relations",
+        sequence=1,
+        record_type="state_sample",
+        simulation_tick=1,
+        simulation_time=1,
+        agent_id="agent-001",
+        payload={"energy": 80},
+        category=RecordCategory.STATE,
+        phase=RunnerPhase.TICK_POST_SYSTEMS,
+    )
+    store.append(record)
+    store.add_record_relation(
+        RecordRelation(
+            run_id="relations",
+            record_id=record.record_id,
+            relation_type="subject",
+            target_type="entity",
+            target_id="agent-001",
+        )
+    )
+    store.append_state_sample(
+        run_id="relations",
+        state_sample_id="sample-1",
+        record_id=record.record_id,
+        subject_id="agent-001",
+        phase=RunnerPhase.TICK_POST_SYSTEMS,
+        simulation_tick=1,
+        simulation_time=1,
+        state={"energy": 80},
+    )
+    store.flush()
+    store.close()
+
+    expected = {
+        "record_relations",
+        "state_samples",
+        "state_deltas",
+        "goals",
+        "goal_transitions",
+        "decisions",
+        "decision_options",
+        "model_requests",
+        "model_turns",
+        "tool_executions",
+        "action_instances",
+        "action_transitions",
+        "interactions",
+        "interaction_participants",
+        "interaction_events",
+        "interaction_episodes",
+        "perception_facts",
+        "perception_deliveries",
+        "opportunity_samples",
+        "transition_samples",
+        "population_samples",
+        "goal_episodes",
+        "resource_samples",
+        "resource_flows",
+        "memory_relations",
+    }
+    connection = sqlite3.connect(database)
+    tables = {
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    relation_count = connection.execute(
+        "SELECT COUNT(*) FROM record_relations"
+    ).fetchone()[0]
+    sample = connection.execute(
+        "SELECT state_json FROM state_samples"
+    ).fetchone()[0]
+    connection.close()
+
+    assert expected <= tables
+    assert relation_count == 1
+    assert json.loads(sample) == {"energy": 80}
+
+
+def test_raw_record_filtering_and_stable_sequence_pagination(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteDatasetStore(tmp_path / "queries.sqlite3")
+    store.begin_run(
+        run_id="queries",
+        seed=1,
+        dt=1,
+        initial_speed=1,
+        scenario={"name": "queries"},
+    )
+    for sequence, category, visibility, agent_id in (
+        (1, RecordCategory.STATE, RecordVisibility.OPERATOR, "agent-001"),
+        (2, RecordCategory.STATE, RecordVisibility.PRIVATE_RESEARCH, "agent-001"),
+        (3, RecordCategory.DECISION, RecordVisibility.OPERATOR, "agent-002"),
+        (4, RecordCategory.STATE, RecordVisibility.OPERATOR, "agent-001"),
+    ):
+        store.append(
+            DatasetRecord(
+                run_id="queries",
+                sequence=sequence,
+                record_type="sample",
+                simulation_tick=sequence,
+                simulation_time=float(sequence),
+                agent_id=agent_id,
+                payload={"sequence": sequence},
+                schema_id="stage0.sample.v1",
+                category=category,
+                visibility=visibility,
+            )
+        )
+    store.flush()
+
+    first_page = store.query_records(
+        "queries",
+        DatasetRecordFilter(
+            record_type="sample",
+            category=RecordCategory.STATE,
+            schema_id="stage0.sample.v1",
+            agent_id="agent-001",
+            subject_id="agent-001",
+            minimum_tick=1,
+            maximum_tick=4,
+            visibility=RecordVisibility.OPERATOR,
+            limit=1,
+        ),
+    )
+    second_page = store.query_records(
+        "queries",
+        DatasetRecordFilter(
+            category=RecordCategory.STATE,
+            visibility=RecordVisibility.OPERATOR,
+            after_sequence=first_page.next_cursor,
+            limit=1,
+        ),
+    )
+    store.close()
+
+    assert [record.sequence for record in first_page.records] == [1]
+    assert first_page.next_cursor == 1
+    assert [record.sequence for record in second_page.records] == [4]
+    assert second_page.next_cursor is None
+
+
+def test_summary_includes_category_visibility_and_schema_counts(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteDatasetStore(tmp_path / "summary-v2.sqlite3")
+    store.begin_run(
+        run_id="summary-v2",
+        seed=1,
+        dt=1,
+        initial_speed=1,
+        scenario={"name": "summary-v2"},
+    )
+    store.append(
+        DatasetRecord(
+            run_id="summary-v2",
+            sequence=1,
+            record_type="decision",
+            simulation_tick=1,
+            simulation_time=1,
+            agent_id="agent-001",
+            payload={},
+            schema_id="stage0.decision.v1",
+            schema_version="1",
+            category=RecordCategory.DECISION,
+            visibility=RecordVisibility.PRIVATE_RESEARCH,
+        )
+    )
+    store.flush()
+
+    summary = store.summary("summary-v2")
+    store.close()
+
+    assert summary["record_counts"] == {"decision": 1}
+    assert summary["category_counts"] == {"DECISION": 1}
+    assert summary["visibility_counts"] == {"PRIVATE_RESEARCH": 1}
+    assert summary["schema_counts"] == {"stage0.decision.v1": 1}
+    assert summary["schema_version_counts"] == {"1": 1}
+
+
+def test_private_decision_context_uses_private_projection_visibility(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteDatasetStore(tmp_path / "private-decision.sqlite3")
+    store.begin_run(
+        run_id="private-decision",
+        seed=1,
+        dt=1,
+        initial_speed=1,
+        scenario={"name": "private-decision"},
+    )
+    operator_record = DatasetRecord(
+        run_id="private-decision",
+        sequence=1,
+        record_type="cognition.requested",
+        simulation_tick=1,
+        simulation_time=1,
+        agent_id="agent-001",
+        payload={},
+        visibility=RecordVisibility.OPERATOR,
+    )
+    private_record = DatasetRecord(
+        run_id="private-decision",
+        sequence=2,
+        record_type="decision_request",
+        simulation_tick=1,
+        simulation_time=1,
+        agent_id="agent-001",
+        payload={"secret": "private context"},
+        visibility=RecordVisibility.PRIVATE_RESEARCH,
+    )
+    store.append(operator_record)
+    store.append(private_record)
+    store.append_decision(
+        run_id="private-decision",
+        decision_id="decision-1",
+        record_id=operator_record.record_id,
+        subject_id="agent-001",
+        simulation_tick=1,
+        status="requested",
+        selected_option_id=None,
+        context={},
+    )
+    store.append_decision(
+        run_id="private-decision",
+        decision_id="decision-1",
+        record_id=private_record.record_id,
+        subject_id="agent-001",
+        simulation_tick=1,
+        status="requested",
+        selected_option_id=None,
+        context={"secret": "private context"},
+    )
+    store.flush()
+
+    public_page = store.query_table(
+        "private-decision",
+        "decisions",
+        DatasetQueryFilter(include_private=False),
+    )
+    private_page = store.query_table(
+        "private-decision",
+        "decisions",
+        DatasetQueryFilter(include_private=True),
+    )
+    store.close()
+
+    assert public_page.rows == ()
+    assert private_page.rows[0]["context"] == {
+        "secret": "private context"
+    }
+
+
 @dataclass
 class FutureComponent:
     value: str
@@ -186,7 +606,7 @@ def test_telemetry_sampling_does_not_add_canonical_records(tmp_path: Path) -> No
             telemetry_hz=50,
         )
         scenario = load_scenario(scenario_path("system1-preemption.json"))
-        scenario_id = manager.add_scenario(scenario)
+        scenario_id = await manager.add_scenario(scenario)
         run_id = await manager.start_run(scenario_id, realtime=False)
         manager.pause(run_id)
         before = store.summary(run_id)["record_counts"]
@@ -195,6 +615,39 @@ def test_telemetry_sampling_does_not_add_canonical_records(tmp_path: Path) -> No
         assert before == after
         assert manager.get_run(run_id).broker.latest_sequence > 0
         await manager.close()
+
+    asyncio.run(exercise())
+
+
+def test_manager_close_preserves_failed_realtime_task_status(
+    tmp_path: Path,
+) -> None:
+    async def exercise() -> None:
+        database = tmp_path / "failed-realtime.sqlite3"
+        manager = SimulationManager(
+            dataset_store=SQLiteDatasetStore(database),
+            character_library=FileSystemCharacterLibrary(
+                Path(__file__).parents[1] / "characters"
+            ),
+        )
+        scenario = load_scenario(scenario_path("system1-preemption.json"))
+        scenario_id = await manager.add_scenario(scenario)
+        run_id = await manager.start_run(scenario_id, realtime=False)
+        managed = manager.get_run(run_id)
+
+        async def fail_realtime() -> None:
+            raise RuntimeError("realtime loop failed")
+
+        managed.realtime_task = asyncio.create_task(fail_realtime())
+        await asyncio.sleep(0)
+        with pytest.raises(RuntimeError, match="realtime loop failed"):
+            await manager.close()
+
+        reopened = SQLiteDatasetStore(database)
+        summary = reopened.summary(run_id)
+        reopened.close()
+        assert summary["status"] == "failed"
+        assert summary["capture_complete"] is False
 
     asyncio.run(exercise())
 

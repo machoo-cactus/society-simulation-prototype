@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-northgate-apartments",
+  "kind": "room",
+  "name": "Northgate Apartments interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "004ff47d596b966b703244ab30948a9b6c6b026cc23d11ab62ce6b70737dee63",
+        "id": "greyford-office-evening.station-greyford-northgate-apartments-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-northgate-apartments-primary",
+      "key": "station-greyford-northgate-apartments-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-northgate-apartments-entry",
+      "name": "Northgate Apartments Entry and Reception",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-northgate-apartments-main",
+      "name": "Northgate Apartments Main Interior",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

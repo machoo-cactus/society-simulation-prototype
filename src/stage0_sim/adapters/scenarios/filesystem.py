@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from stage0_sim.application.scenario import ScenarioDefinition
+from stage0_sim.application.elements import ScenarioSourceDefinition
 from stage0_sim.application.scenarios import (
     ScenarioConflictError,
     ScenarioLibraryError,
@@ -29,14 +29,14 @@ class FileSystemScenarioLibrary:
             if not path.name.startswith(".")
         )
 
-    def get(self, scenario_id: str) -> ScenarioDefinition:
+    def get(self, scenario_id: str) -> ScenarioSourceDefinition:
         return self._read(scenario_id)
 
     def create(
         self,
         scenario_id: str,
-        scenario: ScenarioDefinition,
-    ) -> ScenarioDefinition:
+        scenario: ScenarioSourceDefinition,
+    ) -> ScenarioSourceDefinition:
         path = self._path(scenario_id)
         if path.exists():
             raise ScenarioConflictError(
@@ -48,9 +48,9 @@ class FileSystemScenarioLibrary:
     def update(
         self,
         scenario_id: str,
-        scenario: ScenarioDefinition,
+        scenario: ScenarioSourceDefinition,
         expected_hash: str,
-    ) -> ScenarioDefinition:
+    ) -> ScenarioSourceDefinition:
         current = self._read(scenario_id)
         self._require_hash(scenario_id, current, expected_hash)
         self._write(scenario_id, scenario)
@@ -61,7 +61,7 @@ class FileSystemScenarioLibrary:
         scenario_id: str,
         new_id: str,
         expected_hash: str,
-    ) -> ScenarioDefinition:
+    ) -> ScenarioSourceDefinition:
         current = self._read(scenario_id)
         self._require_hash(scenario_id, current, expected_hash)
         destination = self._path(new_id)
@@ -79,7 +79,7 @@ class FileSystemScenarioLibrary:
         self,
         scenario_id: str,
         expected_hash: str,
-    ) -> ScenarioDefinition:
+    ) -> ScenarioSourceDefinition:
         current = self._read(scenario_id)
         self._require_hash(scenario_id, current, expected_hash)
         try:
@@ -97,7 +97,7 @@ class FileSystemScenarioLibrary:
             raise ScenarioLibraryError("scenario path escapes library root")
         return path
 
-    def _read(self, scenario_id: str) -> ScenarioDefinition:
+    def _read(self, scenario_id: str) -> ScenarioSourceDefinition:
         path = self._path(scenario_id)
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -113,8 +113,13 @@ class FileSystemScenarioLibrary:
             raise ScenarioLibraryError(
                 f"scenario {scenario_id} is not valid JSON: {error}"
             ) from error
+        if not isinstance(raw, dict) or raw.get("schema_version") != 3:
+            raise ScenarioLibraryError(
+                f"scenario {scenario_id} requires schema version 3; "
+                "schema-version-2 saved scenarios are not supported"
+            )
         try:
-            return ScenarioDefinition.model_validate(raw)
+            return ScenarioSourceDefinition.model_validate(raw)
         except ValidationError as error:
             raise ScenarioLibraryError(
                 f"scenario {scenario_id} validation failed: {error}"
@@ -123,7 +128,7 @@ class FileSystemScenarioLibrary:
     def _write(
         self,
         scenario_id: str,
-        scenario: ScenarioDefinition,
+        scenario: ScenarioSourceDefinition,
     ) -> None:
         path = self._path(scenario_id)
         temporary = self.root / f".{scenario_id}.{uuid4().hex}.tmp"
@@ -146,7 +151,7 @@ class FileSystemScenarioLibrary:
     @staticmethod
     def _require_hash(
         scenario_id: str,
-        scenario: ScenarioDefinition,
+        scenario: ScenarioSourceDefinition,
         expected_hash: str,
     ) -> None:
         if scenario_content_hash(scenario) != expected_hash:

@@ -1,0 +1,83 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-quayline-cafe",
+  "kind": "room",
+  "name": "Quayline Cafe interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "cda900217838826ad0d28598d7acc7c2fc7331b340eed903b94bd65331e73b36",
+        "id": "greyford-office-evening.station-greyford-quayline-cafe-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-quayline-cafe-primary",
+      "key": "station-greyford-quayline-cafe-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "86f7e65384f7a31576c7741d711c9e038677391dc67c5e634ae6f7c5405ca1bb",
+        "id": "greyford-office-evening.transaction-point-greyford-quayline-counter",
+        "kind": "object"
+      },
+      "id": "transaction-point-greyford-quayline-counter",
+      "key": "transaction-point-greyford-quayline-counter",
+      "position": {
+        "x": 4,
+        "y": 3
+      },
+      "staff_position": {
+        "x": 4,
+        "y": 2
+      }
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-quayline-cafe-entry",
+      "name": "Quayline Street Entrance and Order Queue",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-quayline-cafe-main",
+      "name": "Quayline Seating and Coffee Bar",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

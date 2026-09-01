@@ -47,7 +47,7 @@ layer may improve transport but must not become the only implementation.
 The map viewport is keyboard focusable and retains ordinary scrollbars. Pointer
 drag pans it, wheel input zooms around the pointer, and the named Zoom
 in/Zoom out/Fit buttons remain the accessible and no-JavaScript alternatives.
-Zoom normally selects city, neighborhood, or building detail automatically.
+Zoom normally selects city, city-zone, building, or room detail automatically.
 The advanced scale override is diagnostic UI, not a second source of spatial
 state.
 
@@ -167,7 +167,15 @@ Playwright assertions auto-wait. Use `expect(...)` instead of sleeps.
   tool-controller scenario.
 - Never depend on wall-clock timing to prove simulation behavior.
 - Keep browser contexts isolated. The test server uses temporary character,
-  scenario, and dataset directories so CRUD tests cannot modify the checkout.
+  scenario, element, and dataset directories so CRUD tests cannot modify the
+  checkout.
+
+Element-library changes must cover create, edit, duplicate, dependency-blocked
+delete, and hash-conflict behavior through labeled controls. Reference-scenario
+coverage must prove that repeated building instances resolve from one element,
+that an override affects only its target instance, and that missing or changed
+dependencies block staging. Repeat the core element create/save path with
+JavaScript disabled.
 
 ## ARIA contract
 
@@ -204,6 +212,50 @@ The shared `page` fixture records uncaught page errors and console errors and
 fails during teardown if either occurs. Do not suppress that assertion or add a
 generic ignore list. Fix the browser error or explicitly assert a narrowly
 expected message in a dedicated test.
+
+## Research dataset explorer workflows
+
+The dataset explorer at `/ui/datasets/{run_id}/` is a server-rendered view of
+persisted research data, not a live telemetry store. Browser coverage must:
+
+- enter through the named **Explore research dataset** link and verify the run
+  summary and capture-completeness facts;
+- switch among dataset views and submit entity, tick/time, record/category,
+  status/outcome, schema, and lineage filters through the ordinary GET form;
+- inspect raw and normalized rows through accessible `<details>` disclosures;
+- prove `PRIVATE_RESEARCH` rows are absent by default;
+- prove choosing `PRIVATE_RESEARCH` without **Include private research data**
+  produces the explicit opt-in guidance rather than exposing content;
+- opt in with the labeled checkbox, verify the warning and private rows, and
+  verify that filtered NDJSON and analysis-bundle links retain
+  `include_private=true`;
+- download filtered NDJSON and the analysis ZIP and verify their filenames and
+  privacy behavior;
+- exercise cursor pagination without losing active filters;
+- verify partial replacement of `#dataset-query-region` preserves applicable
+  focus, open disclosures, and scroll state;
+- repeat the core summary, filtering, detail, and download-link workflow with
+  JavaScript disabled to prove the native form/link fallback.
+
+Do not copy prompts, model text, memories, or profile/situation content into a
+test failure message unless the fixture is deliberately synthetic. Prefer
+asserting visibility labels, schema IDs, and known synthetic markers.
+
+## Data Management workflows
+
+The `/ui/data/` workflow is also server-rendered. Browser coverage must enter
+through the named **Data** navigation link and exercise catalog filters,
+pagination, cross-page selection, select-all/clear, aggregate compatibility and
+pooled-versus-macro output, the default private-derived warning and exclusion
+control, and JSON/CSV downloads. It must cover both individual and bulk
+deletion previews, active-run rejection, required confirmation controls, stale
+tokens, atomic success notices, and removal of deleted session references.
+
+Use role/label locators for catalog checkboxes and destructive controls. Verify
+enhanced replacement of the stable catalog, selection, aggregate, notice, and
+deletion regions without navigation, then repeat the core catalog-selection-
+aggregate path with JavaScript disabled. Aggregate assertions must never expose
+raw private prompts, memories, profiles, or model content.
 
 ## Debugging failures
 
@@ -247,6 +299,11 @@ The browser suite must continue to cover:
 - accessible world SVG and view controls;
 - event filtering, event detail, copy/download affordances, and clearing;
 - transcript and dataset download visibility;
+- research dataset summary/schema views, accessible filters, stable
+  pagination, record detail, and filtered exports;
+- private research exclusion by default, rejected implicit disclosure, explicit
+  opt-in warning, and private-enabled download propagation;
+- native no-JavaScript dataset explorer fallback;
 - character search, create/import, duplicate, rename/edit, download, and
   confirmed delete;
 - unique IDs and primary landmarks;

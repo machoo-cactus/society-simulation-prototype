@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from stage0_sim.domain.components import (
+    ActionInstance,
     ActionType,
     ActivityComponent,
     ActivityType,
@@ -13,6 +14,10 @@ from stage0_sim.domain.components import (
     System1State,
 )
 from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
+from stage0_sim.domain.lineage import (
+    action_lineage_payload,
+    emit_action_lifecycle,
+)
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
 from stage0_sim.domain.world import AffordanceStation
@@ -56,6 +61,7 @@ class AffordanceExecutionSystem:
                 drive.target_station_id,
                 action,
                 source="system1",
+                action_instance=drive.correction_action,
             )
             if started:
                 self._advance(context, agent_id)
@@ -83,6 +89,7 @@ class AffordanceExecutionSystem:
                 request.station_id,
                 action,
                 source=request.source,
+                action_instance=request.action_instance,
             )
             if started:
                 request.status = "running"
@@ -99,13 +106,29 @@ class AffordanceExecutionSystem:
         action: ActionType,
         *,
         source: str,
+        action_instance: ActionInstance | None = None,
     ) -> tuple[bool, str | None]:
         world = local_world_for_agent(context.registry, agent_id)
+        if world is None:
+            self._emit_failure(
+                context,
+                agent_id,
+                station_id,
+                action.value,
+                "local_space_unavailable",
+                action_instance,
+            )
+            return False, "local_space_unavailable"
         try:
             station = world.station(station_id)
         except KeyError:
             self._emit_failure(
-                context, agent_id, station_id, action.value, "station_not_found"
+                context,
+                agent_id,
+                station_id,
+                action.value,
+                "station_not_found",
+                action_instance,
             )
             return False, "station_not_found"
         failure = self._precondition_failure(
@@ -116,7 +139,14 @@ class AffordanceExecutionSystem:
             check_availability=True,
         )
         if failure is not None:
-            self._emit_failure(context, agent_id, station.id, action.value, failure)
+            self._emit_failure(
+                context,
+                agent_id,
+                station.id,
+                action.value,
+                failure,
+                action_instance,
+            )
             return False, failure
 
         definition = station.action(action.value)
@@ -135,7 +165,13 @@ class AffordanceExecutionSystem:
                 "station_id": station.id,
                 "action": action.value,
                 "duration": definition.duration,
+                **action_lineage_payload(action_instance),
             },
+            correlation_id=(
+                action_instance.root_correlation_id
+                if action_instance is not None
+                else None
+            ),
         )
         context.registry.add_component(
             agent_id,
@@ -147,8 +183,13 @@ class AffordanceExecutionSystem:
                 starting_energy=homeostasis.energy,
                 starting_stress=homeostasis.stress,
                 previous_activity=previous_activity,
-                correlation_id=started.event_id,
+                correlation_id=(
+                    action_instance.root_correlation_id
+                    if action_instance is not None
+                    else started.event_id
+                ),
                 source=source,
+                action_instance=action_instance,
             ),
         )
         if previous_activity is not activity.current:
@@ -163,7 +204,11 @@ class AffordanceExecutionSystem:
                     "reason": "affordance_started",
                 },
                 causation_id=started.event_id,
-                correlation_id=started.event_id,
+                correlation_id=(
+                    action_instance.root_correlation_id
+                    if action_instance is not None
+                    else started.event_id
+                ),
             )
         return True, None
 
@@ -172,6 +217,9 @@ class AffordanceExecutionSystem:
             agent_id, AffordanceExecutionComponent
         )
         world = local_world_for_agent(context.registry, agent_id)
+        if world is None:
+            cancel_affordance(context, agent_id, "local_space_unavailable")
+            return
         station = world.station(execution.station_id)
         failure = self._precondition_failure(
             context,
@@ -235,6 +283,7 @@ class AffordanceExecutionSystem:
                         12,
                     ),
                 },
+                **action_lineage_payload(execution.action_instance),
             },
             correlation_id=execution.correlation_id,
         )
@@ -251,9 +300,21 @@ class AffordanceExecutionSystem:
                 "progress": round(progress, 12),
                 "before": before,
                 "after": after,
+                **action_lineage_payload(execution.action_instance),
             },
             correlation_id=execution.correlation_id,
         )
+        if execution.source == "system1" and execution.action_instance is not None:
+            emit_action_lifecycle(
+                context,
+                "action.progressed",
+                agent_id,
+                execution.action_instance,
+                {
+                    "station_id": execution.station_id,
+                    "progress": round(progress, 12),
+                },
+            )
         if execution.elapsed >= execution.definition.duration:
             self._complete(context, agent_id, execution)
 
@@ -274,6 +335,7 @@ class AffordanceExecutionSystem:
                 "action": execution.definition.action,
                 "duration": execution.definition.duration,
                 "homeostasis": homeostasis.snapshot(),
+                **action_lineage_payload(execution.action_instance),
             },
             correlation_id=execution.correlation_id,
         )
@@ -351,6 +413,7 @@ class AffordanceExecutionSystem:
         station_id: str,
         action: str,
         reason: str,
+        action_instance: ActionInstance | None = None,
     ) -> None:
         context.events.emit(
             "affordance.failed",
@@ -361,7 +424,13 @@ class AffordanceExecutionSystem:
                 "station_id": station_id,
                 "action": action,
                 "reason": reason,
+                **action_lineage_payload(action_instance),
             },
+            correlation_id=(
+                action_instance.root_correlation_id
+                if action_instance is not None
+                else None
+            ),
         )
 
 
@@ -381,6 +450,7 @@ def cancel_affordance(context: SystemContext, agent_id: str, reason: str) -> Non
             "action": execution.definition.action,
             "elapsed": execution.elapsed,
             "reason": reason,
+            **action_lineage_payload(execution.action_instance),
         },
         correlation_id=execution.correlation_id,
     )

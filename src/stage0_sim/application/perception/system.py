@@ -20,7 +20,7 @@ from stage0_sim.domain.perception import (
 )
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
-from stage0_sim.domain.world import Coordinate, SpatialScale, WorldGrid, WorldMap
+from stage0_sim.domain.world import Coordinate, WorldGrid, WorldMap
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +50,6 @@ class PerceptionSystem:
     def update(self, context: SystemContext) -> None:
         if not context.registry.has_resource(WorldMap):
             return
-        world = context.registry.get_resource(WorldMap)
         configuration = context.registry.get_resource(PerceptionConfiguration)
         pending_events = context.events.events[self._event_cursor :]
         self._event_cursor = len(context.events.events)
@@ -60,19 +59,24 @@ class PerceptionSystem:
             )
         )
         for observer_id in observers:
+            observer_world = local_world_for_agent(
+                context.registry, observer_id
+            )
+            if observer_world is None:
+                continue
             self._scan_visible(
                 context,
-                local_world_for_agent(context.registry, observer_id),
+                observer_world,
                 configuration,
                 observer_id,
             )
         for event in pending_events:
             if event.event_type == "speech.started":
-                self._route_speech(context, world, configuration, event, observers)
+                self._route_speech(context, configuration, event, observers)
             elif event.event_type == "agent.moved":
-                self._route_movement(context, world, event, observers)
+                self._route_movement(context, event, observers)
             elif event.event_type in {"activity.changed", "affordance.started"}:
-                self._route_visual_event(context, world, event, observers)
+                self._route_visual_event(context, event, observers)
             elif event.event_type == "time.updated":
                 self._route_time_update(context, event, observers)
             elif event.event_type == "weather.changed":
@@ -119,8 +123,8 @@ class PerceptionSystem:
             )
             and context.registry.get_component(
                 observer_id, SpatialLocationComponent
-            ).location.scale
-            is not SpatialScale.BUILDING
+            ).location.local_coordinate
+            is None
         ):
             vision_range = int(
                 vision_range
@@ -259,7 +263,6 @@ class PerceptionSystem:
     def _route_visual_event(
         self,
         context: SystemContext,
-        world: WorldMap,
         event: DomainEvent,
         observers: tuple[str, ...],
     ) -> None:
@@ -277,6 +280,8 @@ class PerceptionSystem:
             observer_world = local_world_for_agent(
                 context.registry, observer_id
             )
+            if observer_world is None:
+                continue
             self._deliver(
                 context,
                 observer_id,
@@ -413,7 +418,6 @@ class PerceptionSystem:
     def _route_movement(
         self,
         context: SystemContext,
-        world: WorldMap,
         event: DomainEvent,
         observers: tuple[str, ...],
     ) -> None:
@@ -423,8 +427,6 @@ class PerceptionSystem:
         current = _coordinate_value(event.payload.get("to"))
         if previous is None or current is None:
             return
-        previous_zone = _zone_id(world, previous)
-        current_zone = _zone_id(world, current)
         for observer_id in observers:
             if observer_id == event.agent_id:
                 continue
@@ -436,6 +438,8 @@ class PerceptionSystem:
             observer_world = local_world_for_agent(
                 context.registry, observer_id
             )
+            if observer_world is None:
+                continue
             previous_zone = _zone_id(observer_world, previous)
             current_zone = _zone_id(observer_world, current)
             fact_type = "entity_moved"
@@ -465,7 +469,6 @@ class PerceptionSystem:
     def _route_speech(
         self,
         context: SystemContext,
-        world: WorldMap,
         configuration: PerceptionConfiguration,
         event: DomainEvent,
         observers: tuple[str, ...],
@@ -496,6 +499,8 @@ class PerceptionSystem:
             observer_world = local_world_for_agent(
                 context.registry, observer_id
             )
+            if observer_world is None:
+                continue
             senses = context.registry.get_component(observer_id, SensesComponent)
             target = context.registry.get_component(
                 observer_id, PositionComponent
@@ -586,6 +591,19 @@ class PerceptionSystem:
                 payload={
                     "fact_id": item.fact.fact_id,
                     "reason": "fact_max_age",
+                    "observer_id": observer_id,
+                    "perceived_tick": context.clock.tick,
+                    "fact_age": round(
+                        max(
+                            0.0,
+                            (context.clock.tick - item.fact.tick)
+                            * context.clock.dt,
+                        ),
+                        12,
+                    ),
+                    "salience": item.salience,
+                    "certainty": item.certainty,
+                    "fact": _fact_payload(item.fact),
                 },
             )
         perceived = PerceivedFact(
@@ -616,6 +634,18 @@ class PerceptionSystem:
                 "fact_type": fact.fact_type,
                 "modality": fact.modality.value,
                 "subject_id": fact.subject_id,
+                "observer_id": observer_id,
+                "perceived_tick": context.clock.tick,
+                "fact_age": round(
+                    max(0.0, (context.clock.tick - fact.tick) * context.clock.dt),
+                    12,
+                ),
+                "salience": salience,
+                "certainty": perceived.certainty,
+                "disclosure": fact.disclosure.value,
+                "object_id": fact.object_id,
+                "location_id": fact.location_id,
+                "fact": _fact_payload(fact),
             },
             causation_id=fact.event_id,
         )
@@ -628,6 +658,19 @@ class PerceptionSystem:
                 payload={
                     "fact_id": dropped.fact.fact_id,
                     "reason": "inbox_limit",
+                    "observer_id": observer_id,
+                    "perceived_tick": context.clock.tick,
+                    "fact_age": round(
+                        max(
+                            0.0,
+                            (context.clock.tick - dropped.fact.tick)
+                            * context.clock.dt,
+                        ),
+                        12,
+                    ),
+                    "salience": dropped.salience,
+                    "certainty": dropped.certainty,
+                    "fact": _fact_payload(dropped.fact),
                 },
             )
 
@@ -657,6 +700,21 @@ class PerceptionSystem:
             modality=modality,
             disclosure=disclosure,
         )
+
+
+def _fact_payload(fact: PerceptibleFact) -> dict[str, JsonValue]:
+    return {
+        "fact_id": fact.fact_id,
+        "event_id": fact.event_id,
+        "tick": fact.tick,
+        "fact_type": fact.fact_type,
+        "subject_id": fact.subject_id,
+        "object_id": fact.object_id,
+        "location_id": fact.location_id,
+        "properties": dict(fact.properties),
+        "modality": fact.modality.value,
+        "disclosure": fact.disclosure.value,
+    }
 
 
 def _display_name(context: SystemContext, entity_id: str) -> str:
@@ -749,8 +807,8 @@ def _same_local_place(
         second_id, SpatialLocationComponent
     ).location
     return (
-        first.scale.value == "BUILDING"
-        and second.scale.value == "BUILDING"
+        first.local_coordinate is not None
+        and second.local_coordinate is not None
         and first.place_id == second.place_id
     )
 

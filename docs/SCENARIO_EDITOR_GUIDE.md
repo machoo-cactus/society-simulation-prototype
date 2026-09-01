@@ -1,8 +1,37 @@
 # Scenario Library and Structured Editor
 
 The operator Scenario Library is available at `/ui/scenarios/`. It stores plain
-`ScenarioDefinition` JSON files in `STAGE0_SCENARIO_DIRECTORY`, which defaults
-to `scenarios/`.
+schema-version-3 `ScenarioSourceDefinition` JSON files in
+`STAGE0_SCENARIO_DIRECTORY`, which defaults to `scenarios/`. Schema-version-2
+materialized documents are internal runtime definitions only. Saved-library,
+CLI, browser-upload, and simulation-API inputs require schema version 3 and
+fail explicitly for version 2 or malformed files.
+
+Reusable world construction records are managed separately at
+`/ui/elements/` and stored in `STAGE0_ELEMENT_DIRECTORY`, which defaults to
+`elements/`. Element files are strict, hash-protected resources with one of
+four kinds: building, room, object, or NPC role. Buildings reference rooms,
+rooms place objects, and staffed transaction objects reference NPC roles.
+
+Reference-format city scenarios use schema version 3 and contain city zones
+plus hash-pinned building instances. Validation resolves the complete element
+dependency graph before staging. Missing resources, wrong kinds, changed
+hashes, invalid placements, and unknown override keys fail explicitly. The
+scenario remains reference-only on disk; the prepared run records the exact
+resolved definitions and hashes as research provenance.
+
+The normal repeated-building case supplies only the instance ID, shared
+building reference, city position, and entrance-network bindings. Optional
+overrides are closed typed records rather than arbitrary JSON merge patches.
+This allows two restaurants to share layout, objects, schedules, and staffing
+while changing only a name, holdings, offer, availability rule, or selected
+child override.
+
+Compatibility fields used by migrated repository sources can preserve an
+existing local-map ID, entrance/object IDs, arbitrary room-local zone shapes,
+and the original building, outdoor-place, and NPC-role ordering. New reusable
+instances normally omit those fields and use deterministic derived IDs and
+containment order.
 
 ## Resource ID and scenario name
 
@@ -24,8 +53,11 @@ The editor provides structured controls for all typed scenario fields:
 - grid dimensions, blocked coordinates, zones, stations, actions, durations,
   capacities, weekly schedules, weather closures, base availability, and
   physiological effects;
-- city bounds, districts, buildings, entrances, outdoor places, local maps,
-  transport nodes and edges, geometry, modes, speeds, and vehicles;
+- item catalogs, compact NPC roles, possessions, transaction offers, and
+  staffed or automated point configuration;
+- city bounds, city zones, hash-pinned building instances, typed building,
+  room, object, and NPC-role overrides, outdoor places, transport nodes and
+  edges, geometry, modes, speeds, and vehicles;
 - entities and position, spatial location, movement, homeostasis, activity,
   character slot, plan, planner, information, controller, senses, memory,
   and conversation components.
@@ -38,8 +70,29 @@ a civil calendar; any weekly schedule requires a calendar.
 Each `character_slot` exposes a role label, temporary briefing, optional
 default character, and selection constraints. The initial constraints are
 inclusive minimum/maximum age, case-insensitive exact gender allowlists, and
-template ID allowlists. Planner goals/priorities and initial memory episodes
-remain separate typed scenario components.
+template ID allowlists. For version-2 characters, age is derived from
+`identity.birth_date` at the scenario calendar start date; a scenario using age
+constraints therefore requires a calendar. Planner goals/priorities and
+initial memory episodes remain separate typed scenario components.
+
+The planner editor keeps legacy `daily_goals` and `current_priorities` string
+lists for backward compatibility. Its `goals` field accepts the strict
+structured-goal JSON array: each goal has a unique stable ID, description,
+priority, optional tags and activation/deadline times, `all`/`any` completion
+policy, and closed typed criteria. Supported criteria are event match, allowed
+state comparison, location match, possession threshold, action outcome,
+interaction count, and simulation-time threshold. Extra fields and executable
+expressions are rejected. Legacy strings receive deterministic IDs but remain
+`unknown` unless replaced by measurable structured goals. See
+[Research Data Collection](DATA_COLLECTION.md#structured-goals-and-criteria)
+for an inline example and exact semantics.
+
+Scenario-level `npc_roles` are compact reusable service templates. A
+transaction point may be `AUTOMATED`, or `STAFFED` with a role reference,
+adjacent staff position, and request timeout. The local-map editor outlines
+staff positions beside staffed points. NPC instances are not stable scenario
+entities or character-library assignments; a run creates them when the first
+service request arrives.
 
 Lists and mappings use native **Add**, **Remove**, move-up, and move-down
 submissions. Optional values and grid/city branches retain their inactive draft
@@ -47,9 +100,10 @@ values. Each browser tab receives an opaque server-side draft, so incomplete or
 invalid values survive redirect-after-submit without being shared between
 tabs.
 
-JSON text areas are limited to intentionally arbitrary values: information
-content and metadata, metro-line payloads, entity metadata and unknown
-passthrough components.
+JSON text areas are limited to intentionally arbitrary values plus strict
+nested records that are validated as a whole, including structured planner
+goals. Examples of arbitrary values are information content and metadata,
+metro-line payloads, entity metadata, and unknown passthrough components.
 
 ## Library operations
 
@@ -82,3 +136,10 @@ while retaining the bundled-example and uploaded-JSON staging flows.
 Validation failures remain in the draft and appear in an alert summary linked
 to inline field errors. Cross-field, cross-reference, malformed JSON, unsafe
 resource ID, duplicate-key, and stale-write failures are explicit.
+
+The editor and runtime projections expose the containment hierarchy as
+`city -> city zone -> building instance -> room -> object`. A building
+instance picker shows library IDs and hashes, creates hash-pinned references
+and entrance nodes, previews inherited interiors, and resets typed overrides
+without changing sibling instances. Saved JSON remains reference-only; room,
+object, and NPC-role definitions are materialized only during resolution.

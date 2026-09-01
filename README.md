@@ -109,7 +109,10 @@ stage0-sim run scenarios/homeostasis.json --ticks 60
 stage0-sim run scenarios/system1-preemption.json --ticks 20
 stage0-sim run scenarios/fake-llm-planning.json --ticks 30
 stage0-sim run scenarios/sparse-city-car-demo.json --ticks 700
+stage0-sim run scenarios/greyford-rivermarket-exchange.json --ticks 500
 stage0-sim run scenarios/greyford-office-evening.json --ticks 3000
+stage0-sim run scenarios/reference-city-restaurants.json \
+  --elements-dir elements --ticks 10
 ```
 
 | Scenario | What it demonstrates |
@@ -121,7 +124,9 @@ stage0-sim run scenarios/greyford-office-evening.json --ticks 3000
 | `fake-llm-planning.json` | Post-tick planning, memory retrieval, and validated routines without an external model |
 | `real-llm-tool-agent.json` | Observer-specific sensing and externally configured typed-tool character control |
 | `sparse-city-car-demo.json` | Hierarchical location, sparse city routing, explicit car travel, and city UI |
+| `greyford-rivermarket-exchange.json` | Cross-building navigation, a lazily spawned deterministic cashier, finite stock, bottle redemption, and an atomic purchase |
 | `greyford-office-evening.json` | Large provincial-capital city, detailed office neighborhood, explicit character knowledge, dinner, and mixed walk/metro travel home |
+| `reference-city-restaurants.json` | Two restaurant instances resolved from one shared building/room/object/NPC-role element graph |
 
 By default, canonical events are written to standard output and a SQLite dataset
 is created under `data/runs/`. Canonical events omit run IDs and wall-clock
@@ -143,9 +148,17 @@ stage0-sim run scenarios/navigation.json --ticks 20 --full-events
 # Pace simulation time against wall time at 4x speed.
 stage0-sim run scenarios/homeostasis.json --ticks 60 --realtime --speed 4
 
+# Force staffed NPCs to use deterministic decisions.
+stage0-sim run scenarios/greyford-rivermarket-exchange.json \
+  --ticks 500 --npc-control deterministic
+
 # Use a different character library.
 stage0-sim run scenarios/real-llm-tool-agent.json \
   --characters-dir path/to/characters --ticks 30
+
+# Use a different reusable world-element library.
+stage0-sim run scenarios/reference-city-restaurants.json \
+  --elements-dir path/to/elements --ticks 10
 
 # Override a scenario slot's optional default character.
 stage0-sim run scenarios/real-llm-tool-agent.json \
@@ -218,6 +231,68 @@ The empty top-level `frontend/` scaffold from the original proposed architecture
 has been removed. It had no source files and was not used by packaging or at
 runtime.
 
+## Explore research data
+
+Every run writes the exhaustive `stage0.dataset.v2` research record stream plus
+normalized and derived SQLite projections. Open the run's **Explore research
+dataset** link, or use the first-class **Data** page to discover historical
+runs, select across catalog pages, compare aggregate statistics, export an
+aggregate, or permanently delete finalized runs:
+
+```text
+http://127.0.0.1:8000/ui/data/
+http://127.0.0.1:8000/ui/datasets/{run_id}/
+```
+
+The configured API/UI SQLite database is the catalog authority across
+application restarts. Dataset-store instances maintain ownership leases so a
+second process cannot reconcile or delete a run still owned by a live process.
+Runs whose prior ownership lease is closed or expired are reconciled as
+`interrupted`; active or not-fully-finalized runs cannot be deleted. Bulk
+deletion is atomic, requires a fresh exact-selection preview and typed
+confirmation, and frees pages for SQLite reuse without automatically running
+`VACUUM`.
+
+Aggregate data keeps run identity and reports pooled observation-weighted
+statistics separately from equally weighted per-run macro statistics. Mixed
+schema/scenario/capture groups remain selectable with explicit compatibility
+warnings. Private-derived aggregates are included by default, with a prominent
+warning and an exclusion control; raw private payloads are never rendered on
+the aggregate page.
+
+The server-rendered explorer provides capture-completeness summaries, raw
+records, goal/decision/action/interaction timelines, transitions, population
+and resource views, schema information, lineage filters, and filtered
+downloads. Native GET forms and links remain usable without JavaScript.
+
+Useful API examples:
+
+```bash
+# Summary and generated data dictionary.
+curl http://127.0.0.1:8000/simulation/runs/RUN/data
+curl http://127.0.0.1:8000/simulation/runs/RUN/data/schema
+
+# Character actions and decision episodes.
+curl "http://127.0.0.1:8000/simulation/runs/RUN/data/actions?entity_id=agent-001"
+curl "http://127.0.0.1:8000/simulation/runs/RUN/data/episodes/decisions?limit=50"
+
+# Privacy-filtered raw records and analysis bundle.
+curl -OJ "http://127.0.0.1:8000/simulation/runs/RUN/exports/records?minimum_tick=10"
+curl -OJ "http://127.0.0.1:8000/simulation/runs/RUN/exports/bundle?entity_id=agent-001"
+```
+
+Filtered queries and exports exclude `PRIVATE_RESEARCH` by default. Explicit
+`include_private=true` access can reveal prompts, model text/tool calls,
+retrieved memories and information, embeddings, and profile or synthesized-
+situation context. The compatibility `/export` JSONL is a complete export and
+is **not privacy-filtered**. Treat SQLite databases and complete/private-enabled
+exports as restricted research artifacts.
+
+Telemetry is a separate omniscient operator transport and is never character-
+controller context. Datasets are research records, not resumable checkpoints.
+See [Research Data Collection](docs/DATA_COLLECTION.md) for schemas, lifecycle
+semantics, feature definitions, APIs, exports, and limitations.
+
 ## Create an experiment
 
 Copy a scenario and change one variable at a time:
@@ -229,11 +304,11 @@ stage0-sim run scenarios/my-experiment.json --ticks 120 \
   --export data/runs/my-experiment.jsonl
 ```
 
-Legacy single-grid scenarios use schema version 1:
+Canonical scenario sources use schema version 3. Grid worlds remain inline:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "name": "example",
   "seed": 42,
   "dt": 1.0,
@@ -249,9 +324,10 @@ Legacy single-grid scenarios use schema version 1:
 }
 ```
 
-Sparse city scenarios use schema version 2. See
-`scenarios/sparse-city-car-demo.json` for the current city, local-map,
-transport-network, vehicle, and hierarchical-location schema.
+City sources use `city_zones` containing hash-pinned building element
+instances. See `scenarios/sparse-city-car-demo.json` for transport, vehicles,
+and hierarchical locations, and `scenarios/reference-city-restaurants.json`
+for reusable building, room, object, and NPC-role resources.
 
 Common experiment variables include:
 
@@ -261,12 +337,19 @@ Common experiment variables include:
 - critical and recovery thresholds;
 - initial positions, vitals, activities, plans, goals, and memories;
 - affordance duration, capacity, and deterministic effects;
+- item catalogs, character possessions, and finite transaction-point offers;
+- compact NPC roles, staffed or automated points, and NPC control mode;
 - memory relevance, recency, and importance weights.
-- schema-version-2 city bounds, districts, buildings, entrances, local maps,
+- schema-version-3 city bounds, city zones, hash-pinned building instances,
   outdoor places, sparse transport edges, vehicles, and scripted `TRAVEL_TO`
   actions.
 
 The full examples in `scenarios/` are the most reliable schema reference.
+
+Reusable building, room, object, and NPC-role resources live under `elements/`
+by default. Set `STAGE0_ELEMENT_DIRECTORY` to use another library. Compact
+reference scenarios require matching hash-pinned resources; prepared run
+datasets retain the exact resolved element definitions and hashes.
 Invalid fields and values are rejected when a scenario is loaded.
 
 ## API workflow
@@ -278,17 +361,23 @@ than duplicating run state in the browser:
 1. Manage reusable character files through `GET/POST /characters` and
    `GET/PUT/DELETE /characters/{character_id}`, and reusable scenario files
    through `GET/POST /scenarios` and `GET/PUT/DELETE /scenarios/{scenario_id}`.
-2. `POST /simulation/scenarios` with a scenario document. Character references
-   are resolved and frozen at this boundary.
+2. `POST /simulation/scenarios` with a schema-version-3
+   `ScenarioSourceDefinition`. Element and character references are resolved
+   and frozen at this boundary; schema-version-2 materialized scenarios are
+   rejected as user input.
 3. `POST /simulation/runs` with the returned `scenario_id`.
 4. Inspect `/simulation/runs/{run_id}` or its `/snapshot`.
 5. Control the run with `/pause`, `/resume`, `/step`, `/speed`, and `/stop`.
 6. Stream ordered telemetry from
    `ws://127.0.0.1:8000/simulation/runs/{run_id}/stream`.
-7. Export records from `/simulation/runs/{run_id}/export`.
+7. Query `/data`, `/data/schema`, `/data/records`, and the normalized lifecycle
+   endpoints, or export filtered records from `/exports/records` and an
+   analysis ZIP from `/exports/bundle`.
 
 Additional endpoints provide agent inspection, controlled vital mutation, event
-history, and dataset summaries. Model APIs are deliberately not mounted in the
+history, dataset summaries, goals, decisions, actions, interactions, state and
+derived features. `/simulation/runs/{run_id}/export` remains the complete
+compatibility JSONL endpoint. Model APIs are deliberately not mounted in the
 simulation process.
 
 API run objects are process-local. Restarting the server does not restore a live

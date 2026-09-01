@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-provincial-assembly",
+  "kind": "room",
+  "name": "Greyford Provincial Assembly Hall interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "75788177deaa970e293fb2df412f5e96b98b30a4764c7f764c59ce5272442ea3",
+        "id": "greyford-office-evening.station-greyford-provincial-assembly-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-provincial-assembly-primary",
+      "key": "station-greyford-provincial-assembly-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-provincial-assembly-entry",
+      "name": "Greyford Provincial Assembly Entry and Reception",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-provincial-assembly-main",
+      "name": "Greyford Provincial Assembly Main Interior",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

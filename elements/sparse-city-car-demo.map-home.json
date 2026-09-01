@@ -1,0 +1,26 @@
+{
+  "blocked": [],
+  "description": "",
+  "height": 3,
+  "id": "sparse-city-car-demo.map-home",
+  "kind": "room",
+  "name": "Alex's Apartment interior",
+  "objects": [],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 3,
+  "zones": [
+    {
+      "bounds": {
+        "height": 3,
+        "width": 2,
+        "x": 1,
+        "y": 0
+      },
+      "id": "home-entry",
+      "name": "Home Entry",
+      "tiles": null,
+      "type": "ENTRY"
+    }
+  ]
+}

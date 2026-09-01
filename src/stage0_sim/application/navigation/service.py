@@ -15,6 +15,7 @@ from stage0_sim.domain.components import (
     SpatialLocationComponent,
 )
 from stage0_sim.domain.ecs import Registry
+from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.world import (
     CityWorld,
     Locator,
@@ -53,6 +54,8 @@ class NavigationService:
         character_id: str,
         target_id: str,
         preferred_mode: TravelMode | None,
+        *,
+        authoritative: bool = False,
     ) -> PlannedNavigation:
         origin = self.registry.get_component(
             character_id,
@@ -60,10 +63,19 @@ class NavigationService:
         ).locator
         if origin is None:
             raise NavigationPlanningError("current_locator_unavailable")
-        destination = self.resolver.resolve(
-            self.known_topology,
-            character_id,
-            target_id,
+        destination = (
+            self._authoritative_destination(target_id)
+            if authoritative
+            else self.resolver.resolve(
+                self.known_topology,
+                character_id,
+                target_id,
+            )
+        )
+        allowed_transition_ids = self._available_transition_ids(
+            self._authoritative_transition_ids()
+            if authoritative
+            else self.known_topology.transition_ids(character_id)
         )
         route = self.planner.plan(
             self.topology,
@@ -78,13 +90,79 @@ class NavigationService:
                 ),
                 occupied_locators=self._occupied_locators(character_id),
             ),
-            allowed_transition_ids=self.known_topology.transition_ids(character_id),
+            allowed_transition_ids=allowed_transition_ids,
         )
         return PlannedNavigation(
             destination=destination,
             route=route,
             primitives=self._compile(route, destination, preferred_mode),
         )
+
+    def _authoritative_destination(
+        self,
+        target_id: str,
+    ) -> KnownDestination:
+        locators = self.topology.destination_locators(target_id)
+        if not locators:
+            raise NavigationPlanningError(
+                "authoritative_destination_has_no_locator"
+            )
+        if self.registry.has_resource(CityWorld):
+            city = self.registry.get_resource(CityWorld)
+            try:
+                item = city.world_object(target_id)
+            except KeyError:
+                item = None
+            if item is not None:
+                return KnownDestination(
+                    id=item.id,
+                    kind=(
+                        "station"
+                        if item.station is not None
+                        else "transaction_point"
+                    ),
+                    name=item.name,
+                    locators=locators,
+                    supported_actions=(
+                        item.station.supported_actions
+                        if item.station is not None
+                        else ()
+                    ),
+                    offers=(
+                        item.transaction_point.offers
+                        if item.transaction_point is not None
+                        else ()
+                    ),
+                )
+            try:
+                room = city.room(target_id)
+            except KeyError:
+                room = None
+            if room is not None:
+                return KnownDestination(
+                    target_id, "room", room.name, locators
+                )
+            try:
+                building = city.building(target_id)
+            except KeyError:
+                building = None
+            if building is not None:
+                return KnownDestination(
+                    target_id, "building", building.name, locators
+                )
+        return KnownDestination(target_id, "place", target_id, locators)
+
+    def _authoritative_transition_ids(self) -> frozenset[str]:
+        transition_ids = {
+            transition.id
+            for transition in self.topology.transitions()
+        }
+        if self.registry.has_resource(CityWorld):
+            transition_ids.update(
+                edge.id
+                for edge in self.registry.get_resource(CityWorld).edges
+            )
+        return frozenset(transition_ids)
 
     def _occupied_locators(self, character_id: str) -> tuple[Locator, ...]:
         occupied: list[tuple[str, Locator]] = []
@@ -115,6 +193,23 @@ class NavigationService:
         index = 0
         while index < len(route.legs):
             leg = route.legs[index]
+            if leg.executor_id == "portal":
+                if leg.transition_id is None:
+                    raise NavigationPlanningError(
+                        "portal_transition_missing_id"
+                    )
+                primitives.append(
+                    NavigationPrimitive(
+                        kind=NavigationPrimitiveKind.TRANSITION,
+                        origin=leg.origin,
+                        destination=leg.destination,
+                        route_leg_start=index,
+                        route_leg_end=index + 1,
+                        transition_id=leg.transition_id,
+                    )
+                )
+                index += 1
+                continue
             if (
                 leg.executor_id == "movement"
                 and leg.origin.space_id == leg.destination.space_id
@@ -150,7 +245,8 @@ class NavigationService:
             while end < len(route.legs):
                 candidate = route.legs[end]
                 if (
-                    candidate.executor_id == "movement"
+                    candidate.executor_id == "portal"
+                    or candidate.executor_id == "movement"
                     and candidate.origin.space_id
                     == candidate.destination.space_id
                 ):
@@ -158,11 +254,15 @@ class NavigationService:
                 end += 1
             segment = route.legs[index:end]
             terminal = segment[-1].destination
-            destination_id = (
-                terminal.space_id
-                if terminal.space_id != city.id
-                else destination.id
-            )
+            if terminal.space_id == city.id:
+                destination_id = destination.id
+            else:
+                try:
+                    destination_id = city.room(
+                        terminal.space_id
+                    ).building_id
+                except KeyError:
+                    destination_id = terminal.space_id
             inbound_transition_id = next(
                 (
                     candidate.transition_id
@@ -219,6 +319,36 @@ class NavigationService:
             )
             index = end
         return tuple(primitives)
+
+    def _available_transition_ids(
+        self,
+        known_transition_ids: frozenset[str],
+    ) -> frozenset[str]:
+        availability = (
+            self.registry.get_resource(EnvironmentAvailabilityRegistry)
+            if self.registry.has_resource(EnvironmentAvailabilityRegistry)
+            else None
+        )
+        allowed: set[str] = set()
+        for transition_id in sorted(known_transition_ids):
+            base_id = transition_id.removesuffix(":reverse")
+            try:
+                transition = self.topology.transition(base_id)
+            except KeyError:
+                allowed.add(transition_id)
+                continue
+            base_available = transition.metadata.get("available", True)
+            if not isinstance(base_available, bool):
+                base_available = True
+            if (
+                availability is None
+                or availability.state(
+                    base_id,
+                    base_available=base_available,
+                ).available
+            ):
+                allowed.add(transition_id)
+        return frozenset(allowed)
 
     @staticmethod
     def _network_node_id(locator: Locator | None) -> str | None:

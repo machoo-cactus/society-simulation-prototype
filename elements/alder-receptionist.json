@@ -1,0 +1,17 @@
+{
+  "briefing": "Serve valid assigned room-booking requests at the hotel front desk.",
+  "description": "",
+  "hearing_multiplier": 1.0,
+  "id": "alder-receptionist",
+  "kind": "npc_role",
+  "name": "Alder Hotel Receptionist",
+  "recognition_range": 4,
+  "schema_version": 1,
+  "tool_allowlist": [
+    "serve_transaction",
+    "say",
+    "wait",
+    "skip"
+  ],
+  "vision_range": 6
+}

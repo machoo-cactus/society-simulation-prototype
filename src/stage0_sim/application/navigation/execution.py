@@ -12,6 +12,7 @@ from stage0_sim.domain.components import (
     PlanComponent,
 )
 from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.lineage import action_lineage_payload
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.world import Locator
 
@@ -55,14 +56,25 @@ class NavigationPlanningSystem:
                         else None
                     ),
                     "reason": navigation.reason,
+                    **action_lineage_payload(navigation.action_instance),
                 },
+                correlation_id=(
+                    navigation.action_instance.root_correlation_id
+                    if navigation.action_instance is not None
+                    else None
+                ),
             )
-            navigation.correlation_id = requested.event_id
+            navigation.correlation_id = (
+                navigation.action_instance.root_correlation_id
+                if navigation.action_instance is not None
+                else requested.event_id
+            )
             try:
                 planned = service.plan(
                     character_id,
                     navigation.target_id,
                     navigation.preferred_mode,
+                    authoritative=navigation.reason == "system1",
                 )
             except (DestinationResolutionError, NavigationPlanningError) as error:
                 reason = error.reason
@@ -114,9 +126,10 @@ class NavigationPlanningSystem:
                         }
                         for leg in planned.route.legs
                     ],
+                    **action_lineage_payload(navigation.action_instance),
                 },
                 causation_id=requested.event_id,
-                correlation_id=requested.event_id,
+                correlation_id=navigation.correlation_id,
             )
 
     @staticmethod
@@ -130,6 +143,7 @@ class NavigationPlanningSystem:
         payload: dict[str, JsonValue] = {
             "target_id": navigation.target_id,
             "reason": reason,
+            **action_lineage_payload(navigation.action_instance),
         }
         if message is not None:
             payload["message"] = message

@@ -4,7 +4,10 @@ import re
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from stage0_sim.application.scenario import CityWorldDefinition, ScenarioDefinition
+from stage0_sim.application.elements import (
+    CityWorldSourceDefinition,
+    ScenarioSourceDefinition,
+)
 from stage0_sim.domain.events import JsonValue
 
 SCENARIO_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -72,33 +75,33 @@ class ScenarioSummary:
 class ScenarioLibrary(Protocol):
     def list(self) -> tuple[ScenarioSummary, ...]: ...
 
-    def get(self, scenario_id: str) -> ScenarioDefinition: ...
+    def get(self, scenario_id: str) -> ScenarioSourceDefinition: ...
 
     def create(
         self,
         scenario_id: str,
-        scenario: ScenarioDefinition,
-    ) -> ScenarioDefinition: ...
+        scenario: ScenarioSourceDefinition,
+    ) -> ScenarioSourceDefinition: ...
 
     def update(
         self,
         scenario_id: str,
-        scenario: ScenarioDefinition,
+        scenario: ScenarioSourceDefinition,
         expected_hash: str,
-    ) -> ScenarioDefinition: ...
+    ) -> ScenarioSourceDefinition: ...
 
     def rename(
         self,
         scenario_id: str,
         new_id: str,
         expected_hash: str,
-    ) -> ScenarioDefinition: ...
+    ) -> ScenarioSourceDefinition: ...
 
     def delete(
         self,
         scenario_id: str,
         expected_hash: str,
-    ) -> ScenarioDefinition: ...
+    ) -> ScenarioSourceDefinition: ...
 
 
 def validate_scenario_id(scenario_id: str) -> str:
@@ -113,7 +116,7 @@ def validate_scenario_id(scenario_id: str) -> str:
     return scenario_id
 
 
-def scenario_content_hash(scenario: ScenarioDefinition) -> str:
+def scenario_content_hash(scenario: ScenarioSourceDefinition) -> str:
     canonical = json.dumps(
         scenario.model_dump(mode="json"),
         ensure_ascii=False,
@@ -123,17 +126,17 @@ def scenario_content_hash(scenario: ScenarioDefinition) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def scenario_world_kind(scenario: ScenarioDefinition) -> ScenarioWorldKind:
+def scenario_world_kind(scenario: ScenarioSourceDefinition) -> ScenarioWorldKind:
     if scenario.world is None:
         return "none"
-    if isinstance(scenario.world, CityWorldDefinition):
+    if isinstance(scenario.world, CityWorldSourceDefinition):
         return "city"
     return "grid"
 
 
 def scenario_summary(
     scenario_id: str,
-    scenario: ScenarioDefinition,
+    scenario: ScenarioSourceDefinition,
 ) -> ScenarioSummary:
     return ScenarioSummary(
         id=scenario_id,

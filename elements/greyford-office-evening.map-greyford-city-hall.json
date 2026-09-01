@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-city-hall",
+  "kind": "room",
+  "name": "Greyford City Hall interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "112eeb77bb4d8fc6550ebc06532de4cd45a29de8adbba9638772b4c669ccb221",
+        "id": "greyford-office-evening.station-greyford-city-hall-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-city-hall-primary",
+      "key": "station-greyford-city-hall-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-city-hall-entry",
+      "name": "Greyford City Hall Entry and Reception",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-city-hall-main",
+      "name": "Greyford City Hall Main Interior",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

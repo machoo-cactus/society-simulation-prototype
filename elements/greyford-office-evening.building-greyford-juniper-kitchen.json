@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-juniper-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 4
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-juniper-kitchen",
+  "kind": "building",
+  "name": "Juniper Kitchen",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "cba849d2626847c540f2506532637c9041b8264e20db3ca78d17f0dbe5b834a4",
+        "id": "greyford-office-evening.map-greyford-juniper-kitchen",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

@@ -37,6 +37,15 @@ class StationContext:
 
 
 @dataclass(frozen=True, slots=True)
+class PlannerGoalContext:
+    id: str
+    description: str
+    status: str
+    priority: int
+    tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class PlannerContext:
     agent_id: str
     simulation_time: float
@@ -47,6 +56,7 @@ class PlannerContext:
     daily_goals: tuple[str, ...]
     memories: tuple[str, ...] = ()
     retrieved_information: tuple[InformationContextCapsule, ...] = ()
+    structured_goals: tuple[PlannerGoalContext, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

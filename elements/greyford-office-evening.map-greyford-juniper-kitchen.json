@@ -1,0 +1,120 @@
+{
+  "blocked": [
+    {
+      "x": 4,
+      "y": 2
+    },
+    {
+      "x": 5,
+      "y": 2
+    },
+    {
+      "x": 8,
+      "y": 2
+    },
+    {
+      "x": 9,
+      "y": 2
+    },
+    {
+      "x": 10,
+      "y": 2
+    },
+    {
+      "x": 11,
+      "y": 2
+    },
+    {
+      "x": 12,
+      "y": 2
+    },
+    {
+      "x": 12,
+      "y": 6
+    },
+    {
+      "x": 12,
+      "y": 7
+    },
+    {
+      "x": 4,
+      "y": 7
+    }
+  ],
+  "description": "",
+  "height": 9,
+  "id": "greyford-office-evening.map-greyford-juniper-kitchen",
+  "kind": "room",
+  "name": "Juniper Kitchen interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "c4be667552dc481f6d2ac6682bbce7d80694dca269b6928f6e66c4f676df42c2",
+        "id": "greyford-office-evening.station-greyford-juniper-window-table",
+        "kind": "object"
+      },
+      "id": "station-greyford-juniper-window-table",
+      "key": "station-greyford-juniper-window-table",
+      "position": {
+        "x": 10,
+        "y": 5
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "168e5a807ad12261b27b1da72928fea81ae51abe30900ab0e33a7239e5c9847a",
+        "id": "greyford-office-evening.station-greyford-juniper-counter-seat",
+        "kind": "object"
+      },
+      "id": "station-greyford-juniper-counter-seat",
+      "key": "station-greyford-juniper-counter-seat",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 14,
+  "zones": [
+    {
+      "bounds": {
+        "height": 5,
+        "width": 4,
+        "x": 0,
+        "y": 2
+      },
+      "id": "zone-greyford-juniper-entry",
+      "name": "Juniper Kitchen Entry",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 4,
+        "width": 10,
+        "x": 4,
+        "y": 0
+      },
+      "id": "zone-greyford-juniper-counter",
+      "name": "Ordering Counter and Open Kitchen",
+      "tiles": null,
+      "type": "FOOD_SERVICE"
+    },
+    {
+      "bounds": {
+        "height": 5,
+        "width": 10,
+        "x": 4,
+        "y": 4
+      },
+      "id": "zone-greyford-juniper-dining",
+      "name": "River Window Dining Room",
+      "tiles": null,
+      "type": "DINING"
+    }
+  ]
+}

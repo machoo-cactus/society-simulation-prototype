@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-westmarket-apartments-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-westmarket-apartments",
+  "kind": "building",
+  "name": "Westmarket Apartments",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "91f5707e7429d08a152c0510ea326a62d416cb04dd0eca29651f908f6d7b84bf",
+        "id": "greyford-office-evening.map-greyford-westmarket-apartments",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

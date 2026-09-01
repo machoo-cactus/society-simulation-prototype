@@ -1,0 +1,45 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A staffed counter offering one standard prepared meal.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {
+    "prepared-meal": 20
+  },
+  "id": "restaurant-checkout",
+  "kind": "object",
+  "name": "Restaurant Checkout",
+  "npc_role": {
+    "content_hash": "a5273d562a06c8df042cf7f4490a5f630cfa0c51c2acfd7f5007d56de24f86af",
+    "id": "restaurant-server",
+    "kind": "npc_role"
+  },
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 12
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "prepared-meal",
+          "quantity": 1
+        }
+      ],
+      "duration": 2.0,
+      "id": "buy-prepared-meal",
+      "name": "Buy one prepared meal"
+    }
+  ],
+  "operation": "STAFFED",
+  "request_timeout": 60.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

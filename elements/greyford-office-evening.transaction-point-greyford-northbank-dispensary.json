@@ -1,0 +1,45 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {
+    "northbank-first-aid-pack": 30
+  },
+  "id": "greyford-office-evening.transaction-point-greyford-northbank-dispensary",
+  "kind": "object",
+  "name": "Northbank Pharmacy Counter",
+  "npc_role": {
+    "content_hash": "866d1f8cfb46df8d144a0808b22d91d2d6118293f5dfa600087895c21636daa7",
+    "id": "northbank-pharmacy-clerk",
+    "kind": "npc_role"
+  },
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "greyford-cent",
+          "quantity": 1200
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "northbank-first-aid-pack",
+          "quantity": 1
+        }
+      ],
+      "duration": 8.0,
+      "id": "buy-northbank-first-aid-pack",
+      "name": "Buy one first-aid pack"
+    }
+  ],
+  "operation": "STAFFED",
+  "request_timeout": 90.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

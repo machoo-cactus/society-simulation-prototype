@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Elements · Stage 0{% endblock %}
+{% block eyebrow %}Reusable world construction library{% endblock %}
+{% block heading %}Element Library{% endblock %}
+{% block content %}
+<div class="element-library-layout">
+  <aside class="panel element-list" aria-labelledby="element-list-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="element-list-heading">Reusable elements</h2>
+        <p>Buildings compose rooms; rooms place objects; staffed objects reference NPC roles.</p>
+      </div>
+    </header>
+    <nav class="element-kind-actions" aria-label="Create element">
+      {% for kind, label in (("building", "Building"), ("room", "Room"), ("object", "Object"), ("npc_role", "NPC role")) %}
+        <a class="button-link" href="/ui/elements/?kind={{ kind }}">New {{ label }}</a>
+      {% endfor %}
+    </nav>
+    <nav aria-label="Elements">
+      {% for element in elements %}
+        <a href="/ui/elements/?selected={{ element.id|urlencode }}" {% if original_id == element.id %}aria-current="page"{% endif %}>
+          <strong>{{ element.name }}</strong>
+          <span>{{ element.kind.value|replace("_", " ") }} · {{ element.id }}</span>
+          {% if element.dependency_ids %}
+            <small>Uses {{ element.dependency_ids|join(", ") }}</small>
+          {% endif %}
+        </a>
+      {% else %}
+        <p class="empty-state">No reusable elements configured.</p>
+      {% endfor %}
+    </nav>
+  </aside>
+
+  <section class="panel element-editor" aria-labelledby="element-editor-heading">
+    <header class="panel__header">
+      <div>
+        <h2 id="element-editor-heading">{{ original_id or "New " ~ selected_kind.value|replace("_", " ") }}</h2>
+        <p>References are hash-pinned. Saving a dependency creates a new hash that dependent scenarios must explicitly adopt.</p>
+      </div>
+    </header>
+
+    {% if form_error %}
+      <div class="editor-error-summary" role="alert">
+        <strong>Element could not be saved.</strong>
+        <p>{{ form_error }}</p>
+      </div>
+    {% endif %}
+
+    <form method="post" action="/ui/elements/save" class="element-editor-form">
+      <input type="hidden" name="original_id" value="{{ original_id }}">
+      <input type="hidden" name="expected_hash" value="{{ expected_hash }}">
+      <input type="hidden" name="selected_kind" value="{{ selected_kind.value }}">
+      <label for="element-resource-id">
+        Element resource ID
+        <input id="element-resource-id" name="resource_id" value="{{ resource_id }}" pattern="[a-z0-9][a-z0-9._\-]*" required>
+      </label>
+      <label for="element-json">
+        Element definition JSON
+        <textarea id="element-json" name="element_json" rows="30" spellcheck="false" required>{{ raw_json }}</textarea>
+      </label>
+      <div class="form-actions">
+        <button type="submit">{{ "Save element" if original_id else "Create element" }}</button>
+        {% if original_id %}
+          <a class="button-link" href="/elements/{{ original_id }}">View API resource</a>
+        {% endif %}
+      </div>
+    </form>
+
+    {% if original_id %}
+      <div class="element-secondary-actions">
+        <details>
+          <summary>Duplicate {{ original_id }}</summary>
+          <form method="post" action="/ui/elements/{{ original_id }}/duplicate">
+            <label for="duplicate-element-id">
+              New element resource ID
+              <input id="duplicate-element-id" name="new_id" value="{{ original_id }}-copy" required>
+            </label>
+            <button type="submit">Duplicate element</button>
+          </form>
+        </details>
+        <details>
+          <summary>Delete {{ original_id }}</summary>
+          <form method="post" action="/ui/elements/{{ original_id }}/delete">
+            <input type="hidden" name="expected_hash" value="{{ expected_hash }}">
+            <label>
+              <input type="checkbox" name="confirm" value="yes" required>
+              I understand deletion is blocked while another element references this resource.
+            </label>
+            <button class="danger" type="submit">Delete element</button>
+          </form>
+        </details>
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

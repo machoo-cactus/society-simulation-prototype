@@ -1,13 +1,17 @@
 """Grid world and pathfinding primitives."""
 
+from stage0_sim.domain.economy import TransactionPoint
 from stage0_sim.domain.world.city import (
     Building,
     BuildingEntrance,
+    BuildingPortal,
     CityBounds,
     CityWorld,
+    CityZone,
     District,
     MapPoint,
     OutdoorPlace,
+    Room,
     SpatialScale,
     TransportEdge,
     TransportNode,
@@ -18,6 +22,7 @@ from stage0_sim.domain.world.city import (
     VehicleRegistry,
     VehicleState,
     WorldLocation,
+    WorldObject,
     find_transport_route,
 )
 from stage0_sim.domain.world.model import (
@@ -31,6 +36,10 @@ from stage0_sim.domain.world.model import (
     default_affordance_action,
 )
 from stage0_sim.domain.world.pathfinding import find_path
+from stage0_sim.domain.world.routing import (
+    NavigationPlanningError,
+    RecursiveRoutePlanner,
+)
 from stage0_sim.domain.world.topology import (
     LocalRoute,
     Locator,
@@ -44,6 +53,7 @@ from stage0_sim.domain.world.topology import (
     TraversalContext,
 )
 from stage0_sim.domain.world.topology_adapters import (
+    ContainerTopology,
     GridTopology,
     SparseGraphTopology,
 )
@@ -53,8 +63,11 @@ __all__ = [
     "AffordanceStation",
     "Building",
     "BuildingEntrance",
+    "BuildingPortal",
     "CityBounds",
+    "CityZone",
     "CityWorld",
+    "ContainerTopology",
     "Coordinate",
     "District",
     "HomeostasisEffect",
@@ -62,7 +75,10 @@ __all__ = [
     "LocalRoute",
     "Locator",
     "MapPoint",
+    "NavigationPlanningError",
     "OutdoorPlace",
+    "Room",
+    "RecursiveRoutePlanner",
     "Route",
     "RouteLeg",
     "Space",
@@ -73,6 +89,7 @@ __all__ = [
     "TopologyView",
     "TransportEdge",
     "TransportNode",
+    "TransactionPoint",
     "Transition",
     "TraversalContext",
     "TravelLeg",
@@ -83,6 +100,7 @@ __all__ = [
     "VehicleState",
     "WorldGrid",
     "WorldMap",
+    "WorldObject",
     "WorldLocation",
     "Zone",
     "default_affordance_action",

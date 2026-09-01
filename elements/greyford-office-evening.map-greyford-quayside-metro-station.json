@@ -1,0 +1,154 @@
+{
+  "blocked": [
+    {
+      "x": 5,
+      "y": 0
+    },
+    {
+      "x": 5,
+      "y": 1
+    },
+    {
+      "x": 5,
+      "y": 2
+    },
+    {
+      "x": 5,
+      "y": 5
+    },
+    {
+      "x": 5,
+      "y": 6
+    },
+    {
+      "x": 5,
+      "y": 7
+    },
+    {
+      "x": 5,
+      "y": 8
+    },
+    {
+      "x": 11,
+      "y": 1
+    },
+    {
+      "x": 11,
+      "y": 2
+    },
+    {
+      "x": 11,
+      "y": 3
+    },
+    {
+      "x": 11,
+      "y": 5
+    },
+    {
+      "x": 11,
+      "y": 6
+    },
+    {
+      "x": 11,
+      "y": 7
+    },
+    {
+      "x": 8,
+      "y": 1
+    },
+    {
+      "x": 9,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 9,
+  "id": "greyford-office-evening.map-greyford-quayside-metro-station",
+  "kind": "room",
+  "name": "Quayside Metro Station interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "2611c0f812ffb5b827845f3a0da40ac536e3952f7c3966ed2391d3f64f8bebe4",
+        "id": "greyford-office-evening.station-greyford-quayside-platform-bench",
+        "kind": "object"
+      },
+      "id": "station-greyford-quayside-platform-bench",
+      "key": "station-greyford-quayside-platform-bench",
+      "position": {
+        "x": 14,
+        "y": 4
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "1d0fcba2ae08f959ef77f989663efc0542bc6800628139ceefa7181f910db2b2",
+        "id": "greyford-office-evening.station-greyford-quayside-information-desk",
+        "kind": "object"
+      },
+      "id": "station-greyford-quayside-information-desk",
+      "key": "station-greyford-quayside-information-desk",
+      "position": {
+        "x": 3,
+        "y": 3
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4ceadcbba62bcb934b50778b71eabcbb747d3d0676a92a1bcab01cb08a93342a",
+        "id": "greyford-office-evening.transaction-point-greyford-quayside-ticket-machine",
+        "kind": "object"
+      },
+      "id": "transaction-point-greyford-quayside-ticket-machine",
+      "key": "transaction-point-greyford-quayside-ticket-machine",
+      "position": {
+        "x": 4,
+        "y": 4
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 16,
+  "zones": [
+    {
+      "bounds": {
+        "height": 7,
+        "width": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-quayside-station-concourse",
+      "name": "Quayside Station Concourse",
+      "tiles": null,
+      "type": "TRANSIT_CONCOURSE"
+    },
+    {
+      "bounds": {
+        "height": 9,
+        "width": 5,
+        "x": 6,
+        "y": 0
+      },
+      "id": "zone-greyford-quayside-station-paid-area",
+      "name": "Quayside Station Paid Area",
+      "tiles": null,
+      "type": "TRANSIT"
+    },
+    {
+      "bounds": {
+        "height": 9,
+        "width": 5,
+        "x": 11,
+        "y": 0
+      },
+      "id": "zone-greyford-quayside-station-platform",
+      "name": "Westbound Metro Platform",
+      "tiles": null,
+      "type": "PLATFORM"
+    }
+  ]
+}

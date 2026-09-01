@@ -15,6 +15,8 @@ _EVENT_IMPORTANCE = {
     "system1.resolved": 0.85,
     "system1.blocked": 1.0,
     "threshold.breached": 0.85,
+    "transaction.completed": 0.65,
+    "transaction.failed": 0.75,
 }
 
 
@@ -95,6 +97,11 @@ def _event_text(event: DomainEvent) -> str:
             f"{event.agent_id or 'Someone'} said: "
             f"{payload.get('text', '')}"
         )
+    if event.event_type.startswith("transaction."):
+        return (
+            f"Transaction event {event.event_type}: "
+            f"{json.dumps(payload, sort_keys=True, separators=(',', ':'))}"
+        )
     if event.event_type.startswith("plan."):
         return (
             f"Plan event {event.event_type}: "
@@ -122,4 +129,8 @@ def _memory_recipients(event: DomainEvent) -> tuple[str, ...]:
                 for recipient in raw_recipients
                 if isinstance(recipient, str)
             )
+    elif event.event_type == "dialogue.generated":
+        target_id = event.payload.get("target_id")
+        if isinstance(target_id, str):
+            recipients.add(target_id)
     return tuple(sorted(recipients))

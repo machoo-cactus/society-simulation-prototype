@@ -15,8 +15,10 @@ from stage0_sim.domain.intents import (
     IntentKind,
     MoveIntent,
     NavigationIntent,
+    ServeTransactionIntent,
     SkipIntent,
     SpeechIntent,
+    TransactionIntent,
     TravelIntent,
     WaitIntent,
 )
@@ -76,6 +78,19 @@ class NavigateToArguments(BaseModel):
     reason: str | None = Field(default=None, max_length=300)
 
 
+class TransactArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    point_id: str = Field(min_length=1)
+    offer_id: str = Field(min_length=1)
+    reason: str | None = Field(default=None, max_length=300)
+
+
+class ServeTransactionArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=1)
+    reason: str | None = Field(default=None, max_length=300)
+
+
 class CheckEnvironmentArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
     topics: list[
@@ -91,6 +106,8 @@ ToolArguments = Annotated[
     | SkipArguments
     | TravelToArguments
     | NavigateToArguments
+    | TransactArguments
+    | ServeTransactionArguments
     | CheckEnvironmentArguments,
     Field(discriminator=None),
 ]
@@ -106,6 +123,8 @@ class ToolRegistry:
             "skip": SkipArguments,
             "travel_to": TravelToArguments,
             "navigate_to": NavigateToArguments,
+            "transact": TransactArguments,
+            "serve_transaction": ServeTransactionArguments,
             "check_environment": CheckEnvironmentArguments,
         }
 
@@ -259,6 +278,72 @@ class ToolRegistry:
                     else None
                 ),
             )
+        if isinstance(args, TransactArguments):
+            target = targets.get(args.point_id)
+            if target is None or target.kind != "transaction_point":
+                raise ToolValidationError(
+                    "transaction_point_not_observable",
+                    args.point_id,
+                )
+            if not target.available:
+                raise ToolValidationError(
+                    "precondition_failed",
+                    f"{target.id} is currently unavailable",
+                )
+            offer = next(
+                (
+                    candidate
+                    for candidate in target.offers
+                    if candidate.id == args.offer_id
+                ),
+                None,
+            )
+            if offer is None:
+                raise ToolValidationError(
+                    "offer_not_observable",
+                    args.offer_id,
+                )
+            if not offer.available:
+                raise ToolValidationError(
+                    "precondition_failed",
+                    f"{offer.id} cannot currently be completed",
+                )
+            return TransactionIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.TRANSACT,
+                args.reason,
+                args.point_id,
+                args.offer_id,
+            )
+        if isinstance(args, ServeTransactionArguments):
+            if request.actor_kind != "npc":
+                raise ToolValidationError(
+                    "tool_not_allowed_for_actor",
+                    call.name,
+                )
+            service_request = next(
+                (
+                    candidate
+                    for candidate in request.observation.service_requests
+                    if candidate.request_id == args.request_id
+                ),
+                None,
+            )
+            if service_request is None:
+                raise ToolValidationError(
+                    "transaction_request_not_observable",
+                    args.request_id,
+                )
+            return ServeTransactionIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.SERVE_TRANSACTION,
+                args.reason,
+                args.request_id,
+            )
         raise ToolValidationError("invalid_arguments", call.name)
 
     def is_read_only(self, name: str) -> bool:
@@ -315,6 +400,13 @@ _DESCRIPTIONS = {
     "navigate_to": (
         "Navigate to a known zone, station, building, or outdoor place, "
         "optionally preferring a transport mode."
+    ),
+    "transact": (
+        "Attempt one observable configured exchange at a transaction point."
+    ),
+    "serve_transaction": (
+        "Authorize one assigned observable transaction request at the staffed "
+        "point."
     ),
     "check_environment": (
         "Read the currently available time, weather, surface, or availability "

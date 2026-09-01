@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 1,
+      "y": 1
+    },
+    {
+      "x": 1,
+      "y": 3
+    },
+    {
+      "x": 3,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 5,
+  "id": "greyford-rivermarket-exchange.map-greyford-rivermarket-flat",
+  "kind": "room",
+  "name": "Rivermarket Walk Flats interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "a1946e29084ba8d6638b8197268ae9f0284e0759e4c7951ed22d27186a24e9ad",
+        "id": "greyford-rivermarket-exchange.station-greyford-rivermarket-flat-sofa",
+        "kind": "object"
+      },
+      "id": "station-greyford-rivermarket-flat-sofa",
+      "key": "station-greyford-rivermarket-flat-sofa",
+      "position": {
+        "x": 2,
+        "y": 2
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 6,
+  "zones": [
+    {
+      "bounds": {
+        "height": 5,
+        "width": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": "zone-greyford-rivermarket-flat-living",
+      "name": "Compact Living Room",
+      "tiles": null,
+      "type": "HOME"
+    },
+    {
+      "bounds": {
+        "height": 5,
+        "width": 2,
+        "x": 4,
+        "y": 0
+      },
+      "id": "zone-greyford-rivermarket-flat-entry",
+      "name": "Flat Entry Hall",
+      "tiles": null,
+      "type": "ENTRY"
+    }
+  ]
+}

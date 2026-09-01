@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-highland-conservatory",
+  "kind": "room",
+  "name": "Highland Botanical Conservatory interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "9f8c03c29fd3dc04264ce3dfcef666876ec0f3c94748586fb30bb108b1eb3ed9",
+        "id": "greyford-office-evening.station-greyford-highland-conservatory-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-highland-conservatory-primary",
+      "key": "station-greyford-highland-conservatory-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-highland-conservatory-entry",
+      "name": "Highland Botanical Conservatory Entry and Reception",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-highland-conservatory-main",
+      "name": "Highland Botanical Conservatory Main Interior",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

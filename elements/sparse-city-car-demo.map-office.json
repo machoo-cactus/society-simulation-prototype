@@ -1,0 +1,26 @@
+{
+  "blocked": [],
+  "description": "",
+  "height": 3,
+  "id": "sparse-city-car-demo.map-office",
+  "kind": "room",
+  "name": "East Research Office interior",
+  "objects": [],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 3,
+  "zones": [
+    {
+      "bounds": {
+        "height": 3,
+        "width": 2,
+        "x": 0,
+        "y": 0
+      },
+      "id": "office-entry",
+      "name": "Office Entry",
+      "tiles": null,
+      "type": "ENTRY"
+    }
+  ]
+}

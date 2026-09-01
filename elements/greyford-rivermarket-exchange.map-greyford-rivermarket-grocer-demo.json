@@ -1,0 +1,115 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 2
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 3,
+      "y": 5
+    },
+    {
+      "x": 6,
+      "y": 1
+    },
+    {
+      "x": 6,
+      "y": 2
+    },
+    {
+      "x": 6,
+      "y": 4
+    },
+    {
+      "x": 6,
+      "y": 5
+    }
+  ],
+  "description": "",
+  "height": 7,
+  "id": "greyford-rivermarket-exchange.map-greyford-rivermarket-grocer-demo",
+  "kind": "room",
+  "name": "Rivermarket Grocer and Convenience interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "859e73f6c7bdd906a016b64eb78383abd2850b8e17253db81c4bfb10ee8cb304",
+        "id": "greyford-rivermarket-exchange.station-greyford-rivermarket-grocer-browse",
+        "kind": "object"
+      },
+      "id": "station-greyford-rivermarket-grocer-browse",
+      "key": "station-greyford-rivermarket-grocer-browse",
+      "position": {
+        "x": 5,
+        "y": 3
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "1e9900bbfac56fb74ecbdc37bc1fdf4d51232363ade113f8f7a59d8343aad846",
+        "id": "greyford-rivermarket-exchange.transaction-point-greyford-rivermarket-checkout",
+        "kind": "object"
+      },
+      "id": "transaction-point-greyford-rivermarket-checkout",
+      "key": "transaction-point-greyford-rivermarket-checkout",
+      "position": {
+        "x": 8,
+        "y": 3
+      },
+      "staff_position": {
+        "x": 8,
+        "y": 2
+      }
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 10,
+  "zones": [
+    {
+      "bounds": {
+        "height": 3,
+        "width": 2,
+        "x": 0,
+        "y": 2
+      },
+      "id": "zone-greyford-rivermarket-grocer-entry",
+      "name": "Street Entrance and Baskets",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 7,
+        "width": 5,
+        "x": 2,
+        "y": 0
+      },
+      "id": "zone-greyford-rivermarket-grocer-aisles",
+      "name": "Grocery Aisles",
+      "tiles": null,
+      "type": "RETAIL"
+    },
+    {
+      "bounds": {
+        "height": 7,
+        "width": 3,
+        "x": 7,
+        "y": 0
+      },
+      "id": "zone-greyford-rivermarket-grocer-service",
+      "name": "Bottle Return and Checkout",
+      "tiles": null,
+      "type": "SERVICE_COUNTER"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from stage0_sim.domain.components import (
+    ActionInstance,
     ActionType,
     DriveComponent,
     PlanComponent,
@@ -16,6 +17,10 @@ from stage0_sim.domain.environment import (
     WeatherRuntime,
 )
 from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.lineage import (
+    action_lineage_payload,
+    emit_action_lifecycle,
+)
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.world import (
     CityWorld,
@@ -65,12 +70,19 @@ class TravelSystem:
         outbound_transition_id: str | None = None,
         origin_network_node_id: str | None = None,
         allowed_edge_ids: frozenset[str] | None = None,
+        action_instance: ActionInstance | None = None,
     ) -> bool:
         city = context.registry.get_resource(CityWorld)
         location = context.registry.get_component(
             agent_id, SpatialLocationComponent
         )
         travel = context.registry.get_component(agent_id, TravelComponent)
+        travel.action_instance = action_instance
+        travel.correlation_id = (
+            action_instance.root_correlation_id
+            if action_instance is not None
+            else None
+        )
         travel.failure_reason = None
         try:
             destination = city.building(destination_id)
@@ -232,7 +244,13 @@ class TravelSystem:
                 "origin_place_id": location.location.place_id,
                 "destination_id": destination_id,
                 "mode": mode.value,
+                **action_lineage_payload(travel.action_instance),
             },
+            correlation_id=(
+                travel.action_instance.root_correlation_id
+                if travel.action_instance is not None
+                else None
+            ),
         )
         travel.destination_id = destination_id
         travel.requested_mode = mode
@@ -247,7 +265,11 @@ class TravelSystem:
             else None
         )
         travel.failure_reason = None
-        travel.correlation_id = requested.event_id
+        travel.correlation_id = (
+            travel.action_instance.root_correlation_id
+            if travel.action_instance is not None
+            else requested.event_id
+        )
         context.events.emit(
             "travel.route_planned",
             simulation_tick=context.clock.tick,
@@ -275,9 +297,10 @@ class TravelSystem:
                     for leg in route
                 ],
                 "vehicle_id": vehicle_id,
+                **action_lineage_payload(travel.action_instance),
             },
             causation_id=requested.event_id,
-            correlation_id=requested.event_id,
+            correlation_id=travel.correlation_id,
         )
         return True
 
@@ -291,13 +314,18 @@ class TravelSystem:
         location = context.registry.get_component(
             agent_id, SpatialLocationComponent
         ).location
-        if location.scale is SpatialScale.BUILDING:
+        if location.local_coordinate is not None:
+            city = context.registry.get_resource(CityWorld)
+            building = city.building_for_room(location.place_id)
             context.events.emit(
                 "building.exited",
                 simulation_tick=context.clock.tick,
                 simulation_time=context.clock.simulation_time,
                 agent_id=agent_id,
-                payload={"building_id": location.place_id},
+                payload={
+                    "building_id": building.id,
+                    "room_id": location.place_id,
+                },
                 correlation_id=travel.correlation_id,
             )
         context.events.emit(
@@ -313,6 +341,7 @@ class TravelSystem:
                     else None
                 ),
                 "vehicle_id": travel.vehicle_id,
+                **action_lineage_payload(travel.action_instance),
             },
             correlation_id=travel.correlation_id,
         )
@@ -394,9 +423,22 @@ class TravelSystem:
                 "mode": leg.mode.value,
                 "progress": round(progress, 12),
                 "vehicle_id": travel.vehicle_id,
+                **action_lineage_payload(travel.action_instance),
             },
             correlation_id=travel.correlation_id,
         )
+        if travel.action_instance is not None:
+            emit_action_lifecycle(
+                context,
+                "action.progressed",
+                agent_id,
+                travel.action_instance,
+                {
+                    "destination_id": travel.destination_id,
+                    "edge_id": leg.edge_id,
+                    "progress": round(progress, 12),
+                },
+            )
         if progress < 1.0:
             return
         TravelSystem._emit_leg(
@@ -460,16 +502,12 @@ class TravelSystem:
                 ),
                 destination.entrances[0],
             )
-            context.registry.set_resource(
-                city.local_map_for_building(destination_id)
-            )
             context.registry.get_component(
                 agent_id, SpatialLocationComponent
             ).location = WorldLocation(
                 scale=SpatialScale.BUILDING,
-                place_id=destination.id,
+                place_id=entrance.room_id,
                 local_coordinate=entrance.local_coordinate,
-                network_node_id=entrance.network_node_id,
             )
             if context.registry.has_component(agent_id, PositionComponent):
                 context.registry.get_component(
@@ -483,6 +521,7 @@ class TravelSystem:
                 payload={
                     "building_id": destination.id,
                     "entrance_id": entrance.id,
+                    "room_id": entrance.room_id,
                 },
                 correlation_id=travel.correlation_id,
             )
@@ -522,6 +561,7 @@ class TravelSystem:
                     else None
                 ),
                 "vehicle_id": travel.vehicle_id,
+                **action_lineage_payload(travel.action_instance),
             },
             correlation_id=travel.correlation_id,
         )
@@ -535,6 +575,7 @@ class TravelSystem:
         node_id: str,
     ) -> None:
         travel.status = TravelStatus.CANCELLED
+        travel.failure_reason = "system1_preemption"
         context.events.emit(
             "travel.interrupted",
             simulation_tick=context.clock.tick,
@@ -544,6 +585,7 @@ class TravelSystem:
                 "destination_id": travel.destination_id,
                 "safe_node_id": node_id,
                 "reason": "system1_preemption",
+                **action_lineage_payload(travel.action_instance),
             },
             correlation_id=travel.correlation_id,
         )
@@ -582,6 +624,7 @@ class TravelSystem:
                 "destination_id": travel.destination_id,
                 "safe_node_id": node_id,
                 "reason": reason,
+                **action_lineage_payload(travel.action_instance),
             },
             correlation_id=travel.correlation_id,
         )
@@ -597,24 +640,26 @@ class TravelSystem:
             and plan.current.action is ActionType.NAVIGATE
         ):
             return
-        if plan.current is not None:
-            context.events.emit(
-                "plan.action_completed",
-                simulation_tick=context.clock.tick,
-                simulation_time=context.clock.simulation_time,
-                agent_id=agent_id,
-                payload={
-                    "action": plan.current.action.value,
-                    "target": plan.current.target,
-                    "mode": (
-                        plan.current.mode.value
-                        if plan.current.mode is not None
-                        else None
-                    ),
-                },
+        from stage0_sim.domain.systems.plans import PlanExecutionSystem
+
+        travel = context.registry.get_component(agent_id, TravelComponent)
+        if travel.status is TravelStatus.ARRIVED:
+            PlanExecutionSystem()._complete(context, agent_id, plan)
+        elif travel.status is TravelStatus.CANCELLED:
+            PlanExecutionSystem()._interrupt(
+                context,
+                agent_id,
+                plan,
+                travel.failure_reason or "system1_preemption",
             )
-        plan.current = None
-        plan.current_started = False
+        elif travel.status is TravelStatus.BLOCKED:
+            PlanExecutionSystem()._fail(
+                context,
+                agent_id,
+                plan,
+                travel.failure_reason or "travel_blocked",
+            )
+        travel.action_instance = None
 
     @staticmethod
     def _origin_node(
@@ -624,8 +669,9 @@ class TravelSystem:
         outbound_transition_id: str | None = None,
         origin_network_node_id: str | None = None,
     ) -> tuple[str | None, str | None]:
-        if location.scale is SpatialScale.BUILDING:
-            building = city.building(location.place_id)
+        if location.local_coordinate is not None:
+            room = city.room(location.place_id)
+            building = city.building(room.building_id)
             if outbound_transition_id is not None:
                 entrance_id = outbound_transition_id.removesuffix(":reverse")
                 entrance = next(
@@ -639,7 +685,9 @@ class TravelSystem:
                 if entrance is None:
                     return None, "invalid_origin_entrance"
                 if (
-                    location.local_coordinate != entrance.local_coordinate
+                    entrance.room_id != room.id
+                    or location.local_coordinate
+                    != entrance.local_coordinate
                     or (
                         origin_network_node_id is not None
                         and entrance.network_node_id
@@ -654,6 +702,7 @@ class TravelSystem:
                         candidate
                         for candidate in building.entrances
                         if candidate.network_node_id == origin_network_node_id
+                        and candidate.room_id == room.id
                         and (
                             location.local_coordinate is None
                             or candidate.local_coordinate
@@ -675,14 +724,13 @@ class TravelSystem:
                         )
                         if candidate.local_coordinate
                         == location.local_coordinate
+                        and candidate.room_id == room.id
                     ),
                     None,
                 )
                 if entrance is not None:
                     return entrance.network_node_id, None
-            if location.network_node_id is not None:
-                return location.network_node_id, None
-            return building.entrances[0].network_node_id, None
+            return None, "origin_not_at_entrance"
         if outbound_transition_id is not None:
             return None, "invalid_origin_entrance"
         if (
@@ -721,6 +769,7 @@ class TravelSystem:
                     ),
                     "current": leg.mode.value,
                     "vehicle_id": travel.vehicle_id,
+                    **action_lineage_payload(travel.action_instance),
                 },
                 correlation_id=travel.correlation_id,
             )
@@ -765,6 +814,7 @@ class TravelSystem:
                 "to_node_id": leg.to_node_id,
                 "mode": leg.mode.value,
                 "duration_seconds": leg.duration_seconds,
+                **action_lineage_payload(travel.action_instance),
             },
             correlation_id=travel.correlation_id,
         )
@@ -777,6 +827,7 @@ class TravelSystem:
                 payload={
                     "node_id": leg.to_node_id,
                     "edge_id": leg.edge_id,
+                    **action_lineage_payload(travel.action_instance),
                 },
                 correlation_id=travel.correlation_id,
             )
@@ -790,14 +841,20 @@ class TravelSystem:
         reason: str,
     ) -> None:
         if context.registry.has_component(agent_id, TravelComponent):
-            context.registry.get_component(
+            travel = context.registry.get_component(
                 agent_id,
                 TravelComponent,
-            ).failure_reason = reason
+            )
+            travel.failure_reason = reason
+        else:
+            travel = None
         payload: dict[str, JsonValue] = {
             "destination_id": destination_id,
             "mode": mode.value,
             "reason": reason,
+            **action_lineage_payload(
+                travel.action_instance if travel is not None else None
+            ),
         }
         context.events.emit(
             "travel.route_failed",
@@ -805,6 +862,9 @@ class TravelSystem:
             simulation_time=context.clock.simulation_time,
             agent_id=agent_id,
             payload=payload,
+            correlation_id=(
+                travel.correlation_id if travel is not None else None
+            ),
         )
 
 

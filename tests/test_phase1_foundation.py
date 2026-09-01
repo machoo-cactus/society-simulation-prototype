@@ -174,3 +174,19 @@ def test_cli_emits_canonical_jsonl(tmp_path: Path) -> None:
     assert "agent_id" not in events[0]
     assert "causation_id" not in events[0]
     assert "correlation_id" not in events[0]
+
+
+def test_cli_rejects_schema_v2_user_input(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scenario_path = tmp_path / "legacy.json"
+    scenario_path.write_text(
+        '{"schema_version":2,"name":"legacy"}',
+        encoding="utf-8",
+    )
+
+    exit_code = main(["run", str(scenario_path), "--ticks", "0"])
+
+    assert exit_code == 2
+    assert "schema-version-2 scenarios are not supported" in capsys.readouterr().err

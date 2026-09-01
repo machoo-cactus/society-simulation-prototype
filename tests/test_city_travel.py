@@ -4,14 +4,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
+from stage0_sim.adapters.elements import FileSystemElementLibrary
 from stage0_sim.api.app import app
 from stage0_sim.application.characters import prepare_scenario
 from stage0_sim.application.information import InformationStore
 from stage0_sim.application.scenario import (
     ScenarioDefinition,
     create_runner,
-    load_scenario,
 )
+from stage0_sim.application.scenario_resolution import load_and_resolve_scenario
 from stage0_sim.application.telemetry import build_ui_bootstrap
 from stage0_sim.domain.components import (
     HomeostasisComponent,
@@ -31,6 +32,14 @@ SCENARIO_PATH = (
     Path(__file__).parents[1] / "scenarios" / "sparse-city-car-demo.json"
 )
 CHARACTER_DIRECTORY = Path(__file__).parents[1] / "characters"
+ELEMENT_DIRECTORY = Path(__file__).parents[1] / "elements"
+
+
+def load_city_scenario() -> ScenarioDefinition:
+    return load_and_resolve_scenario(
+        SCENARIO_PATH,
+        FileSystemElementLibrary(ELEMENT_DIRECTORY),
+    ).scenario
 
 
 def create_city_runner(
@@ -38,7 +47,7 @@ def create_city_runner(
     *,
     run_id: str | None = None,
 ):
-    scenario = scenario or load_scenario(SCENARIO_PATH)
+    scenario = scenario or load_city_scenario()
     prepared = prepare_scenario(
         scenario,
         FileSystemCharacterLibrary(CHARACTER_DIRECTORY),
@@ -51,7 +60,7 @@ def create_city_runner(
 
 
 def test_city_schema_and_references_are_validated() -> None:
-    payload = load_scenario(SCENARIO_PATH).model_dump(mode="json")
+    payload = load_city_scenario().model_dump(mode="json")
     payload["world"]["transport"]["edges"][0]["to_node_id"] = "missing"
 
     with pytest.raises(ValueError, match="references unknown node"):
@@ -61,7 +70,7 @@ def test_city_schema_and_references_are_validated() -> None:
 @pytest.mark.parametrize(
     ("outdoor_places", "field", "value", "message"),
     [
-        ([], "local_map_id", "missing-map", "references unknown local map"),
+        ([], "room_ids", ["missing-room"], "references an invalid room"),
         (
             None,
             "entrance_node",
@@ -72,7 +81,7 @@ def test_city_schema_and_references_are_validated() -> None:
             [],
             "entrance_coordinate",
             {"x": 99, "y": 0},
-            "entrance entrance-home is outside local map",
+            "entrance entrance-home is not on a walkable room tile",
         ),
     ],
 )
@@ -82,7 +91,7 @@ def test_every_building_reference_is_validated_independently(
     value: object,
     message: str,
 ) -> None:
-    payload = load_scenario(SCENARIO_PATH).model_dump(mode="json")
+    payload = load_city_scenario().model_dump(mode="json")
     if outdoor_places is not None:
         payload["world"]["outdoor_places"] = outdoor_places
     if field == "entrance_node":
@@ -153,9 +162,9 @@ def test_scripted_car_trip_arrives_without_teleporting() -> None:
     travel = runner.registry.get_component("agent-001", TravelComponent)
 
     assert after.scale is SpatialScale.BUILDING
-    assert after.place_id == "building-office"
+    assert after.place_id == "building-office.interior"
     assert after_component.locator is not None
-    assert after_component.locator.space_id == "building-office"
+    assert after_component.locator.space_id == "building-office.interior"
     assert travel.status is TravelStatus.ARRIVED
     event_types = [event.event_type for event in runner.events.events]
     assert "building.exited" in event_types
@@ -180,7 +189,7 @@ def test_scripted_car_trip_arrives_without_teleporting() -> None:
     )
     assert learned.content["destination_id"] == "building-office"
     assert learned.content["locator"] == {
-        "space_id": "building-office",
+        "space_id": "building-office.interior",
         "local_reference": {"kind": "coordinate", "x": 0, "y": 1},
     }
     assert learned.content["transition_ids"] == [
@@ -200,11 +209,22 @@ def test_city_bootstrap_omits_unrequested_local_map_grids() -> None:
 
     assert bootstrap["city"] is not None
     assert "local_maps" not in bootstrap["city"]
+    assert [zone["id"] for zone in bootstrap["city"]["city_zones"]] == [
+        "district-west",
+        "district-central",
+        "district-east",
+    ]
+    assert {
+        room["id"] for room in bootstrap["city"]["rooms"]
+    } == {"building-home.interior", "building-office.interior"}
     assert bootstrap["world"]["width"] == 3
 
 
 def test_city_and_building_read_apis() -> None:
-    scenario = load_scenario(SCENARIO_PATH).model_dump(mode="json")
+    scenario = load_and_resolve_scenario(
+        SCENARIO_PATH,
+        FileSystemElementLibrary(ELEMENT_DIRECTORY),
+    ).source.model_dump(mode="json")
     with TestClient(app) as client:
         scenario_id = client.post(
             "/simulation/scenarios",
@@ -218,6 +238,12 @@ def test_city_and_building_read_apis() -> None:
         building = client.get(
             f"/simulation/runs/{run_id}/world/buildings/building-office"
         )
+        city_zone = client.get(
+            f"/simulation/runs/{run_id}/world/city-zones/district-east"
+        )
+        room = client.get(
+            f"/simulation/runs/{run_id}/world/rooms/building-office.interior"
+        )
         neighborhood = client.get(
             f"/simulation/runs/{run_id}/world/neighborhoods/building-office"
         )
@@ -228,10 +254,22 @@ def test_city_and_building_read_apis() -> None:
     assert city.status_code == 200
     assert city.json()["city"]["id"] == "demo-city"
     assert building.status_code == 200
-    assert building.json()["building"]["local_map"]["width"] == 3
+    assert building.json()["building"]["rooms"][0]["map"]["width"] == 3
+    assert building.json()["building"]["rooms"][0]["id"] == (
+        "building-office.interior"
+    )
+    assert city_zone.status_code == 200
+    assert city_zone.json()["city_zone"]["buildings"][0]["id"] == (
+        "building-office"
+    )
+    assert room.status_code == 200
+    assert room.json()["room"]["building_id"] == "building-office"
     assert neighborhood.status_code == 200
     assert neighborhood.json()["edges"]
-    assert spatial.json()["spatial_location"]["place_id"] == "building-home"
+    assert spatial.json()["spatial_location"]["place_id"] == (
+        "building-home.interior"
+    )
+    assert spatial.json()["spatial_location"]["building_id"] == "building-home"
 
 
 def test_system1_interrupts_city_travel_at_next_safe_node() -> None:
@@ -272,7 +310,7 @@ def test_cycle_and_direct_metro_routes(
     vehicle_type: str | None,
     expected_event: str,
 ) -> None:
-    payload = load_scenario(SCENARIO_PATH).model_dump(mode="json")
+    payload = load_city_scenario().model_dump(mode="json")
     for edge in payload["world"]["transport"]["edges"]:
         if edge["id"].startswith("road-"):
             edge["allowed_modes"] = [mode]
@@ -290,7 +328,7 @@ def test_cycle_and_direct_metro_routes(
     location = runner.registry.get_component(
         "agent-001", SpatialLocationComponent
     ).location
-    assert location.place_id == "building-office"
+    assert location.place_id == "building-office.interior"
     assert any(
         event.event_type == expected_event
         for event in runner.events.events

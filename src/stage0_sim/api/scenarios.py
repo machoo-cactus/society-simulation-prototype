@@ -3,7 +3,7 @@ from typing import cast
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from stage0_sim.application.scenario import ScenarioDefinition
+from stage0_sim.application.elements import ScenarioSourceDefinition
 from stage0_sim.application.scenarios import (
     ScenarioConflictError,
     ScenarioLibrary,
@@ -20,14 +20,14 @@ class ScenarioCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1)
-    scenario: ScenarioDefinition
+    scenario: ScenarioSourceDefinition
 
 
 class ScenarioUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     expected_hash: str = Field(min_length=1)
-    scenario: ScenarioDefinition
+    scenario: ScenarioSourceDefinition
 
 
 class ScenarioRenameRequest(BaseModel):
@@ -43,7 +43,7 @@ def get_library(request: Request) -> ScenarioLibrary:
 
 def scenario_payload(
     scenario_id: str,
-    scenario: ScenarioDefinition,
+    scenario: ScenarioSourceDefinition,
 ) -> dict[str, JsonValue]:
     return {
         "id": scenario_id,

@@ -9,8 +9,9 @@ and reproducible SQLite/JSONL datasets.
 ## Implemented
 
 - Fixed-step ECS simulation with stable system and entity ordering.
-- Grid worlds and sparse hierarchical cities with buildings, local maps,
-  transport graphs, vehicles, and deterministic travel.
+- Grid worlds and sparse hierarchical cities with container buildings,
+  authoritative room grids and portals, transport graphs, vehicles, and
+  deterministic travel.
 - Continuous satiety, energy, and stress with absolute System 1 survival
   priority.
 - Plans, physical affordances, speech, observer-specific perception, episodic

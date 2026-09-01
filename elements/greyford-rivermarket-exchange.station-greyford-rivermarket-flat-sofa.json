@@ -1,0 +1,34 @@
+{
+  "actions": [
+    {
+      "action": "RELAX",
+      "duration": 300.0,
+      "effect": {
+        "energy_delta": 0.0,
+        "energy_target": null,
+        "satiety_delta": 0.0,
+        "satiety_target": null,
+        "stress_delta": -8.0,
+        "stress_target": null
+      }
+    }
+  ],
+  "available": true,
+  "capacity": 1,
+  "description": "",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "greyford-rivermarket-exchange.station-greyford-rivermarket-flat-sofa",
+  "kind": "object",
+  "name": "Living Room Sofa",
+  "npc_role": null,
+  "object_type": "affordance",
+  "offers": [],
+  "operation": "AUTOMATED",
+  "request_timeout": 60.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

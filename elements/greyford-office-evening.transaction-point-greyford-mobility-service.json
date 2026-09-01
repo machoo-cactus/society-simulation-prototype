@@ -1,0 +1,45 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {
+    "riverfront-cycle-service-receipt": 50
+  },
+  "id": "greyford-office-evening.transaction-point-greyford-mobility-service",
+  "kind": "object",
+  "name": "Riverfront Cycle Service Counter",
+  "npc_role": {
+    "content_hash": "949032d9274666eb061f9ffeb10f997cff50397de64334f3de9217870d61b4e3",
+    "id": "riverfront-service-clerk",
+    "kind": "npc_role"
+  },
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "greyford-cent",
+          "quantity": 1800
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "riverfront-cycle-service-receipt",
+          "quantity": 1
+        }
+      ],
+      "duration": 12.0,
+      "id": "buy-riverfront-cycle-service",
+      "name": "Purchase a standard cycle service"
+    }
+  ],
+  "operation": "STAFFED",
+  "request_timeout": 120.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

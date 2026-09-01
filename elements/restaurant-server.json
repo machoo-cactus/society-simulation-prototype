@@ -1,0 +1,17 @@
+{
+  "briefing": "Serve valid restaurant purchase requests in deterministic request order.",
+  "description": "Reusable transient service role for staffed restaurant counters.",
+  "hearing_multiplier": 1.0,
+  "id": "restaurant-server",
+  "kind": "npc_role",
+  "name": "Restaurant Server",
+  "recognition_range": 4,
+  "schema_version": 1,
+  "tool_allowlist": [
+    "serve_transaction",
+    "say",
+    "wait",
+    "skip"
+  ],
+  "vision_range": 6
+}

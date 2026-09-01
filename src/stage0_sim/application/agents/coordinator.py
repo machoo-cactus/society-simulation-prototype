@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
+from typing import Any, cast
 
 from stage0_sim.application.agents.contracts import (
     CharacterController,
@@ -13,10 +14,22 @@ from stage0_sim.application.agents.contracts import (
 )
 from stage0_sim.application.agents.tools import ToolRegistry, ToolValidationError
 from stage0_sim.application.cognition import EmbeddingError
+from stage0_sim.application.data_capture import (
+    DecisionId,
+    ModelRequestId,
+    RecordCategory,
+    RecordJoinIds,
+    RecordSource,
+    ResearchRecorder,
+    ToolCallId,
+)
 from stage0_sim.application.information import InformationQuery, InformationRetriever
 from stage0_sim.application.information_context import InformationContextCapsule
 from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.domain.components import (
+    ActionGoalLink,
+    ActionInstance,
+    ActionOrigin,
     ActionType,
     ControllerComponent,
     DriveComponent,
@@ -32,10 +45,18 @@ from stage0_sim.domain.intents import (
     CharacterIntent,
     MoveIntent,
     NavigationIntent,
+    ServeTransactionIntent,
     SkipIntent,
     SpeechIntent,
+    TransactionIntent,
     TravelIntent,
     WaitIntent,
+)
+from stage0_sim.domain.lineage import (
+    active_goal_links,
+    emit_action_lifecycle,
+    new_action_instance,
+    queue_plan_actions,
 )
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.world import TravelMode
@@ -85,6 +106,7 @@ class AgentWorkCoordinator:
         memory_store: EpisodicMemoryStore | None = None,
         information_retriever: InformationRetriever | None = None,
         execution_mode: str = "global_barrier",
+        research_recorder: ResearchRecorder | None = None,
     ) -> None:
         if max_concurrency <= 0:
             raise ValueError("max_concurrency must be greater than zero")
@@ -103,6 +125,7 @@ class AgentWorkCoordinator:
         self.memory_store = memory_store
         self.information_retriever = information_retriever
         self.execution_mode = execution_mode
+        self.research_recorder = research_recorder
         self.request_count = 0
         self.input_tokens = 0
         self.output_tokens = 0
@@ -117,7 +140,24 @@ class AgentWorkCoordinator:
         self._pending: dict[Future[_DecisionExecution], _PendingDecision] = {}
         self._queued: list[CharacterDecisionRequest] = []
 
-    def budget_failure(self) -> str | None:
+    def bind_research_recorder(self, recorder: ResearchRecorder) -> None:
+        self.research_recorder = recorder
+        model_controller = getattr(self.controller, "model_controller", None)
+        target = model_controller or self.controller
+        if hasattr(target, "research_recorder"):
+            cast(Any, target).research_recorder = recorder
+
+    def _uses_model(self, actor_kind: str) -> bool:
+        resolver = getattr(self.controller, "uses_model", None)
+        if callable(resolver):
+            return bool(resolver(actor_kind))
+        return True
+
+    def budget_failure(
+        self, actor_kind: str = "character"
+    ) -> str | None:
+        if not self._uses_model(actor_kind):
+            return None
         if self.max_requests is not None and self.request_count >= self.max_requests:
             return "maximum_requests"
         if (
@@ -133,9 +173,10 @@ class AgentWorkCoordinator:
         return None
 
     def submit(self, request: CharacterDecisionRequest) -> None:
-        if self.budget_failure() is not None:
+        if self.budget_failure(request.actor_kind) is not None:
             raise RuntimeError("cannot submit after cognition budget exhaustion")
-        self.request_count += 1
+        if self._uses_model(request.actor_kind):
+            self.request_count += 1
         self._queued.append(request)
 
     def _start(self, request: CharacterDecisionRequest) -> None:
@@ -218,6 +259,12 @@ class AgentWorkCoordinator:
                         ),
                     )
                 )
+                self._record_decision_failure(
+                    request,
+                    reason="provider_timeout",
+                    message="model request timed out",
+                    status="timeout",
+                )
                 continue
             del self._pending[future]
             try:
@@ -244,6 +291,12 @@ class AgentWorkCoordinator:
 
     def cancel_all(self, context: SystemContext, reason: str) -> None:
         for request in self._queued:
+            self._record_decision_failure(
+                request,
+                reason=reason,
+                message=reason,
+                status="cancelled",
+            )
             self._clear_pending(context, request)
             context.events.emit(
                 "cognition.cancelled",
@@ -257,6 +310,12 @@ class AgentWorkCoordinator:
         for future, pending in tuple(self._pending.items()):
             request = pending.request
             future.cancel()
+            self._record_decision_failure(
+                request,
+                reason=reason,
+                message=reason,
+                status="cancelled",
+            )
             self._clear_pending(context, request)
             context.events.emit(
                 "cognition.cancelled",
@@ -274,7 +333,10 @@ class AgentWorkCoordinator:
     async def _decide(
         self, request: CharacterDecisionRequest
     ) -> _DecisionExecution:
-        if self.information_retriever is not None:
+        if (
+            request.actor_kind != "npc"
+            and self.information_retriever is not None
+        ):
             query = _build_information_query(request)
             provider = _provider_name(
                 self.information_retriever.embedding_provider
@@ -282,12 +344,18 @@ class AgentWorkCoordinator:
             try:
                 capsules = self.information_retriever.retrieve(query)
             except EmbeddingError as error:
+                failed_request = replace(
+                    request,
+                    information_retrieval_performed=True,
+                    information_query=query.text,
+                )
+                self._record_decision_request(failed_request)
                 model_error = ModelClientError(
                     f"information retrieval failed: {error}",
                     reason="information_retrieval_failed",
                 )
                 return _DecisionExecution(
-                    request,
+                    failed_request,
                     None,
                     model_error,
                     _RetrievalTrace(
@@ -313,13 +381,13 @@ class AgentWorkCoordinator:
                 provider=provider,
             )
             try:
-                decision = await self.controller.decide(enriched)
+                decision = await self._invoke_controller(enriched)
             except ModelClientError as error:
                 return _DecisionExecution(enriched, None, error, trace)
             return _DecisionExecution(enriched, decision, None, trace)
         if self.memory_store is None:
             try:
-                decision = await self.controller.decide(request)
+                decision = await self._invoke_controller(request)
             except ModelClientError as error:
                 return _DecisionExecution(request, None, error)
             return _DecisionExecution(request, decision, None)
@@ -329,7 +397,7 @@ class AgentWorkCoordinator:
         ]
         if not query_parts:
             try:
-                decision = await self.controller.decide(request)
+                decision = await self._invoke_controller(request)
             except ModelClientError as error:
                 return _DecisionExecution(request, None, error)
             return _DecisionExecution(request, decision, None)
@@ -341,6 +409,7 @@ class AgentWorkCoordinator:
                 top_k=5,
             )
         except EmbeddingError as error:
+            self._record_decision_request(request)
             return _DecisionExecution(
                 request,
                 None,
@@ -354,10 +423,115 @@ class AgentWorkCoordinator:
             memories=tuple(item.record.text for item in retrieved),
         )
         try:
-            decision = await self.controller.decide(enriched)
+            decision = await self._invoke_controller(enriched)
         except ModelClientError as error:
             return _DecisionExecution(enriched, None, error)
         return _DecisionExecution(enriched, decision, None)
+
+    async def _invoke_controller(
+        self,
+        request: CharacterDecisionRequest,
+    ) -> CharacterDecision:
+        self._record_decision_request(request)
+        decision = await self.controller.decide(request)
+        if self.research_recorder is not None:
+            self.research_recorder.record(
+                "decision_result",
+                {
+                    "operation": "character_decision",
+                    "decision": decision,
+                    "status": (
+                        "model_rejected"
+                        if decision.error is not None
+                        or decision.tool_call is None
+                        else "model_completed"
+                    ),
+                },
+                category=RecordCategory.DECISION,
+                source=RecordSource.APPLICATION,
+                subject_id=request.agent_id,
+                correlation_id=request.decision_id,
+                joins=RecordJoinIds(
+                    decision_id=DecisionId(request.decision_id),
+                    tool_call_id=(
+                        ToolCallId(decision.tool_call.call_id)
+                        if decision.tool_call is not None
+                        else None
+                    ),
+                ),
+            )
+        return decision
+
+    def _record_decision_request(
+        self,
+        request: CharacterDecisionRequest,
+    ) -> None:
+        if self.research_recorder is None:
+            return
+        self.research_recorder.record(
+            "decision_request",
+            {
+                "operation": "character_decision",
+                "request": request,
+            },
+            category=RecordCategory.DECISION,
+            source=RecordSource.APPLICATION,
+            subject_id=request.agent_id,
+            correlation_id=request.decision_id,
+            joins=RecordJoinIds(
+                decision_id=DecisionId(request.decision_id)
+            ),
+        )
+
+    def _record_decision_failure(
+        self,
+        request: CharacterDecisionRequest,
+        *,
+        reason: str,
+        message: str,
+        status: str,
+    ) -> None:
+        if self.research_recorder is None:
+            return
+        model_request_id = f"{request.decision_id}:round:1"
+        joins = RecordJoinIds(
+            decision_id=DecisionId(request.decision_id),
+            model_request_id=ModelRequestId(model_request_id),
+        )
+        self.research_recorder.record(
+            "model_error",
+            {
+                "operation": "character_decision",
+                "model_request_id": model_request_id,
+                "round": 1,
+                "status": status,
+                "reason": reason,
+                "message": message,
+            },
+            category=RecordCategory.MODEL,
+            source=RecordSource.APPLICATION,
+            subject_id=request.agent_id,
+            correlation_id=request.decision_id,
+            joins=joins,
+            ordinal=1,
+        )
+        self.research_recorder.record(
+            "decision_result",
+            {
+                "operation": "character_decision",
+                "decision_id": request.decision_id,
+                "status": status,
+                "reason": reason,
+                "message": message,
+            },
+            category=RecordCategory.DECISION,
+            source=RecordSource.APPLICATION,
+            subject_id=request.agent_id,
+            correlation_id=request.decision_id,
+            joins=RecordJoinIds(
+                decision_id=DecisionId(request.decision_id)
+            ),
+        )
 
     def _apply(
         self, context: SystemContext, completed: _CompletedDecision
@@ -366,6 +540,16 @@ class AgentWorkCoordinator:
         if completed.retrieval is not None:
             self._emit_retrieval(context, request, completed.retrieval)
         if completed.error is not None:
+            self._record_decision_failure(
+                request,
+                reason=completed.error.reason,
+                message=str(completed.error),
+                status=(
+                    "timeout"
+                    if completed.error.reason == "provider_timeout"
+                    else "failed"
+                ),
+            )
             self._clear_pending(context, request)
             context.events.emit(
                 "cognition.failed",
@@ -569,14 +753,19 @@ class AgentWorkCoordinator:
                 "character already has an action",
             )
             return
+        action_instance = None
+        goal_links = active_goal_links(context, request.agent_id)
         if isinstance(intent, MoveIntent):
-            self._queue_navigation(
+            action_instance = self._queue_navigation(
                 context,
                 request.agent_id,
                 plan,
                 intent.target_id,
                 None,
                 intent.reason,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                goal_links=goal_links,
             )
         elif isinstance(intent, ActivityIntent):
             duration = intent.duration_seconds
@@ -589,20 +778,40 @@ class AgentWorkCoordinator:
                     f"{intent.action.value} requires duration_seconds",
                 )
                 return
-            plan.queue.append(
-                PlanAction(
+            action_instance = queue_plan_actions(
+                context,
+                request.agent_id,
+                plan,
+                [
+                    PlanAction(
                     action=intent.action,
                     target=intent.target_id,
                     duration=duration,
-                )
-            )
+                    )
+                ],
+                origin=ActionOrigin.CONTROLLER,
+                goal_links=goal_links,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                root_correlation_id=request.decision_id,
+            )[0]
         elif isinstance(intent, WaitIntent):
-            plan.queue.append(
-                PlanAction(
-                    action=ActionType.IDLE,
-                    duration=intent.duration_seconds,
-                )
-            )
+            action_instance = queue_plan_actions(
+                context,
+                request.agent_id,
+                plan,
+                [
+                    PlanAction(
+                        action=ActionType.IDLE,
+                        duration=intent.duration_seconds,
+                    )
+                ],
+                origin=ActionOrigin.CONTROLLER,
+                goal_links=goal_links,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                root_correlation_id=request.decision_id,
+            )[0]
         elif isinstance(intent, SkipIntent):
             pass
         elif isinstance(intent, SpeechIntent):
@@ -617,6 +826,23 @@ class AgentWorkCoordinator:
                     "speech is already pending",
                 )
                 return
+            action_instance = new_action_instance(
+                context,
+                request.agent_id,
+                origin=ActionOrigin.CONTROLLER,
+                action_name="SAY",
+                target_id=intent.target_id,
+                goal_links=goal_links,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                root_correlation_id=request.decision_id,
+            )
+            emit_action_lifecycle(
+                context,
+                "action.queued",
+                request.agent_id,
+                action_instance,
+            )
             context.registry.add_component(
                 request.agent_id,
                 PendingSpeechComponent(
@@ -625,26 +851,68 @@ class AgentWorkCoordinator:
                     target_id=intent.target_id,
                     text=intent.text,
                     channel=intent.channel,
+                    action_instance=action_instance,
                 ),
             )
         elif isinstance(intent, TravelIntent):
-            self._queue_navigation(
+            action_instance = self._queue_navigation(
                 context,
                 request.agent_id,
                 plan,
                 intent.target_id,
                 intent.mode,
                 intent.reason,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                goal_links=goal_links,
             )
         elif isinstance(intent, NavigationIntent):
-            self._queue_navigation(
+            action_instance = self._queue_navigation(
                 context,
                 request.agent_id,
                 plan,
                 intent.target_id,
                 intent.preferred_mode,
                 intent.reason,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                goal_links=goal_links,
             )
+        elif isinstance(intent, TransactionIntent):
+            action_instance = queue_plan_actions(
+                context,
+                request.agent_id,
+                plan,
+                [
+                    PlanAction(
+                        action=ActionType.TRANSACT,
+                        target=intent.point_id,
+                        offer_id=intent.offer_id,
+                    )
+                ],
+                origin=ActionOrigin.CONTROLLER,
+                goal_links=goal_links,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                root_correlation_id=request.decision_id,
+            )[0]
+        elif isinstance(intent, ServeTransactionIntent):
+            action_instance = queue_plan_actions(
+                context,
+                request.agent_id,
+                plan,
+                [
+                    PlanAction(
+                        action=ActionType.SERVE_TRANSACTION,
+                        target=intent.request_id,
+                    )
+                ],
+                origin=ActionOrigin.CONTROLLER,
+                goal_links=goal_links,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                root_correlation_id=request.decision_id,
+            )[0]
         else:
             raise TypeError(f"unsupported intent: {type(intent).__name__}")
         state = context.registry.get_component(
@@ -669,6 +937,21 @@ class AgentWorkCoordinator:
                 "tool_call_id": intent.tool_call_id,
                 "tool_name": tool_name,
                 "intent_kind": intent.kind.value,
+                "action_id": (
+                    action_instance.action_id
+                    if action_instance is not None
+                    else None
+                ),
+                "plan_id": (
+                    action_instance.plan_id
+                    if action_instance is not None
+                    else None
+                ),
+                "action_origin": (
+                    action_instance.origin.value
+                    if action_instance is not None
+                    else None
+                ),
             },
             correlation_id=request.decision_id,
         )
@@ -697,7 +980,28 @@ class AgentWorkCoordinator:
         target_id: str,
         preferred_mode: TravelMode | None,
         reason: str | None,
-    ) -> None:
+        *,
+        decision_id: str,
+        tool_call_id: str,
+        goal_links: tuple[ActionGoalLink, ...],
+    ) -> ActionInstance:
+        action = queue_plan_actions(
+            context,
+            agent_id,
+            plan,
+            [
+                PlanAction(
+                    action=ActionType.NAVIGATE,
+                    target=target_id,
+                    mode=preferred_mode,
+                )
+            ],
+            origin=ActionOrigin.CONTROLLER,
+            goal_links=goal_links,
+            decision_id=decision_id,
+            tool_call_id=tool_call_id,
+            root_correlation_id=decision_id,
+        )[0]
         if context.registry.has_component(agent_id, NavigationComponent):
             navigation = context.registry.get_component(
                 agent_id,
@@ -710,14 +1014,9 @@ class AgentWorkCoordinator:
             target_id,
             preferred_mode=preferred_mode,
             reason=reason,
+            action_instance=action,
         )
-        plan.queue.append(
-            PlanAction(
-                action=ActionType.NAVIGATE,
-                target=target_id,
-                mode=preferred_mode,
-            )
-        )
+        return action
 
     def _reject(
         self,
@@ -844,6 +1143,7 @@ def _build_information_query(
         simulation_time=request.observation.simulation_time,
         source_scope=("character.dossier", "memory.episode"),
         token_budget=512,
+        operation_id=f"{request.decision_id}:information-retrieval",
     )
 
 

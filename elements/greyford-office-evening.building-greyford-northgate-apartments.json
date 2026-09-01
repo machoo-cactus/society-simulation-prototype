@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-northgate-apartments-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-northgate-apartments",
+  "kind": "building",
+  "name": "Northgate Apartments",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "be4649839c2622d75d49a031f68105bc631ef499b4e74ba78bebaa34c6884c2a",
+        "id": "greyford-office-evening.map-greyford-northgate-apartments",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

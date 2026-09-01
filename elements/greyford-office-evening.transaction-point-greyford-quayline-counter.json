@@ -1,0 +1,45 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {
+    "quayline-coffee": 40
+  },
+  "id": "greyford-office-evening.transaction-point-greyford-quayline-counter",
+  "kind": "object",
+  "name": "Quayline Coffee Counter",
+  "npc_role": {
+    "content_hash": "459012fc9417cdf8cc17c145970ab7f1e36aeb36c36a57cf2e9b930f7c9b281e",
+    "id": "quayside-cashier",
+    "kind": "npc_role"
+  },
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "greyford-cent",
+          "quantity": 450
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "quayline-coffee",
+          "quantity": 1
+        }
+      ],
+      "duration": 5.0,
+      "id": "buy-quayline-coffee",
+      "name": "Buy one coffee"
+    }
+  ],
+  "operation": "STAFFED",
+  "request_timeout": 90.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

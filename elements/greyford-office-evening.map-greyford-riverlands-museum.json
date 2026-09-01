@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-riverlands-museum",
+  "kind": "room",
+  "name": "Museum of the Riverlands interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "32e6be6f876dd5a2c8392d4c190c94c99aa682589b39adf6e1b147108164df6d",
+        "id": "greyford-office-evening.station-greyford-riverlands-museum-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-riverlands-museum-primary",
+      "key": "station-greyford-riverlands-museum-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-riverlands-museum-entry",
+      "name": "Museum of the Riverlands Entry and Reception",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-riverlands-museum-main",
+      "name": "Museum of the Riverlands Main Interior",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

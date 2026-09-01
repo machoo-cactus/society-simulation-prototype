@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 7,
+  "id": "greyford-office-evening.map-greyford-intermodal-logistics",
+  "kind": "room",
+  "name": "Greyford Intermodal Logistics Terminal interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "0bc9f2ad7639a8584b00daade69bf8721eef2a2cb980617a1772fd3ad849d71d",
+        "id": "greyford-office-evening.station-greyford-intermodal-logistics-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-intermodal-logistics-primary",
+      "key": "station-greyford-intermodal-logistics-primary",
+      "position": {
+        "x": 8,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 10,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-intermodal-logistics-entry",
+      "name": "Greyford Intermodal Logistics Terminal Entry and Reception",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 7,
+        "width": 7,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-intermodal-logistics-main",
+      "name": "Greyford Intermodal Logistics Terminal Main Interior",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

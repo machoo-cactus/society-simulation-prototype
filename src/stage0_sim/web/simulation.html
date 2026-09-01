@@ -80,7 +80,7 @@
                   <option value="">Select a character</option>
                   {% for character in slot_characters.get(entity.id, ()) %}
                     <option value="{{ character.id }}" {% if current == character.id %}selected{% endif %}>
-                      {{ character.display_name }} ({{ character.id }}, age {{ character.age if character.age is not none else "unknown" }}, {{ character.gender or "gender unspecified" }})
+                      {{ character.display_name }} ({{ character.id }}, born {{ character.birth_date if character.birth_date is not none else "unknown" }}, age {{ character.age if character.age is not none else "unknown at scenario start" }}, {{ character.gender or "gender unspecified" }})
                     </option>
                   {% else %}
                     <option value="" disabled>No eligible characters</option>
@@ -92,6 +92,36 @@
           </form>
         </details>
       {% endif %}
+      {% if prepared %}
+        <details open>
+          <summary>Frozen character situations</summary>
+          <p>
+            Synthesis is
+            <strong>{{ "enabled" if scenario.character_situation_synthesis.enabled else "disabled" }}</strong>.
+            These non-authoritative situations were created only after all
+            character assignments were validated.
+          </p>
+          {% for entity_id, artifact in prepared.situations.items() %}
+            <article class="inspector-section">
+              <h3>{{ artifact.data.summary }} ({{ entity_id }})</h3>
+              <pre>{{ json_pretty(artifact.data.model_dump(mode="json")) }}</pre>
+              <dl class="facts">
+                <div><dt>Character</dt><dd>{{ artifact.character_id }}</dd></div>
+                <div><dt>Provider</dt><dd>{{ artifact.generation.provider }}</dd></div>
+                <div><dt>Model</dt><dd>{{ artifact.generation.model }}</dd></div>
+                <div><dt>Prompt</dt><dd>{{ artifact.generation.prompt_version }}</dd></div>
+                <div><dt>Input hash</dt><dd><code>{{ artifact.input_hash }}</code></dd></div>
+                <div><dt>Content hash</dt><dd><code>{{ artifact.content_hash }}</code></dd></div>
+              </dl>
+            </article>
+          {% endfor %}
+          <form method="post" action="/ui/scenario/situations/regenerate" data-ui-targets="#notice-region,#simulation-controls,#world-panel,#inspector-panel,#events-panel,#transcript-panel,#dataset-panel">
+            <button type="submit" {% if session.run_id %}disabled{% endif %}>
+              Regenerate character situations
+            </button>
+          </form>
+        </details>
+      {% endif %}
     {% endif %}
 
     <div class="lifecycle-controls" role="group" aria-label="Run lifecycle">
@@ -100,6 +130,13 @@
         <select id="start-speed" name="speed" {% if not controls.start %}disabled{% endif %}>
           {% for speed in (0.5, 1, 2, 4, 10) %}
             <option value="{{ speed }}" {% if scenario and scenario.speed == speed %}selected{% endif %}>{{ speed }}x</option>
+          {% endfor %}
+        </select>
+        <label for="npc-control-mode">NPC control</label>
+        <select id="npc-control-mode" name="npc_control_mode" {% if not controls.start %}disabled{% endif %}>
+          {% set npc_mode = scenario.cognition.npc_control_mode.value if scenario else "auto" %}
+          {% for mode, label in (("auto", "Automatic"), ("model", "Model"), ("deterministic", "Deterministic")) %}
+            <option value="{{ mode }}" {% if npc_mode == mode %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
         <button class="primary" type="submit" {% if not controls.start %}disabled{% endif %}>Start run</button>
@@ -126,6 +163,7 @@
           <div><dt>Tick</dt><dd>{{ managed.runner.clock.tick }}</dd></div>
           <div><dt>Simulation time</dt><dd>{{ "%.1f"|format(managed.runner.clock.simulation_time) }}s</dd></div>
           <div><dt>Cognition</dt><dd>{{ managed.runner.cognition_phase.value }}</dd></div>
+          <div><dt>NPC control</dt><dd>{{ managed.runner.configuration.effective_npc_control_mode.value }}</dd></div>
         </dl>
       {% endif %}
     </div>
@@ -171,7 +209,7 @@
           <summary>Advanced scale override</summary>
           <label for="view-level">Scale</label>
           <select id="view-level" name="view_level">
-            {% for level, label in (("auto", "Automatic from zoom"), ("building", "Building"), ("neighborhood", "Neighborhood"), ("city", "City")) %}
+            {% for level, label in (("auto", "Automatic from zoom"), ("room", "Room"), ("building", "Building"), ("city_zone", "City zone"), ("city", "City")) %}
               <option value="{{ level }}" {% if session.view_level == level %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
@@ -229,12 +267,20 @@
                 <title>{{ station.name }} · {{ (station.get("actions") or station.get("supported_actions") or [])|join(", ") }}{% if station.environment_availability and not station.environment_availability.available %} · Closed: {{ station.environment_availability.reason }}{% endif %}</title>
               </rect>
             {% endfor %}
+            {% for point in world_view.transaction_points %}
+              <circle role="img" aria-label="Transaction point: {{ point.name }}" class="transaction-point {% if point.environment_availability and not point.environment_availability.available %}resource-closed{% endif %}" cx="{{ point.position.x + 0.5 }}" cy="{{ point.position.y + 0.5 }}" r=".3">
+                <title>{{ point.name }} · {{ point.operation|default("AUTOMATED")|lower }} · {{ point.offers|map(attribute="name")|join(", ") }}{% if point.runtime and point.runtime.staffing and point.runtime.staffing.npc_id %} · Staffed by {{ point.runtime.staffing.npc_id }}{% endif %}{% if point.environment_availability and not point.environment_availability.available %} · Closed: {{ point.environment_availability.reason }}{% endif %}</title>
+              </circle>
+              {% if point.staffing %}
+                <rect role="img" aria-label="Staff position for {{ point.name }}" class="npc-staff-position" x="{{ point.staffing.staff_position.x + 0.2 }}" y="{{ point.staffing.staff_position.y + 0.2 }}" width=".6" height=".6"><title>{{ point.name }} staff position</title></rect>
+              {% endif %}
+            {% endfor %}
             {% for agent in world_view.agents %}
               {% if agent.destination %}
                 <circle class="destination-marker" cx="{{ agent.destination.x + 0.5 }}" cy="{{ agent.destination.y + 0.5 }}" r=".16"><title>{{ agent.name }} destination</title></circle>
               {% endif %}
               <a href="/ui/?selected={{ agent.id }}" data-ui-link-targets="#world-panel,#inspector-panel">
-                <circle class="character-marker {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %} {% if agent.system1 and agent.system1 != 'NORMAL' %}critical{% endif %}" cx="{{ agent.x + 0.5 }}" cy="{{ agent.y + 0.5 }}" r=".25">
+                <circle class="character-marker {% if agent.actor_kind == 'npc' %}npc{% endif %} {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %} {% if agent.system1 and agent.system1 != 'NORMAL' %}critical{% endif %}" cx="{{ agent.x + 0.5 }}" cy="{{ agent.y + 0.5 }}" r=".25">
                   <title>{{ agent.name }} at {{ agent.x }}, {{ agent.y }}</title>
                 </circle>
                 {% if "names" in session.overlays %}<text class="map-label" x="{{ agent.x + 0.5 }}" y="{{ agent.y + 0.12 }}">{{ agent.name }}</text>{% endif %}
@@ -263,7 +309,7 @@
             {% endfor %}
             {% for agent in world_view.agents %}
               <a href="/ui/?selected={{ agent.id|urlencode }}" aria-label="Inspect {{ agent.name }}" data-ui-link-targets="#world-panel,#inspector-panel">
-                <circle class="city-character {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %}" cx="{{ agent.px }}" cy="{{ agent.py }}" r="9" data-character-id="{{ agent.id }}">
+                <circle class="city-character {% if agent.actor_kind == 'npc' %}npc{% endif %} {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %}" cx="{{ agent.px }}" cy="{{ agent.py }}" r="9" data-character-id="{{ agent.id }}">
                   <title>{{ agent.name }}</title>
                 </circle>
                 {% if "speech" in session.overlays and agent.speech %}<text class="city-speech-label" x="{{ agent.px }}" y="{{ agent.py - 18 }}">{{ agent.speech[:48] }}</text>{% endif %}
@@ -313,7 +359,11 @@
     </form>
     <div id="inspector-live">
       {% if selected_agent %}
+        {% if selected_agent.get("actor_kind") == "npc" %}
+          <p class="status-chip">Transient NPC · {{ selected_agent.get("npc", {}).get("role_name") }} · {{ selected_agent.get("npc", {}).get("control_mode") }}</p>
+        {% endif %}
         {% set homeostasis = selected_agent.get("homeostasis", {}) %}
+        {% if homeostasis %}
         <div class="gauges">
         {% for vital in ("satiety", "energy", "stress") %}
           <label>
@@ -322,6 +372,9 @@
           </label>
         {% endfor %}
         </div>
+        {% else %}
+          <p class="empty-state">No physiological state is tracked for this transient NPC.</p>
+        {% endif %}
         <dl class="facts">
         <div><dt>Activity</dt><dd>{{ selected_agent.get("activity", "—") }}</dd></div>
         <div><dt>System 1</dt><dd>{{ selected_agent.get("system1", {}).get("state", "—") }}</dd></div>
@@ -330,6 +383,16 @@
         <div><dt>Memories</dt><dd>{{ selected_agent.get("memory", {}).get("count", 0) }}</dd></div>
         <div><dt>Visible now</dt><dd>{{ selected_agent.get("perception", {}).get("visible_now", [])|join(", ") or "nobody" }}</dd></div>
         </dl>
+        <section class="inspector-section">
+        <h3>Possessions</h3>
+        <ul>
+          {% for item in selected_agent.get("possessions", []) %}
+            <li>{{ item.name }}: {{ item.quantity }} {{ item.unit }}</li>
+          {% else %}
+            <li>No possessions</li>
+          {% endfor %}
+        </ul>
+        </section>
         <section class="inspector-section">
         <h3>System 2 plan</h3>
         <ol>
@@ -340,6 +403,10 @@
         <summary>Character profile</summary>
         <pre>{{ json_pretty(selected_agent.get("character_profile", {}).get("data", {})) }}</pre>
         </details>
+        <details class="inspector-section">
+        <summary>Frozen character situation</summary>
+        <pre>{{ json_pretty(selected_agent.get("character_situation", {})) }}</pre>
+        </details>
         <section class="inspector-section">
         <h3>Recent perceptions</h3>
         <ol>
@@ -347,7 +414,7 @@
         </ol>
         </section>
         <form class="vitals-form" method="post" action="/ui/run/vitals" data-ui-targets="#notice-region,#inspector-live,#event-live,#event-summary">
-        <fieldset {% if not controls.vitals %}disabled{% endif %}>
+        <fieldset {% if not controls.vitals or not homeostasis %}disabled{% endif %}>
           <legend>Controlled vital mutation</legend>
           {% for vital in ("satiety", "energy", "stress") %}
             <label>{{ vital|title }} <input name="{{ vital }}" type="number" min="0" max="100" step="0.1"></label>
@@ -454,8 +521,20 @@
   {% if managed %}
     <section id="dataset-panel" class="panel dataset-panel" aria-labelledby="dataset-heading">
       <header class="panel__header"><h2 id="dataset-heading">Research data</h2></header>
-      <p>Download the versioned JSONL dataset for this run.</p>
-      <a class="button-link" href="/simulation/runs/{{ session.run_id }}/export">Download run dataset</a>
+      <p>
+        Inspect authoritative persisted records, capture completeness,
+        timelines, aggregates, and the data dictionary.
+      </p>
+      {% if dataset_summary %}
+        <dl class="dataset-panel__summary">
+          <div><dt>Persisted records</dt><dd>{{ dataset_summary.record_counts.values() | sum }}</dd></div>
+          <div><dt>Capture complete</dt><dd>{{ "Yes" if dataset_summary.capture_complete else "Not yet" }}</dd></div>
+        </dl>
+      {% endif %}
+      <div class="dataset-panel__actions">
+        <a class="button-link" href="/ui/datasets/{{ session.run_id }}/">Explore research dataset</a>
+        <a class="button-link" href="/simulation/runs/{{ session.run_id }}/export">Download run dataset</a>
+      </div>
     </section>
   {% else %}
     <div id="dataset-panel" hidden></div>

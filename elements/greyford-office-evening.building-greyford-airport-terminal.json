@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-airport-terminal-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 4
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-airport-terminal",
+  "kind": "building",
+  "name": "Greyford International Airport Terminal",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "e75bdd31c43afc226c685cafac451a6447a4a0119ffb501026ded1fc32f68e26",
+        "id": "greyford-office-evening.map-greyford-airport-terminal",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

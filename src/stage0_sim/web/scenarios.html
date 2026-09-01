@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% from "scenario_fields.html" import render_node %}
+{% from "scenario_fields.html" import render_node, render_focused_node %}
 {% block title %}Scenarios · Stage 0{% endblock %}
 {% block eyebrow %}Portable world and run configuration{% endblock %}
 {% block heading %}Scenario Library{% endblock %}
 {% block content %}
+{% set editor_query = "draft=" ~ draft.token ~ ("&selected=" ~ draft.original_id|urlencode if draft.original_id else "&new=1") %}
 <div class="scenario-library-layout">
   <aside class="panel scenario-list" aria-labelledby="scenario-list-heading">
     <header class="panel__header">
@@ -39,10 +40,7 @@
     <header class="panel__header">
       <div>
         <h2 id="scenario-editor-heading">{{ draft.resource_id or "New scenario" }}</h2>
-        <p>
-          Resource IDs name library files. The Scenario name field remains part
-          of the portable document.
-        </p>
+        <p>Select world objects from the map or explorer, then edit the focused record.</p>
       </div>
       {% if draft.original_id %}
         <div class="header-actions">
@@ -61,46 +59,335 @@
         <p>Correct the following fields. Your submitted values are retained.</p>
         <ul>
           {% for problem in draft.errors %}
-            <li><a href="#{{ problem.control_id }}">{{ problem.message }}</a></li>
+            <li>
+              {% if problem.node_id %}
+                <a href="?{{ editor_query }}&focus={{ problem.node_id }}#{{ problem.control_id }}">{{ problem.message }}</a>
+              {% else %}
+                <a href="#{{ problem.control_id }}">{{ problem.message }}</a>
+              {% endif %}
+            </li>
           {% endfor %}
         </ul>
       </section>
     {% endif %}
 
-    <form class="scenario-form" method="post" action="/ui/scenarios/drafts/{{ draft.token }}">
+    <form id="scenario-map-view-form" method="post" action="/ui/scenarios/drafts/{{ draft.token }}/view"></form>
+    <form id="scenario-form" class="scenario-form" method="post" action="/ui/scenarios/drafts/{{ draft.token }}">
       <fieldset class="scenario-resource">
         <legend>Library resource</legend>
         <label for="scenario-resource-id">
           Scenario resource ID
-          <input
-            id="scenario-resource-id"
-            name="resource_id"
-            value="{{ draft.resource_id }}"
-            pattern="[a-z0-9][a-z0-9._\-]*"
-            required
-          >
+          <input id="scenario-resource-id" name="resource_id" value="{{ draft.resource_id }}" pattern="[a-z0-9][a-z0-9._\-]*" required>
         </label>
         {% if draft.original_id %}
           <p>Original resource: <code>{{ draft.original_id }}</code>. Renames remain hash protected.</p>
         {% endif %}
       </fieldset>
 
-      {{ render_node(draft.root) }}
+      <details class="scenario-general-settings">
+        <summary>Scenario and environment settings</summary>
+        <div class="scenario-general-grid">
+          {% for child in draft.root.children if child.schema.field_name not in ("world", "entities") %}
+            {{ render_node(child, 1) }}
+          {% endfor %}
+        </div>
+      </details>
+
+      <section id="scenario-world-workspace" class="scenario-world-workspace" aria-labelledby="scenario-world-heading">
+        {% set active_world = editor_world.world_node.variants.get(editor_world.world_node.choice) %}
+        <header class="scenario-world-header">
+          <div>
+            <h3 id="scenario-world-heading">Visual world editor</h3>
+            <nav class="world-breadcrumbs" aria-label="World hierarchy">
+              {% for scope_id, label in editor_world.breadcrumbs %}
+                {% if loop.last %}
+                  <span aria-current="page">{{ label }}</span>
+                {% else %}
+                  <a href="?{{ editor_query }}&scope={{ scope_id }}&focus=" data-ui-link-targets="#scenario-world-workspace">{{ label }}</a>
+                {% endif %}
+              {% endfor %}
+            </nav>
+          </div>
+          <div class="view-controls">
+            <label for="{{ editor_world.world_node.control_id }}-choice">World type</label>
+            <select id="{{ editor_world.world_node.control_id }}-choice" name="choice_{{ editor_world.world_node.id }}">
+              {% for value, label, unused in editor_world.world_node.schema.variants %}
+                <option value="{{ value }}" {% if editor_world.world_node.choice == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" name="intent" value="refresh" formnovalidate>Apply world type</button>
+            <button form="scenario-map-view-form" name="zoom_action" value="out" aria-label="Zoom out">−</button>
+            <output data-map-zoom-output aria-label="Editor zoom level" aria-live="polite">{{ (draft.view.zoom * 100)|round|int }}%</output>
+            <button form="scenario-map-view-form" name="zoom_action" value="in" aria-label="Zoom in">+</button>
+            <button form="scenario-map-view-form" name="zoom_action" value="fit">Fit</button>
+          </div>
+        </header>
+
+        {% if active_world %}
+          <details class="scenario-world-properties">
+            <summary>World dimensions and transport defaults</summary>
+            <div class="scenario-fields">
+              {% if editor_world.world_node.choice == "grid" %}
+                {% for child in active_world.children if child.schema.field_name in ("width", "height") %}
+                  {{ render_node(child, 1) }}
+                {% endfor %}
+              {% else %}
+                {% for child in active_world.children %}
+                  {% if child.schema.field_name == "city" %}
+                    {{ render_node(child, 1) }}
+                  {% elif child.schema.field_name == "transport" %}
+                    <fieldset class="scenario-group">
+                      <legend>{{ child.schema.label }}</legend>
+                      <div class="scenario-fields">
+                        {% for transport_child in child.children if transport_child.schema.field_name not in ("nodes", "edges", "vehicles") %}
+                          {{ render_node(transport_child, 2) }}
+                        {% endfor %}
+                      </div>
+                    </fieldset>
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+            </div>
+          </details>
+        {% endif %}
+
+        <aside class="scenario-object-explorer" aria-labelledby="scenario-object-heading">
+          <h3 id="scenario-object-heading">World objects</h3>
+          {% for key, label, collection_id, items in editor_world.groups %}
+            <details open>
+              <summary>{{ label }} <span>{{ items|length }}</span></summary>
+              <div class="scenario-object-list">
+                {% for item in items %}
+                  <a
+                    href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ item.node_id }}#scenario-object-inspector"
+                    data-ui-link-targets="#scenario-world-workspace"
+                    {% if item.node_id == draft.view.selected_node_id %}aria-current="true"{% endif %}
+                  >
+                    <span>{{ item.label }}</span>
+                    <small>{{ item.kind }}{% if item.unplaced %} · not shown on map{% endif %}</small>
+                  </a>
+                {% else %}
+                  <p class="empty-state">No {{ label|lower }} configured.</p>
+                {% endfor %}
+                {% if collection_id and not key.startswith("buildings-") %}
+                  <button type="submit" name="collection_action" value="add:{{ collection_id }}" formnovalidate>Add {{ label|lower }}</button>
+                {% endif %}
+              </div>
+            </details>
+          {% else %}
+            <p class="empty-state">Choose a world type to start adding spatial records.</p>
+          {% endfor %}
+        </aside>
+
+        <div
+          id="scenario-world-render"
+          class="world-scroll scenario-world-render"
+          data-preserve-scroll
+          data-map-viewport
+          data-map-zoom-endpoint="/ui/scenarios/drafts/{{ draft.token }}/view"
+          data-map-refresh-target="#scenario-world-workspace"
+          tabindex="0"
+          aria-label="Pannable scenario world map"
+        >
+          {% if editor_world.view %}
+            {% set world_view = editor_world.view %}
+            <svg
+              class="world-map world-map--{{ world_view.kind }}"
+              viewBox="{{ world_view.view_box }}"
+              style="width: {{ world_view.display_width }}px"
+              data-base-width="{{ world_view.base_display_width }}"
+              data-map-zoom="{{ draft.view.zoom }}"
+              data-camera-x="{{ draft.view.camera_x }}"
+              data-camera-y="{{ draft.view.camera_y }}"
+              role="img"
+              aria-label="{{ world_view.title }}"
+            >
+              <title>{{ world_view.title }}</title>
+              {% if world_view.kind == "grid" %}
+                <rect class="map-background" x="0" y="0" width="{{ world_view.width }}" height="{{ world_view.height }}"/>
+                {% for zone in world_view.zones %}
+                  <a href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ zone.node_id }}#scenario-object-inspector" aria-label="Edit zone {{ zone.name }}" data-ui-link-targets="#scenario-world-workspace">
+                    {% for tile in zone.tiles %}
+                      <rect class="zone zone--{{ zone.type|lower }} {% if zone.selected %}map-object-selected{% endif %}" x="{{ tile.x }}" y="{{ tile.y }}" width="1" height="1"><title>{{ zone.name }}</title></rect>
+                    {% endfor %}
+                  </a>
+                {% endfor %}
+                {% for point in world_view.blocked %}
+                  <a href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ point.node_id }}#scenario-object-inspector" aria-label="Edit blocked cell {{ loop.index }}" data-ui-link-targets="#scenario-world-workspace">
+                    <rect class="blocked {% if point.selected %}map-object-selected{% endif %}" x="{{ point.x }}" y="{{ point.y }}" width="1" height="1"><title>Blocked {{ point.x }}, {{ point.y }}</title></rect>
+                  </a>
+                {% endfor %}
+                {% for station in world_view.stations %}
+                  <a href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ station.node_id }}#scenario-object-inspector" aria-label="Edit station {{ station.name }}" data-ui-link-targets="#scenario-world-workspace">
+                    <rect class="station {% if station.selected %}map-object-selected{% endif %}" x="{{ station.position.x + 0.22 }}" y="{{ station.position.y + 0.22 }}" width=".56" height=".56"><title>{{ station.name }}</title></rect>
+                  </a>
+                {% endfor %}
+                {% for point in world_view.transaction_points %}
+                  <a href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ point.node_id }}#scenario-object-inspector" aria-label="Edit transaction point {{ point.name }}" data-ui-link-targets="#scenario-world-workspace">
+                    <circle class="transaction-point {% if point.selected %}map-object-selected{% endif %}" cx="{{ point.position.x + 0.5 }}" cy="{{ point.position.y + 0.5 }}" r=".3"><title>{{ point.name }}</title></circle>
+                    {% if point.staffing %}
+                      <rect role="img" aria-label="Staff position for {{ point.name }}" class="npc-staff-position {% if point.selected %}map-object-selected{% endif %}" x="{{ point.staffing.staff_position.x + 0.2 }}" y="{{ point.staffing.staff_position.y + 0.2 }}" width=".6" height=".6"><title>{{ point.name }} staff position</title></rect>
+                    {% endif %}
+                  </a>
+                {% endfor %}
+                {% for agent in world_view.agents %}
+                  <a href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ agent.node_id }}#scenario-object-inspector" aria-label="Edit entity {{ agent.name }}" data-ui-link-targets="#scenario-world-workspace">
+                    <circle class="character-marker {% if agent.selected %}selected{% endif %}" cx="{{ agent.x + 0.5 }}" cy="{{ agent.y + 0.5 }}" r=".25"><title>{{ agent.name }}</title></circle>
+                  </a>
+                {% endfor %}
+                {% for x in range(world_view.width + 1) %}<line class="grid-line" x1="{{ x }}" y1="0" x2="{{ x }}" y2="{{ world_view.height }}"/>{% endfor %}
+                {% for y in range(world_view.height + 1) %}<line class="grid-line" x1="0" y1="{{ y }}" x2="{{ world_view.width }}" y2="{{ y }}"/>{% endfor %}
+              {% else %}
+                <rect class="map-background" x="0" y="0" width="1000" height="650"/>
+                {% for edge in world_view.edges %}
+                  <a href="?{{ editor_query }}&focus={{ edge.node_id }}#scenario-object-inspector" aria-label="Edit transport edge {{ edge.id }}" data-ui-link-targets="#scenario-world-workspace">
+                    <polyline class="transport-edge map-selectable-edge {% if edge.selected %}map-object-selected{% endif %}" points="{{ edge.points }}"><title>{{ edge.id }}</title></polyline>
+                  </a>
+                {% endfor %}
+                {% for district in world_view.districts %}
+                  <a href="?{{ editor_query }}&focus={{ district.node_id }}#scenario-object-inspector" aria-label="Edit district {{ district.name }}" data-ui-link-targets="#scenario-world-workspace">
+                    <circle class="district-center map-selectable-point {% if district.selected %}map-object-selected{% endif %}" cx="{{ district.px }}" cy="{{ district.py }}" r="8"><title>{{ district.name }}</title></circle>
+                  </a>
+                {% endfor %}
+                {% for building in world_view.buildings %}
+                  <a href="?{{ editor_query }}&focus={{ building.node_id }}#scenario-object-inspector" aria-label="Edit building {{ building.name }}" data-ui-link-targets="#scenario-world-workspace">
+                    <rect class="building {% if building.selected %}map-object-selected{% endif %}" x="{{ building.px - 10 }}" y="{{ building.py - 10 }}" width="20" height="20"><title>{{ building.name }}</title></rect>
+                  </a>
+                {% endfor %}
+                {% for place in world_view.places %}
+                  <a href="?{{ editor_query }}&focus={{ place.node_id }}#scenario-object-inspector" aria-label="Edit outdoor place {{ place.name }}" data-ui-link-targets="#scenario-world-workspace">
+                    <circle class="outdoor-place {% if place.selected %}map-object-selected{% endif %}" cx="{{ place.px }}" cy="{{ place.py }}" r="7"><title>{{ place.name }}</title></circle>
+                  </a>
+                {% endfor %}
+                {% for node in world_view.nodes %}
+                  <a href="?{{ editor_query }}&focus={{ node.node_id }}#scenario-object-inspector" aria-label="Edit transport node {{ node.id }}" data-ui-link-targets="#scenario-world-workspace">
+                    <circle class="transport-node {% if node.selected %}map-object-selected{% endif %}" cx="{{ node.px }}" cy="{{ node.py }}" r="5"><title>{{ node.id }}</title></circle>
+                  </a>
+                {% endfor %}
+                {% for vehicle in world_view.vehicles %}
+                  <a href="?{{ editor_query }}&focus={{ vehicle.node_id }}#scenario-object-inspector" aria-label="Edit vehicle {{ vehicle.name }}" data-ui-link-targets="#scenario-world-workspace">
+                    <rect class="vehicle-marker {% if vehicle.selected %}map-object-selected{% endif %}" x="{{ vehicle.px - 7 }}" y="{{ vehicle.py - 4 }}" width="14" height="8"><title>{{ vehicle.name }}</title></rect>
+                  </a>
+                {% endfor %}
+                {% for agent in world_view.agents %}
+                  <a href="?{{ editor_query }}&focus={{ agent.node_id }}#scenario-object-inspector" aria-label="Edit entity {{ agent.name }}" data-ui-link-targets="#scenario-world-workspace">
+                    <circle class="city-character {% if agent.selected %}selected{% endif %}" cx="{{ agent.px }}" cy="{{ agent.py }}" r="9"><title>{{ agent.name }}</title></circle>
+                  </a>
+                {% endfor %}
+                {% for label in world_view.labels %}
+                  <text class="city-label city-label--{{ label.kind }}" x="{{ label.x }}" y="{{ label.y }}">{{ label.text }}</text>
+                {% endfor %}
+              {% endif %}
+            </svg>
+          {% else %}
+            <p class="empty-state">Choose a world type and apply it to create a visual world.</p>
+          {% endif %}
+        </div>
+
+        <aside id="scenario-object-inspector" class="scenario-object-inspector" aria-labelledby="scenario-inspector-heading">
+          <h3 id="scenario-inspector-heading">Selected object</h3>
+          {% if editor_world.selected_node %}
+            <p class="selected-path">{{ editor_world.selected_node.path|join(" › ") }}</p>
+            {% if editor_world.selected_node.path|length == 3 and editor_world.selected_node.path[1] == "city_zones" %}
+              <section class="building-archetype-picker" aria-labelledby="building-archetype-heading">
+                <h4 id="building-archetype-heading">Add building from library</h4>
+                <p>Each instance stores only the selected element ID and content hash. Entrance transport nodes are created with the instance.</p>
+                {% for element in building_elements %}
+                  <div class="building-archetype-choice">
+                    <div>
+                      <strong>{{ element.name }}</strong>
+                      <code>{{ element.id }}</code>
+                      <small>SHA-256 {{ element.content_hash }}</small>
+                    </div>
+                    <button
+                      type="submit"
+                      name="building_action"
+                      value="add:{{ editor_world.selected_node.id }}:{{ element.id }}"
+                      formnovalidate
+                    >Add {{ element.name }}</button>
+                  </div>
+                {% else %}
+                  <p class="empty-state">No building elements are available.</p>
+                {% endfor %}
+              </section>
+            {% endif %}
+            {% if selected_membership %}
+              {% set collection = selected_membership[0] %}
+              {% set selected_index = selected_membership[1] %}
+              <div class="item-actions" aria-label="Selected object actions">
+                <button type="submit" name="collection_action" value="up:{{ collection.id }}:{{ editor_world.selected_node.id }}" formnovalidate {% if selected_index == 0 %}disabled{% endif %}>Move up</button>
+                <button type="submit" name="collection_action" value="down:{{ collection.id }}:{{ editor_world.selected_node.id }}" formnovalidate {% if selected_index + 1 == collection.items|length %}disabled{% endif %}>Move down</button>
+                <button class="danger" type="submit" name="collection_action" value="remove:{{ collection.id }}:{{ editor_world.selected_node.id }}" formnovalidate>Remove</button>
+              </div>
+            {% endif %}
+            {% if editor_world.view and editor_world.view.kind == "city" %}
+              {% for building in editor_world.view.buildings if building.node_id == editor_world.selected_node.id and building.interior_node_id %}
+                <a class="button-link" href="?{{ editor_query }}&scope={{ building.interior_node_id }}&focus={{ building.interior_node_id }}" data-ui-link-targets="#scenario-world-workspace">Open {{ building.name }} interior</a>
+              {% endfor %}
+            {% endif %}
+            {% if inherited_building %}
+              <section class="inherited-building-summary" aria-labelledby="inherited-building-heading">
+                <h4 id="inherited-building-heading">Inherited building definition</h4>
+                <dl>
+                  <dt>Instance</dt><dd><code>{{ inherited_building.instance_id }}</code></dd>
+                  <dt>Element</dt><dd><code>{{ inherited_building.element_id }}</code></dd>
+                  <dt>Selected hash</dt><dd><code>{{ inherited_building.expected_hash }}</code></dd>
+                  {% if inherited_building.actual_hash %}
+                    <dt>Library hash</dt><dd><code>{{ inherited_building.actual_hash }}</code></dd>
+                  {% endif %}
+                </dl>
+                {% if inherited_building.error %}
+                  <p class="field-errors">{{ inherited_building.error }}</p>
+                {% else %}
+                  <p>
+                    <strong>{{ inherited_building.name }}</strong>
+                    {% if inherited_building.description %} · {{ inherited_building.description }}{% endif %}
+                  </p>
+                  {% if not inherited_building.hash_matches %}
+                    <p class="field-errors">The selected hash differs from the current library hash. Staging is blocked until the reference is deliberately updated.</p>
+                  {% endif %}
+                  <ul>
+                    {% for room in inherited_building.rooms %}
+                      <li>
+                        <strong>{{ room.name }}</strong>
+                        <small>{{ room.key }} · {{ room.room_type }} · element {{ room.id }}</small>
+                        {% if room.objects %}
+                          <ul>
+                            {% for object in room.objects %}
+                              <li>
+                                {{ object.name }}
+                                <small>{{ object.key }} · {{ object.kind }} · element {{ object.id }}{% if object.npc_name %} · NPC {{ object.npc_name }}{% endif %}</small>
+                              </li>
+                            {% endfor %}
+                          </ul>
+                        {% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+                <button
+                  type="submit"
+                  name="building_action"
+                  value="reset:{{ inherited_building.node_id }}"
+                  formnovalidate
+                >Reset building overrides</button>
+              </section>
+            {% endif %}
+            {{ render_focused_node(editor_world.selected_node) }}
+            <button type="submit" name="intent" value="refresh" formnovalidate>Apply selected changes</button>
+          {% else %}
+            <p class="empty-state">Select an object on the map or in the explorer.</p>
+          {% endif %}
+        </aside>
+      </section>
 
       <div class="scenario-form-actions">
-        <button type="submit" name="intent" value="refresh" formnovalidate>
-          Apply field choices
-        </button>
-        <button class="primary" type="submit" name="intent" value="save">
-          {{ "Save scenario" if draft.original_id else "Create scenario" }}
-        </button>
+        <button type="submit" name="intent" value="refresh" formnovalidate>Apply field choices</button>
+        <button class="primary" type="submit" name="intent" value="save">{{ "Save scenario" if draft.original_id else "Create scenario" }}</button>
         <button type="submit" name="intent" value="stage">Validate and stage</button>
         <button type="submit" name="intent" value="discard" formnovalidate>Discard unsaved changes</button>
       </div>
-      <p class="staging-note">
-        Saving changes only the library file. Staging validates this draft and
-        replaces the Simulation preview, but never saves or starts a run.
-      </p>
+      <p class="staging-note">Saving changes only the library file. Staging validates this draft and replaces the Simulation preview, but never saves or starts a run.</p>
     </form>
 
     {% if draft.original_id %}
@@ -108,10 +395,7 @@
         <summary>Delete {{ draft.original_id }}</summary>
         <form method="post" action="/ui/scenarios/{{ draft.original_id }}/delete">
           <input type="hidden" name="expected_hash" value="{{ draft.original_hash }}">
-          <label>
-            <input type="checkbox" name="confirm" value="yes" required>
-            I understand this permanently deletes the scenario file.
-          </label>
+          <label><input type="checkbox" name="confirm" value="yes" required> I understand this permanently deletes the scenario file.</label>
           <button class="danger" type="submit">Delete scenario</button>
         </form>
       </details>

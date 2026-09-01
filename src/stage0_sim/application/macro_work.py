@@ -12,6 +12,13 @@ from stage0_sim.application.cognition import (
     PlannerError,
     PlanValidationError,
 )
+from stage0_sim.application.data_capture import (
+    MemoryId,
+    RecordCategory,
+    RecordJoinIds,
+    RecordSource,
+    ResearchRecorder,
+)
 from stage0_sim.application.information_context import InformationContextCapsule
 from stage0_sim.application.memory import (
     EpisodicMemoryStore,
@@ -19,6 +26,7 @@ from stage0_sim.application.memory import (
 )
 from stage0_sim.application.planning import action_payload, validate_plan
 from stage0_sim.domain.components import (
+    ActionOrigin,
     AffordanceExecutionComponent,
     ConversationComponent,
     DriveComponent,
@@ -27,9 +35,10 @@ from stage0_sim.domain.components import (
     System1State,
 )
 from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.lineage import active_goal_links, queue_plan_actions
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.plans import fail_social_action, is_dialogue_capable
-from stage0_sim.domain.world import WorldMap
+from stage0_sim.domain.systems.spatial_context import local_world_for_agent
 
 
 @runtime_checkable
@@ -54,6 +63,7 @@ class PlanningWork:
     context: PlannerContext
     memory_query: str | None
     top_k: int
+    operation_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,13 +84,18 @@ class MacroWorkCoordinator:
         planner: Planner,
         dialogue_generator: DialogueGenerator,
         memory_store: EpisodicMemoryStore,
+        research_recorder: ResearchRecorder | None = None,
     ) -> None:
         self.planner = planner
         self.dialogue_generator = dialogue_generator
         self.memory_store = memory_store
+        self.research_recorder = research_recorder
         self._memory: deque[MemoryWork] = deque()
         self._planning: deque[PlanningWork] = deque()
         self._dialogue: deque[DialogueWork] = deque()
+
+    def bind_research_recorder(self, recorder: ResearchRecorder) -> None:
+        self.research_recorder = recorder
 
     def enqueue_memory(self, work: MemoryWork) -> None:
         self._memory.append(work)
@@ -169,6 +184,19 @@ class MacroWorkCoordinator:
         work: DialogueWork,
         reason: str,
     ) -> None:
+        self._record_private(
+            "dialogue_result",
+            {
+                "operation_id": work.requested_event_id,
+                "target_id": work.target_id,
+                "status": "cancelled",
+                "reason": reason,
+            },
+            category=RecordCategory.MODEL,
+            subject_id=work.agent_id,
+            related_entity_ids=(work.target_id,),
+            correlation_id=work.requested_event_id,
+        )
         conversation = context.registry.get_component(
             work.agent_id, ConversationComponent
         )
@@ -202,6 +230,18 @@ class MacroWorkCoordinator:
         work: MemoryWork,
         reason: str,
     ) -> None:
+        self._record_private(
+            "memory_generation_result",
+            {
+                "operation_id": work.requested_event_id,
+                "status": "cancelled",
+                "reason": reason,
+                "request": work,
+            },
+            category=RecordCategory.MEMORY,
+            subject_id=work.agent_id,
+            correlation_id=work.correlation_id,
+        )
         context.events.emit(
             "memory.cancelled",
             simulation_tick=context.clock.tick,
@@ -224,6 +264,17 @@ class MacroWorkCoordinator:
         work: PlanningWork,
         reason: str,
     ) -> None:
+        self._record_private(
+            "planner_result",
+            {
+                "operation_id": work.operation_id,
+                "status": "cancelled",
+                "reason": reason,
+            },
+            category=RecordCategory.MODEL,
+            subject_id=work.agent_id,
+            correlation_id=work.operation_id,
+        )
         planner = context.registry.get_component(
             work.agent_id, PlannerComponent
         )
@@ -243,6 +294,19 @@ class MacroWorkCoordinator:
         )
 
     def _record_memory(self, context: SystemContext, work: MemoryWork) -> None:
+        self._record_private(
+            "memory_generation_request",
+            {
+                "operation_id": work.requested_event_id,
+                "request": work,
+                "provider": _provider_name(
+                    self.memory_store.embedding_provider
+                ),
+            },
+            category=RecordCategory.MEMORY,
+            subject_id=work.agent_id,
+            correlation_id=work.correlation_id,
+        )
         try:
             record = self.memory_store.record(
                 agent_id=work.agent_id,
@@ -252,6 +316,18 @@ class MacroWorkCoordinator:
                 metadata=work.metadata,
             )
         except EmbeddingError as error:
+            self._record_private(
+                "memory_generation_result",
+                {
+                    "operation_id": work.requested_event_id,
+                    "status": "failed",
+                    "error_type": type(error).__name__,
+                    "message": str(error),
+                },
+                category=RecordCategory.MEMORY,
+                subject_id=work.agent_id,
+                correlation_id=work.correlation_id,
+            )
             context.events.emit(
                 "memory.failed",
                 simulation_tick=context.clock.tick,
@@ -267,6 +343,18 @@ class MacroWorkCoordinator:
                 correlation_id=work.correlation_id,
             )
             return
+        self._record_private(
+            "memory_generation_result",
+            {
+                "operation_id": work.requested_event_id,
+                "status": "completed",
+                "memory": record,
+            },
+            category=RecordCategory.MEMORY,
+            subject_id=work.agent_id,
+            correlation_id=work.correlation_id,
+            joins=RecordJoinIds(memory_id=MemoryId(record.id)),
+        )
         context.events.emit(
             "memory.recorded",
             simulation_tick=context.clock.tick,
@@ -300,6 +388,17 @@ class MacroWorkCoordinator:
             )
         ):
             planner_state.request_pending = False
+            self._record_private(
+                "planner_result",
+                {
+                    "operation_id": work.operation_id,
+                    "status": "cancelled",
+                    "reason": "agent_no_longer_eligible",
+                },
+                category=RecordCategory.MODEL,
+                subject_id=work.agent_id,
+                correlation_id=work.operation_id,
+            )
             context.events.emit(
                 "planner.cancelled",
                 simulation_tick=context.clock.tick,
@@ -326,6 +425,19 @@ class MacroWorkCoordinator:
             memories=memories,
             retrieved_information=retrieved_information,
         )
+        self._record_private(
+            "planner_request",
+            {
+                "operation_id": work.operation_id,
+                "provider": provider,
+                "context": planner_context,
+                "memory_query": work.memory_query,
+                "top_k": work.top_k,
+            },
+            category=RecordCategory.MODEL,
+            subject_id=work.agent_id,
+            correlation_id=work.operation_id,
+        )
         requested = context.events.emit(
             "planner.requested",
             simulation_tick=context.clock.tick,
@@ -333,6 +445,16 @@ class MacroWorkCoordinator:
             agent_id=work.agent_id,
             payload={
                 "daily_goals": list(planner_context.daily_goals),
+                "structured_goals": [
+                    {
+                        "id": goal.id,
+                        "description": goal.description,
+                        "status": goal.status,
+                        "priority": goal.priority,
+                        "tags": list(goal.tags),
+                    }
+                    for goal in planner_context.structured_goals
+                ],
                 "zone_count": len(planner_context.zones),
                 "station_count": len(planner_context.stations),
                 "memory_count": len(planner_context.memories),
@@ -346,9 +468,26 @@ class MacroWorkCoordinator:
         result = None
         try:
             result = self.planner.plan(planner_context)
-            world = context.registry.get_resource(WorldMap)
+            world = local_world_for_agent(
+                context.registry, work.agent_id
+            )
+            if world is None:
+                raise PlanValidationError("local_space_unavailable")
             validate_plan(result, world, context.registry, work.agent_id)
         except (PlannerError, PlanValidationError) as error:
+            self._record_private(
+                "planner_result",
+                {
+                    "operation_id": work.operation_id,
+                    "status": "failed",
+                    "error_type": type(error).__name__,
+                    "message": str(error),
+                    "result": result,
+                },
+                category=RecordCategory.MODEL,
+                subject_id=work.agent_id,
+                correlation_id=work.operation_id,
+            )
             planner_state.failure_count += 1
             planner_state.request_pending = False
             metadata: dict[str, JsonValue]
@@ -376,7 +515,28 @@ class MacroWorkCoordinator:
             )
             return
 
-        plan.queue.extend(result.actions)
+        self._record_private(
+            "planner_result",
+            {
+                "operation_id": work.operation_id,
+                "status": "completed",
+                "result": result,
+            },
+            category=RecordCategory.MODEL,
+            subject_id=work.agent_id,
+            correlation_id=work.operation_id,
+        )
+
+        queue_plan_actions(
+            context,
+            work.agent_id,
+            plan,
+            list(result.actions),
+            origin=ActionOrigin.PLANNER,
+            goal_links=active_goal_links(context, work.agent_id),
+            root_correlation_id=requested.event_id,
+            causation_id=requested.event_id,
+        )
         planner_state.needs_plan = False
         planner_state.request_pending = False
         planner_state.last_planned_at = context.clock.simulation_time
@@ -428,9 +588,36 @@ class MacroWorkCoordinator:
             memories=memories,
             retrieved_information=retrieved_information,
         )
+        self._record_private(
+            "dialogue_request",
+            {
+                "operation_id": work.requested_event_id,
+                "target_id": work.target_id,
+                "provider": provider,
+                "context": dialogue_context,
+            },
+            category=RecordCategory.MODEL,
+            subject_id=work.agent_id,
+            related_entity_ids=(work.target_id,),
+            correlation_id=work.requested_event_id,
+        )
         try:
             result = self.dialogue_generator.generate(dialogue_context)
         except DialogueError as error:
+            self._record_private(
+                "dialogue_result",
+                {
+                    "operation_id": work.requested_event_id,
+                    "target_id": work.target_id,
+                    "status": "failed",
+                    "error_type": type(error).__name__,
+                    "message": str(error),
+                },
+                category=RecordCategory.MODEL,
+                subject_id=work.agent_id,
+                related_entity_ids=(work.target_id,),
+                correlation_id=work.requested_event_id,
+            )
             conversation.request_pending = False
             context.events.emit(
                 "dialogue.failed",
@@ -447,6 +634,20 @@ class MacroWorkCoordinator:
                 correlation_id=work.requested_event_id,
             )
             return
+
+        self._record_private(
+            "dialogue_result",
+            {
+                "operation_id": work.requested_event_id,
+                "target_id": work.target_id,
+                "status": "completed",
+                "result": result,
+            },
+            category=RecordCategory.MODEL,
+            subject_id=work.agent_id,
+            related_entity_ids=(work.target_id,),
+            correlation_id=work.requested_event_id,
+        )
 
         conversation.request_pending = False
         conversation.turns.append(result.text)
@@ -512,15 +713,14 @@ class MacroWorkCoordinator:
                 simulation_time=context.clock.simulation_time,
                 top_k=top_k,
             )
-        except EmbeddingError as error:
+        except EmbeddingError:
             context.events.emit(
                 "memory.retrieval_failed",
                 simulation_tick=context.clock.tick,
                 simulation_time=context.clock.simulation_time,
                 agent_id=agent_id,
                 payload={
-                    "message": str(error),
-                    "query": query,
+                    "reason": "embedding_failed",
                     "provider": _provider_name(
                         self.memory_store.embedding_provider
                     ),
@@ -534,14 +734,36 @@ class MacroWorkCoordinator:
                 simulation_time=context.clock.simulation_time,
                 agent_id=agent_id,
                 payload={
-                    "query": query,
-                    "memory_ids": [item.record.id for item in retrieved],
-                    "scores": [item.score for item in retrieved],
+                    "memory_count": len(retrieved),
                 },
             )
         return (
             tuple(item.record.text for item in retrieved),
             memory_context_capsules(self.memory_store, retrieved),
+        )
+
+    def _record_private(
+        self,
+        record_type: str,
+        payload: object,
+        *,
+        category: RecordCategory,
+        subject_id: str | None = None,
+        related_entity_ids: tuple[str, ...] = (),
+        correlation_id: str | None = None,
+        joins: RecordJoinIds | None = None,
+    ) -> None:
+        if self.research_recorder is None:
+            return
+        self.research_recorder.record(
+            record_type,
+            payload,
+            category=category,
+            source=RecordSource.APPLICATION,
+            subject_id=subject_id,
+            related_entity_ids=related_entity_ids,
+            correlation_id=correlation_id,
+            joins=joins,
         )
 
 

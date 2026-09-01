@@ -1,0 +1,17 @@
+{
+  "briefing": "Serve valid assigned clinic check-in payments and issue the configured receipt.",
+  "description": "",
+  "hearing_multiplier": 1.0,
+  "id": "meridian-receptionist",
+  "kind": "npc_role",
+  "name": "Meridian Clinic Receptionist",
+  "recognition_range": 4,
+  "schema_version": 1,
+  "tool_allowlist": [
+    "serve_transaction",
+    "say",
+    "wait",
+    "skip"
+  ],
+  "vision_range": 6
+}

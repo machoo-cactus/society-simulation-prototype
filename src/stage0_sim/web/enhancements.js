@@ -19,6 +19,15 @@ const PAGE_TARGETS = [
   "#dataset-panel",
 ];
 
+function pageTargetSelectors() {
+  const configured = document.body.dataset.uiPageTargets || "";
+  const selectors = configured
+    .split(",")
+    .map((selector) => selector.trim())
+    .filter(Boolean);
+  return selectors.length ? selectors : PAGE_TARGETS;
+}
+
 let actionInFlight = false;
 let liveTimer = null;
 let liveController = null;
@@ -198,6 +207,7 @@ async function fetchPage(url, options = {}) {
 async function updateFromForm(form, submitter) {
   const selectors = targetSelectors(form);
   const method = (form.method || "get").toUpperCase();
+  const formAction = form.getAttribute("action") || window.location.href;
   const formData = new FormData(form);
   if (submitter?.name) formData.append(submitter.name, submitter.value);
   const snapshotUrl = new URL(window.location.href);
@@ -214,21 +224,21 @@ async function updateFromForm(form, submitter) {
     let navigationUrl = null;
     if (method === "GET") {
       navigationUrl = mergedUrl(
-        form.action,
+        formAction,
         formData.entries(),
         removableQueryKeys(form),
       );
       stateDocument = await fetchPage(navigationUrl);
       noticeDocument = stateDocument;
     } else {
-      const actionDocument = await fetchPage(form.action, {
+      const actionDocument = await fetchPage(formAction, {
         method,
         body: formData,
       });
       noticeDocument = actionDocument;
       const responseUrl = new URL(window.location.href);
       stateDocument =
-        responseUrl.pathname === new URL(form.action).pathname &&
+        responseUrl.pathname === new URL(formAction, window.location.href).pathname &&
         responseUrl.search === snapshotUrl.search
           ? actionDocument
           : await fetchPage(snapshotUrl);
@@ -354,7 +364,8 @@ function synchronizeZoom(zoom, viewport, map) {
     zoomTimer = null;
     try {
       const camera = mapCamera(viewport, map);
-      const response = await fetch("/ui/view/zoom", {
+      const endpoint = viewport.dataset.mapZoomEndpoint || "/ui/view/zoom";
+      const response = await fetch(endpoint, {
         method: "POST",
         cache: "no-store",
         credentials: "same-origin",
@@ -369,7 +380,10 @@ function synchronizeZoom(zoom, viewport, map) {
         throw new Error(`Zoom synchronization failed with HTTP ${response.status}`);
       }
       const stateDocument = await fetchPage(window.location.href);
-      replaceTargets(["#world-panel"], stateDocument);
+      replaceTargets(
+        [viewport.dataset.mapRefreshTarget || "#world-panel"],
+        stateDocument,
+      );
     } catch (error) {
       console.error("Map zoom synchronization failed", error);
     } finally {
@@ -400,7 +414,9 @@ function applyWheelZoom(viewport, event) {
   const ratio = nextZoom / oldZoom;
   map.dataset.mapZoom = String(nextZoom);
   map.style.width = `${Number(map.dataset.baseWidth) * nextZoom}px`;
-  const output = document.querySelector("[data-map-zoom-output]");
+  const output =
+    viewport.closest("section")?.querySelector("[data-map-zoom-output]") ||
+    document.querySelector("[data-map-zoom-output]");
   if (output) output.textContent = `${Math.round(nextZoom * 100)}%`;
   requestAnimationFrame(() => {
     viewport.scrollLeft = contentX * ratio - pointerX;
@@ -409,9 +425,8 @@ function applyWheelZoom(viewport, event) {
   synchronizeZoom(nextZoom, viewport, map);
 }
 
-function setupMaps() {
-  const viewport = document.getElementById("world-render");
-  if (!viewport || viewport.dataset.mapEnhanced === "true") return;
+function setupMap(viewport) {
+  if (viewport.dataset.mapEnhanced === "true") return;
   viewport.dataset.mapEnhanced = "true";
   const initialMap = viewport.querySelector("[data-map-zoom]");
   if (initialMap instanceof SVGElement) {
@@ -488,6 +503,13 @@ function setupMaps() {
   );
 }
 
+function setupMaps() {
+  const viewports = document.querySelectorAll(
+    "[data-map-viewport], #world-render",
+  );
+  for (const viewport of viewports) setupMap(viewport);
+}
+
 document.addEventListener(
   "click",
   (event) => {
@@ -542,7 +564,7 @@ document.addEventListener("click", (event) => {
 window.addEventListener("popstate", () => {
   actionInFlight = true;
   fetchPage(window.location.href)
-    .then((stateDocument) => replaceTargets(PAGE_TARGETS, stateDocument))
+    .then((stateDocument) => replaceTargets(pageTargetSelectors(), stateDocument))
     .catch((error) => {
       console.error("History navigation update failed", error);
       window.location.reload();

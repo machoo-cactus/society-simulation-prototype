@@ -4,6 +4,7 @@ from typing import Protocol
 
 from stage0_sim.application.information import InformationStore
 from stage0_sim.domain.components import SpatialLocationComponent
+from stage0_sim.domain.economy import TransactionOffer
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.events import JsonValue
@@ -13,7 +14,7 @@ from stage0_sim.domain.information import (
     character_information_namespace_id,
 )
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
-from stage0_sim.domain.world import Locator, SpaceRegistry
+from stage0_sim.domain.world import CityWorld, Locator, SpaceRegistry
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +26,7 @@ class KnownDestination:
     supported_actions: tuple[str, ...] = ()
     available: bool = True
     availability_reason: str | None = None
+    offers: tuple[TransactionOffer, ...] = ()
 
 
 class KnownTopologyProjection(Protocol):
@@ -99,6 +101,8 @@ class InformationKnownTopologyProjection:
                             previous.supported_actions
                             or candidate.supported_actions
                         ),
+                        availability_reason=previous.availability_reason,
+                        offers=previous.offers or candidate.offers,
                         available=previous.available and candidate.available,
                     )
                 )
@@ -170,6 +174,32 @@ class InformationKnownTopologyProjection:
             return ()
         world = local_world_for_agent(self.registry, character_id)
         destinations: list[KnownDestination] = []
+        if self.registry.has_resource(CityWorld):
+            city = self.registry.get_resource(CityWorld)
+            try:
+                room = city.room(current.space_id)
+            except KeyError:
+                room = None
+            if room is not None:
+                building = city.building(room.building_id)
+                destinations.append(
+                    KnownDestination(
+                        room.id,
+                        "room",
+                        room.name,
+                        self.topology.destination_locators(room.id),
+                    )
+                )
+                destinations.append(
+                    KnownDestination(
+                        building.id,
+                        "building",
+                        building.name,
+                        self.topology.destination_locators(building.id),
+                    )
+                )
+        if world is None:
+            return tuple(destinations)
         for zone in sorted(world.zones, key=lambda item: item.id):
             locators = tuple(
                 locator
@@ -203,6 +233,36 @@ class InformationKnownTopologyProjection:
                             EnvironmentAvailabilityRegistry
                         )
                         else station.available
+                    ),
+                )
+            )
+        for point in sorted(
+            world.transaction_points,
+            key=lambda item: item.id,
+        ):
+            locators = tuple(
+                locator
+                for locator in self.topology.destination_locators(point.id)
+                if locator.space_id == current.space_id
+            )
+            destinations.append(
+                KnownDestination(
+                    point.id,
+                    "transaction_point",
+                    point.name,
+                    locators,
+                    offers=point.offers,
+                    available=(
+                        self.registry.get_resource(
+                            EnvironmentAvailabilityRegistry
+                        ).state(
+                            point.id,
+                            base_available=point.available,
+                        ).available
+                        if self.registry.has_resource(
+                            EnvironmentAvailabilityRegistry
+                        )
+                        else point.available
                     ),
                 )
             )

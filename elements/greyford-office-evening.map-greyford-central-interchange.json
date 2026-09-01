@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 8,
+  "id": "greyford-office-evening.map-greyford-central-interchange",
+  "kind": "room",
+  "name": "Greyford Central Rail and Metro Interchange interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "860b8edee1bb8c911b81ea1f250e42502704bc1f2241e2095d6fc16748ecc1b0",
+        "id": "greyford-office-evening.station-greyford-central-interchange-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-central-interchange-primary",
+      "key": "station-greyford-central-interchange-primary",
+      "position": {
+        "x": 10,
+        "y": 4
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 12,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-central-interchange-entry",
+      "name": "Greyford Central Interchange Entry and Reception",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 8,
+        "width": 9,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-central-interchange-main",
+      "name": "Greyford Central Interchange Main Interior",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

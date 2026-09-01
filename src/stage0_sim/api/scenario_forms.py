@@ -14,7 +14,17 @@ from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
 from stage0_sim.application import scenario as scenario_models
-from stage0_sim.application.scenario import ScenarioDefinition
+from stage0_sim.application.elements import (
+    BuildingInstanceDefinition,
+    BuildingOverrideDefinition,
+    CityWorldSourceDefinition,
+    CityZoneSourceDefinition,
+    ElementReference,
+    ObjectOverrideDefinition,
+    OutdoorPlaceSourceDefinition,
+    RoomOverrideDefinition,
+    ScenarioSourceDefinition,
+)
 
 type PathPart = str | int
 type FieldPath = tuple[PathPart, ...]
@@ -64,6 +74,16 @@ class ScenarioEditorNode:
 class ScenarioEditorError:
     message: str
     control_id: str
+    node_id: str = ""
+
+
+@dataclass(slots=True)
+class ScenarioEditorViewState:
+    selected_node_id: str = ""
+    scope_node_id: str = ""
+    zoom: float = 1.0
+    camera_x: float = 0.5
+    camera_y: float = 0.5
 
 
 @dataclass(slots=True)
@@ -75,6 +95,7 @@ class ScenarioEditorDraft:
     original_hash: str
     root: ScenarioEditorNode
     errors: list[ScenarioEditorError] = field(default_factory=list)
+    view: ScenarioEditorViewState = field(default_factory=ScenarioEditorViewState)
 
 
 class ScenarioEditorDraftStore:
@@ -91,7 +112,7 @@ class ScenarioEditorDraftStore:
     def create(
         self,
         session_id: str,
-        scenario: ScenarioDefinition,
+        scenario: ScenarioSourceDefinition,
         *,
         resource_id: str = "",
         original_id: str | None = None,
@@ -141,6 +162,7 @@ KNOWN_ENTITY_COMPONENT_MODELS: dict[str, type[BaseModel] | None] = {
     "movement": scenario_models.MovementDefinition,
     "homeostasis": scenario_models.HomeostasisComponentDefinition,
     "activity": scenario_models.ActivityDefinition,
+    "possessions": scenario_models.PossessionsComponentDefinition,
     "character_slot": scenario_models.CharacterSlotDefinition,
     "plan": scenario_models.PlanComponentDefinition,
     "planner": scenario_models.PlannerComponentDefinition,
@@ -164,18 +186,32 @@ ARBITRARY_JSON_FIELDS: frozenset[tuple[type[BaseModel], str]] = frozenset(
         ),
         (scenario_models.TransportDefinition, "metro_lines"),
         (scenario_models.CharacterCustomFieldDefinition, "value"),
+        (scenario_models.PlannerComponentDefinition, "goals"),
     }
 )
 
 EXTENSIBLE_PROFILE_MODELS: frozenset[type[BaseModel]] = frozenset(
     {
         scenario_models.CharacterIdentityDefinition,
+        scenario_models.CharacterBodyMeasurementsDefinition,
         scenario_models.CharacterAppearanceDefinition,
+        scenario_models.CharacterHealthConditionDefinition,
+        scenario_models.CharacterHealthAllergyDefinition,
+        scenario_models.CharacterMedicationDefinition,
+        scenario_models.CharacterHealthDefinition,
         scenario_models.CharacterPersonalityDefinition,
         scenario_models.CharacterBackgroundDefinition,
+        scenario_models.CharacterFinancialSituationDefinition,
         scenario_models.CharacterMotivationsDefinition,
         scenario_models.CharacterCapabilitiesDefinition,
         scenario_models.CharacterPreferencesDefinition,
+        scenario_models.CharacterPresentationDefinition,
+        scenario_models.CharacterDispositionsDefinition,
+        scenario_models.CharacterCommunicationDefinition,
+        scenario_models.CharacterDecisionCopingDefinition,
+        scenario_models.CharacterLifeStructureDefinition,
+        scenario_models.CharacterFamilyMemberDefinition,
+        scenario_models.CharacterFamilyDefinition,
         scenario_models.CharacterRelationshipDefinition,
         scenario_models.CharacterCustomFieldDefinition,
         scenario_models.CharacterCustomSectionDefinition,
@@ -186,7 +222,130 @@ EXTENSIBLE_PROFILE_MODELS: frozenset[type[BaseModel]] = frozenset(
 # This registry is deliberately explicit. The coverage test fails when a
 # scenario model gains a field until the editor classification is reviewed.
 SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
+    ElementReference: frozenset(["kind", "id", "content_hash"]),
+    ObjectOverrideDefinition: frozenset(
+        [
+            "name",
+            "available",
+            "environment",
+            "holdings",
+            "offers",
+            "npc_role",
+        ]
+    ),
+    RoomOverrideDefinition: frozenset(
+        [
+            "name",
+            "room_type",
+            "object_overrides",
+            "disabled_object_keys",
+        ]
+    ),
+    BuildingOverrideDefinition: frozenset(
+        [
+            "name",
+            "available",
+            "environment",
+            "room_overrides",
+            "disabled_room_keys",
+        ]
+    ),
+    BuildingInstanceDefinition: frozenset(
+        [
+            "id",
+            "element",
+            "city_position",
+            "entrance_node_ids",
+            "overrides",
+        ]
+    ),
+    OutdoorPlaceSourceDefinition: frozenset(
+        [
+            "id",
+            "name",
+            "city_position",
+            "network_node_id",
+            "available",
+            "environment",
+        ]
+    ),
+    CityZoneSourceDefinition: frozenset(
+        ["id", "name", "center", "buildings", "outdoor_places"]
+    ),
+    CityWorldSourceDefinition: frozenset(
+        [
+            "type",
+            "city",
+            "city_zones",
+            "transport",
+            "building_order",
+            "outdoor_place_order",
+            "npc_role_order",
+        ]
+    ),
+    ScenarioSourceDefinition: frozenset(
+        [
+            "schema_version",
+            "name",
+            "seed",
+            "dt",
+            "speed",
+            "run_id",
+            "items",
+            "calendar",
+            "weather",
+            "world",
+            "homeostasis",
+            "system1",
+            "memory",
+            "perception",
+            "cognition",
+            "character_situation_synthesis",
+            "entities",
+        ]
+    ),
     scenario_models.CoordinateDefinition: frozenset(["x", "y"]),
+    scenario_models.ItemCatalogEntryDefinition: frozenset(
+        ["id", "name", "unit"]
+    ),
+    scenario_models.ItemAmountDefinition: frozenset(["item_id", "quantity"]),
+    scenario_models.NpcRoleDefinition: frozenset(
+        [
+            "id",
+            "name",
+            "briefing",
+            "tool_allowlist",
+            "vision_range",
+            "recognition_range",
+            "hearing_multiplier",
+        ]
+    ),
+    scenario_models.TransactionOfferDefinition: frozenset(
+        [
+            "id",
+            "name",
+            "character_gives",
+            "character_receives",
+            "duration",
+        ]
+    ),
+    scenario_models.TransactionPointDefinition: frozenset(
+        [
+            "id",
+            "name",
+            "position",
+            "offers",
+            "holdings",
+            "available",
+            "capacity",
+            "operation",
+            "staffing",
+            "environment",
+        ]
+    ),
+    scenario_models.TransactionStaffingDefinition: frozenset(
+        ["role_id", "staff_position", "request_timeout"]
+    ),
     scenario_models.BoundsDefinition: frozenset(["x", "y", "width", "height"]),
     scenario_models.ZoneDefinition: frozenset(["id", "name", "type", "bounds", "tiles"]),
     scenario_models.StationDefinition: frozenset(
@@ -219,13 +378,47 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         ]
     ),
     scenario_models.StationActionDefinition: frozenset(["action", "duration", "effect"]),
-    scenario_models.WorldDefinition: frozenset(["width", "height", "blocked", "zones", "stations"]),
+    scenario_models.WorldDefinition: frozenset(
+        [
+            "width",
+            "height",
+            "blocked",
+            "zones",
+            "stations",
+            "transaction_points",
+        ]
+    ),
     scenario_models.MapPointDefinition: frozenset(["x", "y"]),
     scenario_models.CityBoundsDefinition: frozenset(["min_x", "min_y", "max_x", "max_y"]),
     scenario_models.CityDefinition: frozenset(["id", "name", "bounds_meters"]),
     scenario_models.DistrictDefinition: frozenset(["id", "name", "center"]),
     scenario_models.BuildingEntranceDefinition: frozenset(
-        ["id", "local_coordinate", "neighborhood_node_id"]
+        ["id", "room_id", "local_coordinate", "neighborhood_node_id"]
+    ),
+    scenario_models.RoomDefinition: frozenset(
+        ["id", "key", "name", "type", "building_id", "offset", "world"]
+    ),
+    scenario_models.BuildingPortalRuntimeDefinition: frozenset(
+        [
+            "id",
+            "building_id",
+            "from_room_id",
+            "from_coordinate",
+            "to_room_id",
+            "to_coordinate",
+            "bidirectional",
+            "available",
+        ]
+    ),
+    scenario_models.WorldObjectDefinition: frozenset(
+        [
+            "id",
+            "name",
+            "object_kind",
+            "building_id",
+            "room_id",
+            "position",
+        ]
     ),
     scenario_models.BuildingDefinition: frozenset(
         [
@@ -233,7 +426,7 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "name",
             "district_id",
             "city_position",
-            "local_map_id",
+            "room_ids",
             "entrances",
             "available",
             "environment",
@@ -290,7 +483,17 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         ]
     ),
     scenario_models.CityWorldDefinition: frozenset(
-        ["type", "city", "districts", "buildings", "outdoor_places", "local_maps", "transport"]
+        [
+            "type",
+            "city",
+            "districts",
+            "buildings",
+            "rooms",
+            "portals",
+            "objects",
+            "outdoor_places",
+            "transport",
+        ]
     ),
     scenario_models.ActivityRatesDefinition: frozenset(["satiety", "energy", "stress"]),
     scenario_models.HomeostasisSettingsDefinition: frozenset({"activity_coefficients"}),
@@ -318,6 +521,7 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "controller",
             "execution_mode",
             "model_profile",
+            "npc_control_mode",
             "decision_timeout_seconds",
             "max_output_tokens",
             "max_read_tool_rounds",
@@ -339,7 +543,13 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         ]
     ),
     scenario_models.CharacterSlotDefinition: frozenset(
-        ["label", "briefing", "default_character_id", "constraints"]
+        [
+            "label",
+            "briefing",
+            "synthesis_guidance",
+            "default_character_id",
+            "constraints",
+        ]
     ),
     scenario_models.EntityDefinition: frozenset(["id", "components"]),
     scenario_models.CalendarSettingsDefinition: frozenset(
@@ -372,6 +582,9 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     scenario_models.WeatherSettingsDefinition: frozenset(
         ["initial", "transitions", "effects"]
     ),
+    scenario_models.CharacterSituationSynthesisSettingsDefinition: frozenset(
+        ["enabled"]
+    ),
     scenario_models.ScenarioDefinition: frozenset(
         [
             "schema_version",
@@ -380,6 +593,8 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "dt",
             "speed",
             "run_id",
+            "items",
+            "npc_roles",
             "calendar",
             "weather",
             "world",
@@ -388,6 +603,7 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "memory",
             "perception",
             "cognition",
+            "character_situation_synthesis",
             "entities",
         ]
     ),
@@ -398,7 +614,20 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         ["scale", "place_id", "local_coordinate", "network_node_id", "edge_id", "edge_progress"]
     ),
     scenario_models.CharacterIdentityDefinition: frozenset(
-        ["display_name", "age", "gender", "pronouns", "occupation"]
+        ["display_name", "age", "birth_date", "gender", "pronouns", "occupation"]
+    ),
+    scenario_models.CharacterBodyMeasurementsDefinition: frozenset(
+        [
+            "measured_on",
+            "height_cm",
+            "weight_kg",
+            "chest_cm",
+            "waist_cm",
+            "hips_cm",
+            "inseam_cm",
+            "shoe_size_system",
+            "shoe_size_value",
+        ]
     ),
     scenario_models.CharacterAppearanceDefinition: frozenset(
         ["summary", "height", "build", "hair", "eyes", "clothing", "distinguishing_features"]
@@ -409,6 +638,20 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     scenario_models.CharacterBackgroundDefinition: frozenset(
         ["birthplace", "residence", "education", "history"]
     ),
+    scenario_models.CharacterFinancialSituationDefinition: frozenset(
+        [
+            "as_of_date",
+            "currency",
+            "annual_gross_income",
+            "income_band",
+            "liquid_assets",
+            "total_assets",
+            "total_debt",
+            "monthly_fixed_expenses",
+            "housing_tenure",
+            "financial_dependents",
+        ]
+    ),
     scenario_models.CharacterMotivationsDefinition: frozenset(
         ["values", "fears", "needs"]
     ),
@@ -417,6 +660,127 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     ),
     scenario_models.CharacterPreferencesDefinition: frozenset(
         ["likes", "dislikes", "habits", "routines"]
+    ),
+    scenario_models.CharacterPresentationDefinition: frozenset(
+        [
+            "aesthetic_identity",
+            "wardrobe_palette",
+            "preferred_silhouettes",
+            "preferred_fabrics",
+            "formality_range",
+            "comfort_priorities",
+            "grooming_norms",
+            "usual_accessories",
+            "practical_constraints",
+            "purchase_habits",
+            "context_variations",
+        ]
+    ),
+    scenario_models.CharacterDispositionsDefinition: frozenset(
+        [
+            "summary",
+            "emotional_baseline",
+            "sociability",
+            "assertiveness",
+            "patience",
+            "conscientiousness",
+            "openness",
+            "adaptability",
+            "risk_tolerance",
+            "ambiguity_tolerance",
+            "impulse_control",
+            "conflict_style",
+            "cooperation_style",
+            "trust_formation",
+            "boundary_setting",
+            "help_seeking",
+            "pressure_response",
+            "fatigue_response",
+            "novelty_response",
+            "authority_response",
+            "crowd_response",
+        ]
+    ),
+    scenario_models.CharacterCommunicationDefinition: frozenset(
+        [
+            "cadence",
+            "vocabulary",
+            "directness",
+            "politeness",
+            "humor",
+            "gesture",
+            "posture",
+            "facial_expressiveness",
+            "listening_style",
+            "disagreement_style",
+            "apology_style",
+            "with_intimates",
+            "with_colleagues",
+            "with_strangers",
+            "with_authority",
+        ]
+    ),
+    scenario_models.CharacterDecisionCopingDefinition: frozenset(
+        [
+            "information_seeking",
+            "planning_horizon",
+            "default_heuristics",
+            "error_sensitivity",
+            "persistence",
+            "recovery_habits",
+            "self_soothing",
+            "stress_signals",
+            "disposition_shifts",
+        ]
+    ),
+    scenario_models.CharacterLifeStructureDefinition: frozenset(
+        [
+            "household",
+            "recurring_obligations",
+            "material_habits",
+            "typical_possessions",
+            "cultural_practices",
+            "interests",
+            "social_patterns",
+        ]
+    ),
+    scenario_models.CharacterFamilyMemberDefinition: frozenset(
+        [
+            "member_id",
+            "linked_character_id",
+            "display_name",
+            "relationship",
+            "birth_date",
+            "living_status",
+            "residence",
+            "household_member",
+            "financial_dependent",
+        ]
+    ),
+    scenario_models.CharacterFamilyDefinition: frozenset(["members"]),
+    scenario_models.CharacterHealthConditionDefinition: frozenset(
+        ["name", "status", "diagnosed_on", "notes"]
+    ),
+    scenario_models.CharacterHealthAllergyDefinition: frozenset(
+        ["substance", "reaction", "severity"]
+    ),
+    scenario_models.CharacterMedicationDefinition: frozenset(
+        ["name", "dose", "schedule", "purpose"]
+    ),
+    scenario_models.CharacterHealthDefinition: frozenset(
+        [
+            "as_of_date",
+            "blood_type",
+            "conditions",
+            "allergies",
+            "medications",
+            "disabilities",
+            "vision",
+            "hearing",
+            "mobility",
+            "past_procedures",
+            "dietary_restrictions",
+        ]
     ),
     scenario_models.CharacterRelationshipDefinition: frozenset(
         ["target_id", "relationship", "sentiment", "notes"]
@@ -431,12 +795,21 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         [
             "template_id",
             "identity",
+            "body_measurements",
             "appearance",
+            "health",
             "personality",
             "background",
+            "financial_situation",
             "motivations",
             "capabilities",
             "preferences",
+            "presentation",
+            "dispositions",
+            "communication",
+            "decision_coping",
+            "life_structure",
+            "family",
             "relationships",
             "custom_sections",
         ]
@@ -446,10 +819,13 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         ["vision_range", "recognition_range", "hearing_multiplier"]
     ),
     scenario_models.ActivityDefinition: frozenset({"type"}),
-    scenario_models.PlanActionDefinition: frozenset(["action", "target", "duration", "mode"]),
+    scenario_models.PossessionsComponentDefinition: frozenset(["holdings"]),
+    scenario_models.PlanActionDefinition: frozenset(
+        ["action", "target", "duration", "mode", "offer_id"]
+    ),
     scenario_models.PlanComponentDefinition: frozenset(["queue", "current"]),
     scenario_models.PlannerComponentDefinition: frozenset(
-        ["daily_goals", "current_priorities", "needs_plan"]
+        ["daily_goals", "current_priorities", "goals", "needs_plan"]
     ),
     scenario_models.InitialInformationSourceDefinition: frozenset(
         ["type", "observer_id", "reference_ids", "metadata"]
@@ -640,7 +1016,7 @@ def _field_schema(
             annotation=annotation,
             variants=tuple(variants),
         )
-    if origin is list:
+    if origin in {list, set}:
         item_annotation = args[0]
         return ScenarioFieldSchema(
             kind="list",
@@ -818,8 +1194,8 @@ def _components_schema(label: str, field_name: str) -> ScenarioFieldSchema:
 
 
 SCENARIO_EDITOR_SCHEMA = _field_schema(
-    ScenarioDefinition,
-    label="Scenario Definition",
+    ScenarioSourceDefinition,
+    label="Scenario Source Definition",
 )
 
 
@@ -1097,6 +1473,26 @@ def find_node(
     return None
 
 
+def find_node_by_path(
+    root: ScenarioEditorNode,
+    path: FieldPath,
+) -> ScenarioEditorNode | None:
+    return next((node for node in _all_nodes(root) if node.path == path), None)
+
+
+def find_collection_membership(
+    root: ScenarioEditorNode,
+    node_id: str,
+) -> tuple[ScenarioEditorNode, int] | None:
+    for node in _all_nodes(root):
+        if node.schema.kind not in {"list", "mapping"}:
+            continue
+        for index, item in enumerate(node.items):
+            if item.id == node_id:
+                return node, index
+    return None
+
+
 def _all_nodes(root: ScenarioEditorNode) -> list[ScenarioEditorNode]:
     nodes = [root]
     for child in root.children:
@@ -1121,6 +1517,11 @@ def _scalar_value(
             errors.append((node, f"Must be valid JSON: {error.msg}"))
             return value
     annotation = node.schema.annotation
+    if get_origin(annotation) is Literal:
+        for option in get_args(annotation):
+            if str(option) == value:
+                return option
+        return value
     if annotation is bool:
         if value == "true":
             return True
@@ -1221,9 +1622,19 @@ def _encode_node(
     raise TypeError(f"unsupported scenario editor node kind: {kind}")
 
 
+def encode_draft_value(
+    draft: ScenarioEditorDraft,
+) -> tuple[dict[str, Any], tuple[tuple[str, str], ...]]:
+    errors: list[tuple[ScenarioEditorNode, str]] = []
+    raw = _encode_node(draft.root, errors)
+    if not isinstance(raw, dict):
+        return {}, ((draft.root.id, "Scenario definition must be an object"),)
+    return raw, tuple((node.id, message) for node, message in errors)
+
+
 def validate_draft(
     draft: ScenarioEditorDraft,
-) -> ScenarioDefinition | None:
+) -> ScenarioSourceDefinition | None:
     clear_draft_errors(draft)
     decode_errors: list[tuple[ScenarioEditorNode, str]] = []
     raw = _encode_node(draft.root, decode_errors)
@@ -1232,7 +1643,7 @@ def validate_draft(
     if decode_errors:
         return None
     try:
-        scenario = ScenarioDefinition.model_validate(raw)
+        scenario = ScenarioSourceDefinition.model_validate(raw)
     except ValidationError as error:
         for item in error.errors(include_url=False):
             location = tuple(item["loc"])
@@ -1310,8 +1721,14 @@ def _add_node_error(
     node.errors.append(message)
     path = ".".join(str(part) for part in node.path)
     rendered = f"{path}: {message}" if path else message
-    draft.errors.append(ScenarioEditorError(message=rendered, control_id=node.control_id))
+    draft.errors.append(
+        ScenarioEditorError(
+            message=rendered,
+            control_id=node.control_id,
+            node_id=node.id,
+        )
+    )
 
 
-def minimal_scenario() -> ScenarioDefinition:
-    return ScenarioDefinition(name="Untitled scenario")
+def minimal_scenario() -> ScenarioSourceDefinition:
+    return ScenarioSourceDefinition(name="Untitled scenario")

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from stage0_sim.domain.components.planning import ActionInstance
 from stage0_sim.domain.world import (
     Locator,
     TravelLeg,
@@ -16,10 +17,7 @@ class SpatialLocationComponent:
 
     @property
     def locator(self) -> Locator | None:
-        if (
-            self.location.scale.value == "BUILDING"
-            and self.location.local_coordinate is not None
-        ):
+        if self.location.local_coordinate is not None:
             coordinate = self.location.local_coordinate
             return Locator(
                 self.location.place_id,
@@ -63,3 +61,4 @@ class TravelComponent:
     interruption_requested: bool = False
     destination_entrance_id: str | None = None
     failure_reason: str | None = None
+    action_instance: ActionInstance | None = None

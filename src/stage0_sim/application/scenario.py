@@ -1,11 +1,22 @@
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import date, datetime, time
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from stage0_sim.adapters.llm import (
     FakeDialogueGenerator,
@@ -15,6 +26,7 @@ from stage0_sim.adapters.llm import (
 from stage0_sim.application.agents import (
     AgentWorkCoordinator,
     CognitionScheduler,
+    RoutedCharacterController,
     ToolCallingCharacterController,
 )
 from stage0_sim.application.agents.contracts import ModelClient
@@ -29,6 +41,7 @@ from stage0_sim.application.cognition import (
 )
 from stage0_sim.application.dialogue import MacroDialogueSystem
 from stage0_sim.application.environment import EnvironmentInformationService
+from stage0_sim.application.goals import GoalEvaluationSystem
 from stage0_sim.application.information import InformationRetriever, InformationStore
 from stage0_sim.application.macro_work import MacroWorkCoordinator
 from stage0_sim.application.memory import EpisodicMemoryStore, MemoryConfiguration
@@ -43,6 +56,7 @@ from stage0_sim.application.navigation import (
     NavigationService,
     RecursiveRoutePlanner,
 )
+from stage0_sim.application.npcs import NpcStaffingSystem
 from stage0_sim.application.perception import (
     PerceptionConfiguration,
     PerceptionSystem,
@@ -51,6 +65,8 @@ from stage0_sim.application.planning import MacroPlanningSystem
 from stage0_sim.application.runner import RunConfiguration, SimulationRunner
 from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
+    ActionOutcome,
+    ActionOutcomeCriterion,
     ActionType,
     ActivityComponent,
     ActivityRates,
@@ -62,9 +78,22 @@ from stage0_sim.domain.components import (
     DriveComponent,
     DriveThreshold,
     DriveType,
+    EventMatchCriterion,
+    GoalComparator,
+    GoalCompletionPolicy,
+    GoalComponent,
+    GoalCriterionEffect,
+    GoalLocationKind,
+    GoalRuntime,
+    GoalStateComponent,
+    GoalStatus,
     HomeostasisComponent,
     HomeostasisConfiguration,
     InformationNamespaceComponent,
+    InteractionCountCriterion,
+    InteractionType,
+    LineageIdGenerator,
+    LocationMatchCriterion,
     MemoryComponent,
     MovementComponent,
     NavigationComponent,
@@ -73,12 +102,31 @@ from stage0_sim.domain.components import (
     PlanComponent,
     PlannerComponent,
     PositionComponent,
+    PossessionsComponent,
+    PossessionThresholdCriterion,
     SensesComponent,
+    SimulationTimeCriterion,
     SpatialLocationComponent,
+    StateComparisonCriterion,
     System1Configuration,
     TravelComponent,
     default_activity_rates,
     default_drive_thresholds,
+    legacy_goal_definition,
+)
+from stage0_sim.domain.components import (
+    GoalDefinition as DomainGoalDefinition,
+)
+from stage0_sim.domain.economy import (
+    ItemAmount,
+    ItemCatalog,
+    ItemDefinition,
+    TransactionOffer,
+    TransactionOperation,
+    TransactionPoint,
+    TransactionPointRegistry,
+    TransactionPointState,
+    TransactionStaffing,
 )
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.environment import (
@@ -105,6 +153,14 @@ from stage0_sim.domain.information import (
     character_dossier_document_id,
     character_information_namespace_id,
 )
+from stage0_sim.domain.npcs import (
+    NpcControlMode,
+    NpcPoolRegistry,
+    NpcRole,
+    NpcRoleRegistry,
+    NpcStaffingAssignment,
+    NpcStaffingState,
+)
 from stage0_sim.domain.systems import SystemExecutor
 from stage0_sim.domain.systems.affordances import AffordanceExecutionSystem
 from stage0_sim.domain.systems.calendar import CalendarUpdateSystem
@@ -121,20 +177,25 @@ from stage0_sim.domain.systems.navigation import MovementSystem, PathfindingSyst
 from stage0_sim.domain.systems.plans import PlanExecutionSystem, TimedPlanActionSystem
 from stage0_sim.domain.systems.speech import SpeechSystem
 from stage0_sim.domain.systems.system1 import System1ArbitrationSystem
+from stage0_sim.domain.systems.transactions import TransactionExecutionSystem
 from stage0_sim.domain.systems.travel import TravelSystem
 from stage0_sim.domain.world import (
     AffordanceAction,
     AffordanceStation,
     Building,
     BuildingEntrance,
+    BuildingPortal,
     CityBounds,
     CityWorld,
+    CityZone,
+    ContainerTopology,
     Coordinate,
     District,
     GridTopology,
     HomeostasisEffect,
     MapPoint,
     OutdoorPlace,
+    Room,
     Space,
     SpaceRegistry,
     SparseGraphTopology,
@@ -150,6 +211,7 @@ from stage0_sim.domain.world import (
     WorldGrid,
     WorldLocation,
     WorldMap,
+    WorldObject,
     Zone,
     default_affordance_action,
 )
@@ -163,6 +225,184 @@ class CoordinateDefinition(BaseModel):
 
     def to_domain(self) -> Coordinate:
         return Coordinate(self.x, self.y)
+
+
+class ItemCatalogEntryDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    unit: str = Field(min_length=1)
+
+    def to_domain(self) -> ItemDefinition:
+        return ItemDefinition(id=self.id, name=self.name, unit=self.unit)
+
+
+class ItemAmountDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: str = Field(min_length=1)
+    quantity: int = Field(gt=0)
+
+    def to_domain(self) -> ItemAmount:
+        return ItemAmount(item_id=self.item_id, quantity=self.quantity)
+
+
+class NpcRoleDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    briefing: str = ""
+    tool_allowlist: list[str] = Field(
+        default_factory=lambda: [
+            "serve_transaction",
+            "say",
+            "wait",
+            "skip",
+        ]
+    )
+    vision_range: int = Field(default=6, ge=0)
+    recognition_range: int = Field(default=4, ge=0)
+    hearing_multiplier: float = Field(default=1.0, gt=0)
+
+    @model_validator(mode="after")
+    def tools_are_restricted(self) -> "NpcRoleDefinition":
+        allowed = {"serve_transaction", "say", "wait", "skip"}
+        unknown = set(self.tool_allowlist) - allowed
+        if unknown:
+            raise ValueError(f"unknown NPC role tools: {sorted(unknown)}")
+        if len(self.tool_allowlist) != len(set(self.tool_allowlist)):
+            raise ValueError("NPC role tools must be unique")
+        return self
+
+    def to_domain(self) -> NpcRole:
+        return NpcRole(
+            id=self.id,
+            name=self.name,
+            briefing=self.briefing,
+            tool_allowlist=tuple(self.tool_allowlist),
+            vision_range=self.vision_range,
+            recognition_range=self.recognition_range,
+            hearing_multiplier=self.hearing_multiplier,
+        )
+
+
+class TransactionOfferDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    character_gives: list[ItemAmountDefinition] = Field(default_factory=list)
+    character_receives: list[ItemAmountDefinition] = Field(default_factory=list)
+    duration: float = Field(default=1.0, gt=0)
+
+    @model_validator(mode="after")
+    def transfers_something(self) -> "TransactionOfferDefinition":
+        if not self.character_gives and not self.character_receives:
+            raise ValueError("transaction offer must transfer at least one item")
+        for field_name, amounts in (
+            ("character_gives", self.character_gives),
+            ("character_receives", self.character_receives),
+        ):
+            item_ids = [amount.item_id for amount in amounts]
+            if len(item_ids) != len(set(item_ids)):
+                raise ValueError(
+                    f"transaction offer has duplicate {field_name} items"
+                )
+        return self
+
+    def to_domain(self) -> TransactionOffer:
+        return TransactionOffer(
+            id=self.id,
+            name=self.name,
+            character_gives=tuple(
+                amount.to_domain() for amount in self.character_gives
+            ),
+            character_receives=tuple(
+                amount.to_domain() for amount in self.character_receives
+            ),
+            duration=self.duration,
+        )
+
+
+class TransactionStaffingDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_id: str = Field(min_length=1)
+    staff_position: CoordinateDefinition
+    request_timeout: float = Field(default=60.0, gt=0)
+
+    def to_domain(self) -> TransactionStaffing:
+        return TransactionStaffing(
+            role_id=self.role_id,
+            staff_position=self.staff_position.to_domain(),
+            request_timeout=self.request_timeout,
+        )
+
+
+class TransactionPointDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    position: CoordinateDefinition
+    offers: list[TransactionOfferDefinition] = Field(min_length=1)
+    holdings: dict[str, int] = Field(default_factory=dict)
+    available: bool = True
+    capacity: int = Field(default=1, gt=0)
+    operation: TransactionOperation = TransactionOperation.AUTOMATED
+    staffing: TransactionStaffingDefinition | None = None
+    environment: "EnvironmentalAvailabilityDefinition" = Field(
+        default_factory=lambda: EnvironmentalAvailabilityDefinition()
+    )
+
+    @model_validator(mode="after")
+    def holdings_and_offers_are_valid(self) -> "TransactionPointDefinition":
+        if any(not item_id for item_id in self.holdings):
+            raise ValueError("transaction point holding item IDs must not be empty")
+        if any(
+            isinstance(quantity, bool) or quantity < 0
+            for quantity in self.holdings.values()
+        ):
+            raise ValueError(
+                "transaction point holding quantities must be non-negative integers"
+            )
+        offer_ids = [offer.id for offer in self.offers]
+        if len(offer_ids) != len(set(offer_ids)):
+            raise ValueError("transaction point offer IDs must be unique")
+        if self.operation is TransactionOperation.STAFFED:
+            if self.staffing is None:
+                raise ValueError("staffed transaction point requires staffing")
+            distance = (
+                abs(self.position.x - self.staffing.staff_position.x)
+                + abs(self.position.y - self.staffing.staff_position.y)
+            )
+            if distance != 1:
+                raise ValueError(
+                    "staff position must be adjacent to the transaction point"
+                )
+        elif self.staffing is not None:
+            raise ValueError(
+                "automated transaction point must not define staffing"
+            )
+        return self
+
+    def to_domain(self) -> TransactionPoint:
+        return TransactionPoint(
+            id=self.id,
+            name=self.name,
+            position=self.position.to_domain(),
+            offers=tuple(offer.to_domain() for offer in self.offers),
+            available=self.available,
+            capacity=self.capacity,
+            operation=self.operation,
+            staffing=(
+                self.staffing.to_domain()
+                if self.staffing is not None
+                else None
+            ),
+        )
 
 
 class BoundsDefinition(BaseModel):
@@ -327,6 +567,9 @@ class WorldDefinition(BaseModel):
     blocked: list[CoordinateDefinition] = Field(default_factory=list)
     zones: list[ZoneDefinition] = Field(default_factory=list)
     stations: list[StationDefinition] = Field(default_factory=list)
+    transaction_points: list[TransactionPointDefinition] = Field(
+        default_factory=list
+    )
 
 
 class MapPointDefinition(BaseModel):
@@ -374,8 +617,47 @@ class BuildingEntranceDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1)
+    room_id: str = Field(min_length=1)
     local_coordinate: CoordinateDefinition
     neighborhood_node_id: str = Field(min_length=1)
+
+
+class RoomDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    key: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    building_id: str = Field(min_length=1)
+    offset: CoordinateDefinition = Field(
+        default_factory=lambda: CoordinateDefinition(x=0, y=0)
+    )
+    world: WorldDefinition
+
+
+class BuildingPortalRuntimeDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    building_id: str = Field(min_length=1)
+    from_room_id: str = Field(min_length=1)
+    from_coordinate: CoordinateDefinition
+    to_room_id: str = Field(min_length=1)
+    to_coordinate: CoordinateDefinition
+    bidirectional: bool = True
+    available: bool = True
+
+
+class WorldObjectDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    object_kind: Literal["affordance", "transaction"]
+    building_id: str = Field(min_length=1)
+    room_id: str = Field(min_length=1)
+    position: CoordinateDefinition
 
 
 class BuildingDefinition(BaseModel):
@@ -385,7 +667,7 @@ class BuildingDefinition(BaseModel):
     name: str = Field(min_length=1)
     district_id: str = Field(min_length=1)
     city_position: MapPointDefinition
-    local_map_id: str = Field(min_length=1)
+    room_ids: list[str] = Field(min_length=1)
     entrances: list[BuildingEntranceDefinition] = Field(min_length=1)
     available: bool = True
     environment: EnvironmentalAvailabilityDefinition = Field(
@@ -475,21 +757,36 @@ class CityWorldDefinition(BaseModel):
     city: CityDefinition
     districts: list[DistrictDefinition]
     buildings: list[BuildingDefinition]
+    rooms: list[RoomDefinition]
+    portals: list[BuildingPortalRuntimeDefinition] = Field(default_factory=list)
+    objects: list[WorldObjectDefinition] = Field(default_factory=list)
     outdoor_places: list[OutdoorPlaceDefinition] = Field(default_factory=list)
-    local_maps: dict[str, WorldDefinition]
     transport: TransportDefinition
 
     @model_validator(mode="after")
     def references_are_valid(self) -> "CityWorldDefinition":
         district_ids = {item.id for item in self.districts}
-        map_ids = set(self.local_maps)
         node_ids = {item.id for item in self.transport.nodes}
+        building_ids = {item.id for item in self.buildings}
+        rooms_by_id = {item.id: item for item in self.rooms}
+        room_ids = set(rooms_by_id)
+        object_ids = {item.id for item in self.objects}
+        interior_destination_ids = [
+            *(
+                zone.id
+                for room in self.rooms
+                for zone in room.world.zones
+            ),
+            *object_ids,
+        ]
         all_ids = [
             self.city.id,
             *(item.id for item in self.districts),
             *(item.id for item in self.buildings),
+            *(item.id for item in self.rooms),
+            *(item.id for item in self.portals),
+            *interior_destination_ids,
             *(item.id for item in self.outdoor_places),
-            *self.local_maps,
             *(item.id for item in self.transport.nodes),
             *(item.id for item in self.transport.edges),
             *(item.id for item in self.transport.vehicles),
@@ -497,16 +794,6 @@ class CityWorldDefinition(BaseModel):
                 entrance.id
                 for building in self.buildings
                 for entrance in building.entrances
-            ),
-            *(
-                zone.id
-                for local_map in self.local_maps.values()
-                for zone in local_map.zones
-            ),
-            *(
-                station.id
-                for local_map in self.local_maps.values()
-                for station in local_map.stations
             ),
         ]
         if len(all_ids) != len(set(all_ids)):
@@ -516,24 +803,137 @@ class CityWorldDefinition(BaseModel):
                 raise ValueError(
                     f"building {building.id} references unknown district"
                 )
-            if building.local_map_id not in map_ids:
+            if len(building.room_ids) != len(set(building.room_ids)):
                 raise ValueError(
-                f"building {building.id} references unknown local map"
+                f"building {building.id} room IDs must be unique"
                 )
-            local_map = self.local_maps[building.local_map_id]
+            if any(
+                room_id not in room_ids
+                or rooms_by_id[room_id].building_id != building.id
+                for room_id in building.room_ids
+            ):
+                raise ValueError(
+                f"building {building.id} references an invalid room"
+                )
+            expected_room_ids = {
+                room.id
+                for room in self.rooms
+                if room.building_id == building.id
+            }
+            if set(building.room_ids) != expected_room_ids:
+                raise ValueError(
+                f"building {building.id} room IDs are incomplete"
+                )
             for entrance in building.entrances:
-                coordinate = entrance.local_coordinate.to_domain()
-                if not (
-                    0 <= coordinate.x < local_map.width
-                    and 0 <= coordinate.y < local_map.height
+                if (
+                    entrance.room_id not in rooms_by_id
+                    or rooms_by_id[entrance.room_id].building_id != building.id
                 ):
                     raise ValueError(
-                        f"entrance {entrance.id} is outside local map"
+                        f"entrance {entrance.id} references invalid room"
+                    )
+                coordinate = entrance.local_coordinate.to_domain()
+                room_world = rooms_by_id[entrance.room_id].world
+                if not _definition_grid_is_walkable(room_world, coordinate):
+                    raise ValueError(
+                        f"entrance {entrance.id} is not on a walkable room tile"
                     )
                 if entrance.neighborhood_node_id not in node_ids:
                     raise ValueError(
                         f"entrance {entrance.id} references unknown node"
                     )
+        for room in self.rooms:
+            if room.building_id not in building_ids:
+                raise ValueError(f"room {room.id} references unknown building")
+        portal_endpoints: set[tuple[str, int, int, str, int, int]] = set()
+        for portal in self.portals:
+            if portal.building_id not in building_ids:
+                raise ValueError(
+                f"portal {portal.id} references unknown building"
+                )
+            if portal.from_room_id == portal.to_room_id:
+                raise ValueError(
+                f"portal {portal.id} must connect distinct rooms"
+                )
+            try:
+                from_room = rooms_by_id[portal.from_room_id]
+                to_room = rooms_by_id[portal.to_room_id]
+            except KeyError as error:
+                raise ValueError(
+                f"portal {portal.id} references unknown room"
+                ) from error
+            if (
+                from_room.building_id != portal.building_id
+                or to_room.building_id != portal.building_id
+            ):
+                raise ValueError(
+                f"portal {portal.id} rooms must belong to its building"
+                )
+            from_coordinate = portal.from_coordinate.to_domain()
+            to_coordinate = portal.to_coordinate.to_domain()
+            if not _definition_grid_is_walkable(
+                from_room.world, from_coordinate
+            ) or not _definition_grid_is_walkable(
+                to_room.world, to_coordinate
+            ):
+                raise ValueError(
+                f"portal {portal.id} endpoints must be walkable"
+                )
+            endpoint = (
+                portal.from_room_id,
+                from_coordinate.x,
+                from_coordinate.y,
+                portal.to_room_id,
+                to_coordinate.x,
+                to_coordinate.y,
+            )
+            reverse = (
+                portal.to_room_id,
+                to_coordinate.x,
+                to_coordinate.y,
+                portal.from_room_id,
+                from_coordinate.x,
+                from_coordinate.y,
+            )
+            if endpoint in portal_endpoints or reverse in portal_endpoints:
+                raise ValueError(
+                f"portal {portal.id} duplicates another portal endpoint"
+                )
+            portal_endpoints.add(endpoint)
+        object_by_id = {item.id: item for item in self.objects}
+        for room in self.rooms:
+            for station in room.world.stations:
+                object_definition = object_by_id.get(station.id)
+                if (
+                object_definition is None
+                or object_definition.object_kind != "affordance"
+                or object_definition.room_id != room.id
+                or object_definition.position != station.position
+                ):
+                    raise ValueError(
+                        f"station {station.id} lacks matching room object"
+                    )
+            for point in room.world.transaction_points:
+                object_definition = object_by_id.get(point.id)
+                if (
+                object_definition is None
+                or object_definition.object_kind != "transaction"
+                or object_definition.room_id != room.id
+                or object_definition.position != point.position
+                ):
+                    raise ValueError(
+                        f"transaction point {point.id} lacks matching room object"
+                    )
+        for item in self.objects:
+            object_room = rooms_by_id.get(item.room_id)
+            if (
+                object_room is None
+                or object_room.building_id != item.building_id
+                or item.building_id not in building_ids
+            ):
+                raise ValueError(
+                f"object {item.id} references invalid hierarchy"
+                )
         for place in self.outdoor_places:
             if place.district_id not in district_ids:
                 raise ValueError(
@@ -568,6 +968,18 @@ class CityWorldDefinition(BaseModel):
                     f"vehicle {vehicle.id} must be CAR or CYCLE"
                 )
         return self
+
+
+def _definition_grid_is_walkable(
+    world: WorldDefinition,
+    coordinate: Coordinate,
+) -> bool:
+    return (
+        0 <= coordinate.x < world.width
+        and 0 <= coordinate.y < world.height
+        and coordinate
+        not in {item.to_domain() for item in world.blocked}
+    )
 
 
 class ActivityRatesDefinition(BaseModel):
@@ -687,6 +1099,7 @@ class CognitionSettingsDefinition(BaseModel):
     controller: str = "legacy"
     execution_mode: Literal["global_barrier", "background"] = "global_barrier"
     model_profile: str = "default"
+    npc_control_mode: NpcControlMode = NpcControlMode.AUTO
     decision_timeout_seconds: float = Field(default=30.0, gt=0)
     max_output_tokens: int = Field(default=512, gt=0)
     max_read_tool_rounds: int = Field(default=1, ge=0, le=4)
@@ -704,6 +1117,7 @@ class CognitionSettingsDefinition(BaseModel):
             "wait",
             "skip",
             "travel_to",
+            "transact",
             "check_environment",
         ]
     )
@@ -720,6 +1134,7 @@ class CognitionSettingsDefinition(BaseModel):
             "wait",
             "skip",
             "travel_to",
+            "transact",
             "check_environment",
         }
         if unknown:
@@ -730,16 +1145,25 @@ class CognitionSettingsDefinition(BaseModel):
 class CharacterProfileTemplateDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = Field(default=1, ge=1)
+    schema_version: int = Field(default=2, ge=1)
     sections: list[str] = Field(
         default_factory=lambda: [
             "identity",
+            "body_measurements",
             "appearance",
+            "health",
             "personality",
             "background",
+            "financial_situation",
             "motivations",
             "capabilities",
             "preferences",
+            "presentation",
+            "dispositions",
+            "communication",
+            "decision_coping",
+            "life_structure",
+            "family",
             "relationships",
         ]
     )
@@ -787,6 +1211,7 @@ class CharacterSlotDefinition(BaseModel):
 
     label: str = Field(min_length=1)
     briefing: str = ""
+    synthesis_guidance: str = ""
     default_character_id: str | None = Field(default=None, min_length=1)
     constraints: CharacterSelectionConstraintsDefinition = Field(
         default_factory=CharacterSelectionConstraintsDefinition
@@ -917,6 +1342,12 @@ class WeatherSettingsDefinition(BaseModel):
         )
 
 
+class CharacterSituationSynthesisSettingsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+
+
 class ScenarioDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -926,6 +1357,8 @@ class ScenarioDefinition(BaseModel):
     dt: float = Field(default=1.0, gt=0)
     speed: float = Field(default=1.0, gt=0)
     run_id: str | None = Field(default=None, min_length=1)
+    items: list[ItemCatalogEntryDefinition] = Field(default_factory=list)
+    npc_roles: list[NpcRoleDefinition] = Field(default_factory=list)
     calendar: CalendarSettingsDefinition | None = None
     weather: WeatherSettingsDefinition | None = None
     world: WorldDefinition | CityWorldDefinition | None = None
@@ -942,10 +1375,21 @@ class ScenarioDefinition(BaseModel):
     cognition: CognitionSettingsDefinition = Field(
         default_factory=CognitionSettingsDefinition
     )
+    character_situation_synthesis: CharacterSituationSynthesisSettingsDefinition = (
+        Field(default_factory=CharacterSituationSynthesisSettingsDefinition)
+    )
     entities: list[EntityDefinition] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def entity_ids_are_unique(self) -> "ScenarioDefinition":
+        item_ids = [item.id for item in self.items]
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("item catalog IDs must be unique")
+        known_item_ids = set(item_ids)
+        npc_role_ids = [role.id for role in self.npc_roles]
+        if len(npc_role_ids) != len(set(npc_role_ids)):
+            raise ValueError("NPC role IDs must be unique")
+        known_npc_role_ids = set(npc_role_ids)
         entity_ids = [entity.id for entity in self.entities]
         if len(entity_ids) != len(set(entity_ids)):
             raise ValueError("entity IDs must be unique")
@@ -965,6 +1409,66 @@ class ScenarioDefinition(BaseModel):
             raw_slot = entity.components.get("character_slot")
             if raw_slot is not None:
                 _validate_component(CharacterSlotDefinition, raw_slot, entity.id)
+            raw_possessions = entity.components.get("possessions")
+            if raw_possessions is not None:
+                possessions = _validate_component(
+                    PossessionsComponentDefinition,
+                    raw_possessions,
+                    entity.id,
+                )
+                unknown = set(possessions.holdings) - known_item_ids
+                if unknown:
+                    raise ValueError(
+                        f"entity {entity.id} possessions reference unknown items: "
+                        f"{sorted(unknown)}"
+                    )
+        worlds = (
+            [self.world]
+            if isinstance(self.world, WorldDefinition)
+            else [room.world for room in self.world.rooms]
+            if isinstance(self.world, CityWorldDefinition)
+            else []
+        )
+        for world in worlds:
+            for point in world.transaction_points:
+                referenced = set(point.holdings)
+                referenced.update(
+                    amount.item_id
+                    for offer in point.offers
+                    for amount in (
+                        *offer.character_gives,
+                        *offer.character_receives,
+                    )
+                )
+                unknown = referenced - known_item_ids
+                if unknown:
+                    raise ValueError(
+                        f"transaction point {point.id} references unknown items: "
+                        f"{sorted(unknown)}"
+                    )
+                if point.staffing is not None:
+                    if point.staffing.role_id not in known_npc_role_ids:
+                        raise ValueError(
+                            f"transaction point {point.id} references unknown "
+                            f"NPC role: {point.staffing.role_id}"
+                        )
+                    staff_position = point.staffing.staff_position.to_domain()
+                    if not (
+                        0 <= staff_position.x < world.width
+                        and 0 <= staff_position.y < world.height
+                    ):
+                        raise ValueError(
+                            f"transaction point {point.id} staff position "
+                            "must be inside its room grid"
+                        )
+                    if staff_position in {
+                        coordinate.to_domain()
+                        for coordinate in world.blocked
+                    }:
+                        raise ValueError(
+                            f"transaction point {point.id} staff position "
+                            "must be walkable"
+                        )
         if self.calendar is None and _scenario_uses_schedules(self.world):
             raise ValueError("weekly environment schedules require a calendar")
         return self
@@ -990,15 +1494,33 @@ def _environment_rules(
                     station.environment,
                 )
             )
+        for point in world.transaction_points:
+            rules.append(
+                _availability_rule(
+                    point.id,
+                    "transaction_point",
+                    point.available,
+                    point.environment,
+                )
+            )
     elif isinstance(world, CityWorldDefinition):
-        for local_map in world.local_maps.values():
-            for station in local_map.stations:
+        for room in world.rooms:
+            for station in room.world.stations:
                 rules.append(
                     _availability_rule(
                         station.id,
                         "station",
                         station.available,
                         station.environment,
+                    )
+                )
+            for point in room.world.transaction_points:
+                rules.append(
+                    _availability_rule(
+                        point.id,
+                        "transaction_point",
+                        point.available,
+                        point.environment,
                     )
                 )
         for building in world.buildings:
@@ -1070,6 +1592,17 @@ class ResolvedCharacterProfile:
     profile: "CharacterProfileDefinition"
 
 
+@dataclass(frozen=True, slots=True)
+class ResolvedCharacterSituation:
+    character_id: str
+    profile_content_hash: str
+    input_hash: str
+    content_hash: str
+    description: str
+    data: Mapping[str, JsonValue]
+    generation: Mapping[str, JsonValue]
+
+
 class ScenarioLoadError(ValueError):
     pass
 
@@ -1092,6 +1625,7 @@ def create_runner(
     scenario: ScenarioDefinition,
     *,
     resolved_characters: Mapping[str, ResolvedCharacterProfile] | None = None,
+    resolved_situations: Mapping[str, ResolvedCharacterSituation] | None = None,
     speed: float | None = None,
     run_id: str | None = None,
     planner: Planner | None = None,
@@ -1100,7 +1634,11 @@ def create_runner(
     model_client: ModelClient | None = None,
     model_max_output_tokens: int | None = None,
     model_max_concurrency: int | None = None,
+    npc_control_mode: NpcControlMode | str | None = None,
 ) -> SimulationRunner:
+    from stage0_sim.application.data_capture import BufferedResearchRecorder
+
+    research_recorder = BufferedResearchRecorder()
     registry = Registry()
     systems = SystemExecutor()
     information_store = InformationStore()
@@ -1109,20 +1647,32 @@ def create_runner(
         resolved_embedding_provider,
         scenario.memory.to_domain(),
         information_store,
+        research_recorder=research_recorder,
     )
     information_retriever = InformationRetriever(
         information_store,
         resolved_embedding_provider,
+        research_recorder=research_recorder,
     )
     macro_work = MacroWorkCoordinator(
         planner=planner or FakePlanner(),
         dialogue_generator=dialogue_generator or FakeDialogueGenerator(),
         memory_store=memory_store,
+        research_recorder=research_recorder,
     )
     registry.set_resource(information_store)
     registry.set_resource(information_retriever)
     registry.set_resource(memory_store)
     registry.set_resource(macro_work)
+    registry.set_resource(LineageIdGenerator())
+    registry.set_resource(
+        ItemCatalog(tuple(item.to_domain() for item in scenario.items))
+    )
+    registry.set_resource(
+        NpcRoleRegistry(
+            {role.id: role.to_domain() for role in scenario.npc_roles}
+        )
+    )
     registry.set_resource(scenario.homeostasis.to_domain())
     registry.set_resource(scenario.system1.to_domain())
     registry.set_resource(scenario.perception.to_domain())
@@ -1150,18 +1700,33 @@ def create_runner(
     systems.add(MemoryRecordingSystem())
     systems.add(MacroDialogueSystem())
     systems.add(MacroPlanningSystem())
+    systems.add(GoalEvaluationSystem())
     city_world = (
         _build_city_world(scenario.world)
         if isinstance(scenario.world, CityWorldDefinition)
         else None
     )
     world = (
-        _initial_city_local_map(scenario, city_world)
+        _initial_city_room_world(scenario, city_world)
         if city_world is not None
         else _build_world(scenario.world)
         if isinstance(scenario.world, WorldDefinition)
         else None
     )
+    requested_npc_mode = (
+        NpcControlMode(npc_control_mode)
+        if npc_control_mode is not None
+        else scenario.cognition.npc_control_mode
+    )
+    effective_npc_mode = (
+        NpcControlMode.MODEL
+        if requested_npc_mode is NpcControlMode.AUTO
+        and model_client is not None
+        else NpcControlMode.DETERMINISTIC
+        if requested_npc_mode is NpcControlMode.AUTO
+        else requested_npc_mode
+    )
+    staffing_states: dict[str, NpcStaffingState] = {}
     if city_world is not None:
         registry.set_resource(city_world)
         registry.set_resource(
@@ -1177,6 +1742,65 @@ def create_runner(
         systems.add(TravelSystem())
     if world is not None:
         registry.set_resource(world)
+        point_definitions = (
+            scenario.world.transaction_points
+            if isinstance(scenario.world, WorldDefinition)
+            else [
+                point
+                for room in scenario.world.rooms
+                for point in room.world.transaction_points
+            ]
+            if isinstance(scenario.world, CityWorldDefinition)
+            else []
+        )
+        registry.set_resource(
+            TransactionPointRegistry(
+                {
+                    point.id: TransactionPointState(dict(point.holdings))
+                    for point in point_definitions
+                }
+            )
+        )
+        if isinstance(scenario.world, WorldDefinition):
+            point_locations = [
+                ("implicit-building", point)
+                for point in scenario.world.transaction_points
+            ]
+        elif isinstance(scenario.world, CityWorldDefinition):
+            point_locations = [
+                (room.id, point)
+                for room in scenario.world.rooms
+                for point in room.world.transaction_points
+            ]
+        else:
+            point_locations = []
+        for place_id, point in point_locations:
+            if point.staffing is None:
+                continue
+            staffing_states[point.id] = NpcStaffingState(
+                NpcStaffingAssignment(
+                    point_id=point.id,
+                    role_id=point.staffing.role_id,
+                    place_id=place_id,
+                    staff_position=point.staffing.staff_position.to_domain(),
+                    request_timeout=point.staffing.request_timeout,
+                )
+            )
+        if (
+            staffing_states
+            and effective_npc_mode is NpcControlMode.MODEL
+            and model_client is None
+        ):
+            raise ValueError(
+                "model NPC control requires an explicit model client"
+            )
+        registry.set_resource(
+            NpcPoolRegistry(
+                staffings=staffing_states,
+                requested_mode=requested_npc_mode,
+                effective_mode=effective_npc_mode,
+            )
+        )
         space_registry = _build_space_registry(world, city_world)
         registry.set_resource(space_registry)
         known_topology = InformationKnownTopologyProjection(
@@ -1195,35 +1819,59 @@ def create_runner(
         systems.add(NavigationPlanningSystem())
         systems.add(PlanExecutionSystem())
         systems.add(AffordanceExecutionSystem())
+        systems.add(TransactionExecutionSystem())
+        if staffing_states:
+            systems.add(NpcStaffingSystem())
         systems.add(MovementSystem())
         systems.add(NavigationKnowledgeRecordingSystem())
         systems.add(PerceptionSystem())
 
     tool_registry = ToolRegistry()
-    tool_agent_enabled = scenario.cognition.controller == "tool-agent" or any(
+    normal_tool_agent_enabled = (
+        scenario.cognition.controller == "tool-agent"
+        or any(
         bool(entity.components.get("controller", {}).get("enabled", False))
         for entity in scenario.entities
+        )
     )
+    tool_agent_enabled = normal_tool_agent_enabled or bool(staffing_states)
     if tool_agent_enabled:
-        if model_client is None:
+        if (
+            model_client is None
+            and (
+                normal_tool_agent_enabled
+                or effective_npc_mode is NpcControlMode.MODEL
+            )
+        ):
             raise ValueError(
                 "tool-agent cognition requires an explicit model client; "
                 "configure STAGE0_LLM_PROVIDER or pass model_client"
             )
-        controller = ToolCallingCharacterController(
-            model_client=model_client,
-            tool_registry=tool_registry,
-            model=scenario.cognition.model_profile,
-            timeout_seconds=scenario.cognition.decision_timeout_seconds,
-            max_output_tokens=(
-                min(
-                    scenario.cognition.max_output_tokens,
-                    model_max_output_tokens,
-                )
-                if model_max_output_tokens is not None
-                else scenario.cognition.max_output_tokens
-            ),
-            max_read_tool_rounds=scenario.cognition.max_read_tool_rounds,
+        model_controller = (
+            ToolCallingCharacterController(
+                model_client=model_client,
+                tool_registry=tool_registry,
+                model=scenario.cognition.model_profile,
+                timeout_seconds=scenario.cognition.decision_timeout_seconds,
+                max_output_tokens=(
+                    min(
+                        scenario.cognition.max_output_tokens,
+                        model_max_output_tokens,
+                    )
+                    if model_max_output_tokens is not None
+                    else scenario.cognition.max_output_tokens
+                ),
+                max_read_tool_rounds=(
+                    scenario.cognition.max_read_tool_rounds
+                ),
+                research_recorder=research_recorder,
+            )
+            if model_client is not None
+            else None
+        )
+        controller = RoutedCharacterController(
+            model_controller=model_controller,
+            npc_mode=effective_npc_mode,
         )
         registry.set_resource(
             AgentWorkCoordinator(
@@ -1246,14 +1894,17 @@ def create_runner(
                 memory_store=memory_store,
                 information_retriever=information_retriever,
                 execution_mode=scenario.cognition.execution_mode,
+                research_recorder=research_recorder,
             )
         )
         systems.add(CognitionScheduler())
 
     occupied: set[tuple[str, Coordinate]] = set()
+    goal_ids: set[str] = set()
     for entity_definition in scenario.entities:
         entity_id = registry.create_entity(entity_definition.id)
         raw_components = dict(entity_definition.components)
+        entity_world = world
         spatial_values = raw_components.pop("spatial_location", None)
         if spatial_values is not None:
             if city_world is None:
@@ -1274,6 +1925,9 @@ def create_runner(
             )
             registry.add_component(entity_id, TravelComponent())
             if spatial_location.local_coordinate is not None:
+                entity_world = city_world.room_world(
+                    spatial_location.place_id
+                )
                 raw_components.setdefault(
                     "position",
                     {
@@ -1282,13 +1936,13 @@ def create_runner(
                     },
                 )
         if "position" in raw_components:
-            if world is None:
+            if entity_world is None:
                 raise ValueError("entity positions require a world definition")
             position_definition = _validate_component(
                 PositionDefinition, raw_components.pop("position"), entity_id
             )
             coordinate = position_definition.to_domain()
-            if not world.grid.is_walkable(coordinate):
+            if not entity_world.grid.is_walkable(coordinate):
                 raise ValueError(
                     f"entity {entity_id} position must be on a walkable grid tile"
                 )
@@ -1304,9 +1958,9 @@ def create_runner(
             registry.add_component(entity_id, PositionComponent(coordinate))
 
         if "movement" in raw_components:
-            if world is None:
+            if entity_world is None:
                 raise ValueError("entity movement requires a world definition")
-            if "position" not in entity_definition.components:
+            if not registry.has_component(entity_id, PositionComponent):
                 raise ValueError(f"moving entity {entity_id} requires a position component")
             movement_definition = _validate_component(
                 MovementDefinition, raw_components.pop("movement"), entity_id
@@ -1316,7 +1970,10 @@ def create_runner(
                 if movement_definition.destination is not None
                 else None
             )
-            if destination is not None and not world.grid.is_walkable(destination):
+            if (
+                destination is not None
+                and not entity_world.grid.is_walkable(destination)
+            ):
                 raise ValueError(
                     f"entity {entity_id} destination must be on a walkable grid tile"
                 )
@@ -1352,6 +2009,17 @@ def create_runner(
         elif "homeostasis" in entity_definition.components:
             registry.add_component(entity_id, ActivityComponent())
 
+        if "possessions" in raw_components:
+            possessions_definition = _validate_component(
+                PossessionsComponentDefinition,
+                raw_components.pop("possessions"),
+                entity_id,
+            )
+            registry.add_component(
+                entity_id,
+                PossessionsComponent(dict(possessions_definition.holdings)),
+            )
+
         if "plan" in raw_components:
             plan_definition = _validate_component(
                 PlanComponentDefinition, raw_components.pop("plan"), entity_id
@@ -1375,14 +2043,84 @@ def create_runner(
                 raw_components.pop("planner"),
                 entity_id,
             )
+            structured_definitions = [
+                goal.to_domain() for goal in planner_definition.goals
+            ]
+            duplicate_goal_ids = goal_ids.intersection(
+                goal.id for goal in structured_definitions
+            )
+            if duplicate_goal_ids:
+                raise ValueError(
+                    "structured goal IDs must be unique across the scenario: "
+                    f"{sorted(duplicate_goal_ids)}"
+                )
+            goal_ids.update(goal.id for goal in structured_definitions)
+            legacy_definitions = [
+                legacy_goal_definition(
+                    entity_id,
+                    "daily_goal",
+                    index,
+                    description,
+                    priority=0,
+                )
+                for index, description in enumerate(
+                    planner_definition.daily_goals
+                )
+            ] + [
+                legacy_goal_definition(
+                    entity_id,
+                    "current_priority",
+                    index,
+                    description,
+                    priority=100,
+                )
+                for index, description in enumerate(
+                    planner_definition.current_priorities
+                )
+            ]
+            duplicate_legacy_ids = goal_ids.intersection(
+                goal.id for goal in legacy_definitions
+            )
+            if duplicate_legacy_ids:
+                raise ValueError(
+                    "goal IDs must be unique across the scenario: "
+                    f"{sorted(duplicate_legacy_ids)}"
+                )
+            all_goal_definitions = [
+                *structured_definitions,
+                *legacy_definitions,
+            ]
+            goal_ids.update(goal.id for goal in legacy_definitions)
             registry.add_component(
                 entity_id,
                 PlannerComponent(
-                    daily_goals=tuple(planner_definition.daily_goals),
+                    daily_goals=(
+                        *planner_definition.daily_goals,
+                        *(
+                            goal.description
+                            for goal in structured_definitions
+                        ),
+                    ),
                     current_priorities=tuple(
                         planner_definition.current_priorities
                     ),
                     needs_plan=planner_definition.needs_plan,
+                ),
+            )
+            registry.add_component(
+                entity_id,
+                GoalComponent(
+                    [
+                        GoalRuntime(
+                            definition=goal,
+                            status=(
+                                GoalStatus.ACTIVE
+                                if goal.legacy
+                                else GoalStatus.PENDING
+                            ),
+                        )
+                        for goal in all_goal_definitions
+                    ]
                 ),
             )
             if not registry.has_component(entity_id, PlanComponent):
@@ -1460,6 +2198,36 @@ def create_runner(
                 slot_id=entity_id,
                 label=slot_definition.label,
                 briefing=slot_definition.briefing,
+                description=(
+                    resolved_situations[entity_id].description
+                    if resolved_situations is not None
+                    and entity_id in resolved_situations
+                    else slot_definition.briefing
+                ),
+                content_hash=(
+                    resolved_situations[entity_id].content_hash
+                    if resolved_situations is not None
+                    and entity_id in resolved_situations
+                    else ""
+                ),
+                input_hash=(
+                    resolved_situations[entity_id].input_hash
+                    if resolved_situations is not None
+                    and entity_id in resolved_situations
+                    else ""
+                ),
+                data=(
+                    dict(resolved_situations[entity_id].data)
+                    if resolved_situations is not None
+                    and entity_id in resolved_situations
+                    else {}
+                ),
+                generation=(
+                    dict(resolved_situations[entity_id].generation)
+                    if resolved_situations is not None
+                    and entity_id in resolved_situations
+                    else {}
+                ),
             ),
         )
         namespace_id = character_information_namespace_id(entity_id)
@@ -1500,6 +2268,30 @@ def create_runner(
                     "slot_id": entity_id,
                     "label": slot_definition.label,
                     "briefing": slot_definition.briefing,
+                    "synthesized": (
+                        dict(resolved_situations[entity_id].data)
+                        if resolved_situations is not None
+                        and entity_id in resolved_situations
+                        else {}
+                    ),
+                    "generation": (
+                        dict(resolved_situations[entity_id].generation)
+                        if resolved_situations is not None
+                        and entity_id in resolved_situations
+                        else {}
+                    ),
+                    "content_hash": (
+                        resolved_situations[entity_id].content_hash
+                        if resolved_situations is not None
+                        and entity_id in resolved_situations
+                        else ""
+                    ),
+                    "input_hash": (
+                        resolved_situations[entity_id].input_hash
+                        if resolved_situations is not None
+                        and entity_id in resolved_situations
+                        else ""
+                    ),
                     "daily_goals": (
                         list(planner_definition.daily_goals)
                         if planner_definition is not None
@@ -1670,6 +2462,12 @@ def create_runner(
                 ),
             )
         if (
+            registry.has_component(entity_id, HomeostasisComponent)
+            and registry.has_component(entity_id, SpatialLocationComponent)
+            and not registry.has_component(entity_id, PlanComponent)
+        ):
+            registry.add_component(entity_id, PlanComponent())
+        if (
             registry.has_component(entity_id, SpatialLocationComponent)
             and not registry.has_component(entity_id, NavigationComponent)
         ):
@@ -1698,9 +2496,12 @@ def create_runner(
             speed=speed if speed is not None else scenario.speed,
             run_id=run_id if run_id is not None else scenario.run_id,
             cognition_execution_mode=scenario.cognition.execution_mode,
+            npc_control_mode=requested_npc_mode,
+            effective_npc_control_mode=effective_npc_mode,
         ),
         registry=registry,
         systems=systems,
+        research_recorder=research_recorder,
     )
 
 
@@ -1732,6 +2533,32 @@ class SpatialLocationDefinition(BaseModel):
     edge_id: str | None = None
     edge_progress: float | None = Field(default=None, ge=0, le=1)
 
+    @model_validator(mode="after")
+    def shape_matches_derived_scale(self) -> "SpatialLocationDefinition":
+        if self.local_coordinate is not None:
+            if self.scale is not SpatialScale.BUILDING:
+                raise ValueError(
+                    "room coordinates require BUILDING compatibility scale"
+                )
+            if (
+                self.edge_id is not None
+                or self.edge_progress is not None
+                or self.network_node_id is not None
+            ):
+                raise ValueError(
+                    "room coordinates cannot include network position fields"
+                )
+            return self
+        if self.scale is SpatialScale.BUILDING:
+            raise ValueError(
+                "BUILDING compatibility scale requires a room coordinate"
+            )
+        if (self.edge_id is None) != (self.edge_progress is None):
+            raise ValueError("edge_id and edge_progress must be provided together")
+        if self.network_node_id is not None and self.edge_id is not None:
+            raise ValueError("city location cannot be both on a node and edge")
+        return self
+
     def to_domain(self) -> WorldLocation:
         return WorldLocation(
             scale=self.scale,
@@ -1757,9 +2584,23 @@ class CharacterIdentityDefinition(ExtensibleCharacterProfileModel):
 
     display_name: str = Field(min_length=1)
     age: int | None = Field(default=None, ge=0, le=150)
+    birth_date: date | None = None
     gender: str = ""
     pronouns: str = ""
     occupation: str = ""
+
+
+class CharacterBodyMeasurementsDefinition(ExtensibleCharacterProfileModel):
+
+    measured_on: date | None = None
+    height_cm: float | None = Field(default=None, gt=0, le=300)
+    weight_kg: float | None = Field(default=None, gt=0, le=700)
+    chest_cm: float | None = Field(default=None, gt=0, le=300)
+    waist_cm: float | None = Field(default=None, gt=0, le=300)
+    hips_cm: float | None = Field(default=None, gt=0, le=300)
+    inseam_cm: float | None = Field(default=None, gt=0, le=200)
+    shoe_size_system: str = ""
+    shoe_size_value: float | None = Field(default=None, gt=0, le=100)
 
 
 class CharacterAppearanceDefinition(ExtensibleCharacterProfileModel):
@@ -1790,6 +2631,29 @@ class CharacterBackgroundDefinition(ExtensibleCharacterProfileModel):
     residence: str = ""
     education: str = ""
     history: str = ""
+
+
+class CharacterFinancialSituationDefinition(ExtensibleCharacterProfileModel):
+
+    as_of_date: date | None = None
+    currency: str = ""
+    annual_gross_income: int | None = Field(default=None, ge=0)
+    income_band: str = ""
+    liquid_assets: int | None = Field(default=None, ge=0)
+    total_assets: int | None = Field(default=None, ge=0)
+    total_debt: int | None = Field(default=None, ge=0)
+    monthly_fixed_expenses: int | None = Field(default=None, ge=0)
+    housing_tenure: str = ""
+    financial_dependents: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def currency_is_iso_style(self) -> "CharacterFinancialSituationDefinition":
+        if self.currency and (
+            len(self.currency) != 3 or not self.currency.isalpha()
+        ):
+            raise ValueError("financial currency must be a three-letter code")
+        self.currency = self.currency.upper()
+        return self
 
 
 class CharacterMotivationsDefinition(ExtensibleCharacterProfileModel):
@@ -1824,6 +2688,158 @@ class CharacterPreferencesDefinition(ExtensibleCharacterProfileModel):
     dislikes: list[str] = Field(default_factory=list)
     habits: list[str] = Field(default_factory=list)
     routines: list[str] = Field(default_factory=list)
+
+
+class CharacterPresentationDefinition(ExtensibleCharacterProfileModel):
+
+    aesthetic_identity: str = ""
+    wardrobe_palette: list[str] = Field(default_factory=list)
+    preferred_silhouettes: list[str] = Field(default_factory=list)
+    preferred_fabrics: list[str] = Field(default_factory=list)
+    formality_range: str = ""
+    comfort_priorities: list[str] = Field(default_factory=list)
+    grooming_norms: list[str] = Field(default_factory=list)
+    usual_accessories: list[str] = Field(default_factory=list)
+    practical_constraints: list[str] = Field(default_factory=list)
+    purchase_habits: list[str] = Field(default_factory=list)
+    context_variations: list[str] = Field(default_factory=list)
+
+
+class CharacterDispositionsDefinition(ExtensibleCharacterProfileModel):
+
+    summary: str = ""
+    emotional_baseline: str = ""
+    sociability: str = ""
+    assertiveness: str = ""
+    patience: str = ""
+    conscientiousness: str = ""
+    openness: str = ""
+    adaptability: str = ""
+    risk_tolerance: str = ""
+    ambiguity_tolerance: str = ""
+    impulse_control: str = ""
+    conflict_style: str = ""
+    cooperation_style: str = ""
+    trust_formation: str = ""
+    boundary_setting: str = ""
+    help_seeking: str = ""
+    pressure_response: str = ""
+    fatigue_response: str = ""
+    novelty_response: str = ""
+    authority_response: str = ""
+    crowd_response: str = ""
+
+
+class CharacterCommunicationDefinition(ExtensibleCharacterProfileModel):
+
+    cadence: str = ""
+    vocabulary: str = ""
+    directness: str = ""
+    politeness: str = ""
+    humor: str = ""
+    gesture: str = ""
+    posture: str = ""
+    facial_expressiveness: str = ""
+    listening_style: str = ""
+    disagreement_style: str = ""
+    apology_style: str = ""
+    with_intimates: str = ""
+    with_colleagues: str = ""
+    with_strangers: str = ""
+    with_authority: str = ""
+
+
+class CharacterDecisionCopingDefinition(ExtensibleCharacterProfileModel):
+
+    information_seeking: str = ""
+    planning_horizon: str = ""
+    default_heuristics: list[str] = Field(default_factory=list)
+    error_sensitivity: str = ""
+    persistence: str = ""
+    recovery_habits: list[str] = Field(default_factory=list)
+    self_soothing: list[str] = Field(default_factory=list)
+    stress_signals: list[str] = Field(default_factory=list)
+    disposition_shifts: list[str] = Field(default_factory=list)
+
+
+class CharacterLifeStructureDefinition(ExtensibleCharacterProfileModel):
+
+    household: str = ""
+    recurring_obligations: list[str] = Field(default_factory=list)
+    material_habits: list[str] = Field(default_factory=list)
+    typical_possessions: list[str] = Field(default_factory=list)
+    cultural_practices: list[str] = Field(default_factory=list)
+    interests: list[str] = Field(default_factory=list)
+    social_patterns: list[str] = Field(default_factory=list)
+
+
+class CharacterFamilyMemberDefinition(ExtensibleCharacterProfileModel):
+
+    member_id: str = Field(min_length=1)
+    linked_character_id: str = ""
+    display_name: str = Field(min_length=1)
+    relationship: str = Field(min_length=1)
+    birth_date: date | None = None
+    living_status: Literal["alive", "deceased", "unknown"] = "unknown"
+    residence: str = ""
+    household_member: bool = False
+    financial_dependent: bool = False
+
+
+class CharacterFamilyDefinition(ExtensibleCharacterProfileModel):
+
+    members: list[CharacterFamilyMemberDefinition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def member_ids_are_unique(self) -> "CharacterFamilyDefinition":
+        member_ids = [member.member_id for member in self.members]
+        if len(member_ids) != len(set(member_ids)):
+            raise ValueError("family member IDs must be unique")
+        return self
+
+
+class CharacterHealthConditionDefinition(ExtensibleCharacterProfileModel):
+
+    name: str = Field(min_length=1)
+    status: Literal["active", "managed", "resolved", "unknown"] = "unknown"
+    diagnosed_on: date | None = None
+    notes: str = ""
+
+
+class CharacterHealthAllergyDefinition(ExtensibleCharacterProfileModel):
+
+    substance: str = Field(min_length=1)
+    reaction: str = ""
+    severity: Literal["mild", "moderate", "severe", "unknown"] = "unknown"
+
+
+class CharacterMedicationDefinition(ExtensibleCharacterProfileModel):
+
+    name: str = Field(min_length=1)
+    dose: str = ""
+    schedule: str = ""
+    purpose: str = ""
+
+
+class CharacterHealthDefinition(ExtensibleCharacterProfileModel):
+
+    as_of_date: date | None = None
+    blood_type: str = ""
+    conditions: list[CharacterHealthConditionDefinition] = Field(
+        default_factory=list
+    )
+    allergies: list[CharacterHealthAllergyDefinition] = Field(
+        default_factory=list
+    )
+    medications: list[CharacterMedicationDefinition] = Field(
+        default_factory=list
+    )
+    disabilities: list[str] = Field(default_factory=list)
+    vision: str = ""
+    hearing: str = ""
+    mobility: str = ""
+    past_procedures: list[str] = Field(default_factory=list)
+    dietary_restrictions: list[str] = Field(default_factory=list)
 
 
 class CharacterRelationshipDefinition(ExtensibleCharacterProfileModel):
@@ -1863,14 +2879,23 @@ class CharacterProfileDefinition(ExtensibleCharacterProfileModel):
 
     template_id: str = "human-v1"
     identity: CharacterIdentityDefinition
+    body_measurements: CharacterBodyMeasurementsDefinition = Field(
+        default_factory=CharacterBodyMeasurementsDefinition
+    )
     appearance: CharacterAppearanceDefinition = Field(
         default_factory=CharacterAppearanceDefinition
+    )
+    health: CharacterHealthDefinition = Field(
+        default_factory=CharacterHealthDefinition
     )
     personality: CharacterPersonalityDefinition = Field(
         default_factory=CharacterPersonalityDefinition
     )
     background: CharacterBackgroundDefinition = Field(
         default_factory=CharacterBackgroundDefinition
+    )
+    financial_situation: CharacterFinancialSituationDefinition = Field(
+        default_factory=CharacterFinancialSituationDefinition
     )
     motivations: CharacterMotivationsDefinition = Field(
         default_factory=CharacterMotivationsDefinition
@@ -1880,6 +2905,24 @@ class CharacterProfileDefinition(ExtensibleCharacterProfileModel):
     )
     preferences: CharacterPreferencesDefinition = Field(
         default_factory=CharacterPreferencesDefinition
+    )
+    presentation: CharacterPresentationDefinition = Field(
+        default_factory=CharacterPresentationDefinition
+    )
+    dispositions: CharacterDispositionsDefinition = Field(
+        default_factory=CharacterDispositionsDefinition
+    )
+    communication: CharacterCommunicationDefinition = Field(
+        default_factory=CharacterCommunicationDefinition
+    )
+    decision_coping: CharacterDecisionCopingDefinition = Field(
+        default_factory=CharacterDecisionCopingDefinition
+    )
+    life_structure: CharacterLifeStructureDefinition = Field(
+        default_factory=CharacterLifeStructureDefinition
+    )
+    family: CharacterFamilyDefinition = Field(
+        default_factory=CharacterFamilyDefinition
     )
     relationships: list[CharacterRelationshipDefinition] = Field(
         default_factory=list
@@ -1928,6 +2971,7 @@ class ControllerDefinition(BaseModel):
             "wait",
             "skip",
             "travel_to",
+            "transact",
             "check_environment",
         ]
     )
@@ -1942,6 +2986,7 @@ class ControllerDefinition(BaseModel):
             "wait",
             "skip",
             "travel_to",
+            "transact",
             "check_environment",
         }
         if unknown:
@@ -1963,6 +3008,25 @@ class ActivityDefinition(BaseModel):
     type: ActivityType = ActivityType.IDLE
 
 
+class PossessionsComponentDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    holdings: dict[str, int] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def quantities_are_non_negative(self) -> "PossessionsComponentDefinition":
+        if any(not item_id for item_id in self.holdings):
+            raise ValueError("possession item IDs must not be empty")
+        if any(
+            isinstance(quantity, bool) or quantity < 0
+            for quantity in self.holdings.values()
+        ):
+            raise ValueError(
+                "possession quantities must be non-negative integers"
+            )
+        return self
+
+
 class PlanActionDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1970,6 +3034,7 @@ class PlanActionDefinition(BaseModel):
     target: str | None = None
     duration: float | None = Field(default=None, gt=0)
     mode: TravelMode | None = None
+    offer_id: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def travel_fields_are_consistent(self) -> "PlanActionDefinition":
@@ -1979,8 +3044,24 @@ class PlanActionDefinition(BaseModel):
         elif self.action is ActionType.NAVIGATE:
             if self.target is None:
                 raise ValueError("NAVIGATE requires target")
+        elif self.action is ActionType.TRANSACT:
+            if self.target is None or self.offer_id is None:
+                raise ValueError("TRANSACT requires target and offer_id")
+            if self.mode is not None:
+                raise ValueError("mode is only valid for TRAVEL_TO or NAVIGATE")
+        elif self.action is ActionType.SERVE_TRANSACTION:
+            if self.target is None:
+                raise ValueError(
+                    "SERVE_TRANSACTION requires a transaction request target"
+                )
+            if self.mode is not None or self.offer_id is not None:
+                raise ValueError(
+                    "SERVE_TRANSACTION does not accept mode or offer_id"
+                )
         elif self.mode is not None:
             raise ValueError("mode is only valid for TRAVEL_TO or NAVIGATE")
+        if self.action is not ActionType.TRANSACT and self.offer_id is not None:
+            raise ValueError("offer_id is only valid for TRANSACT")
         return self
 
     def to_domain(self) -> PlanAction:
@@ -1989,6 +3070,7 @@ class PlanActionDefinition(BaseModel):
             target=self.target,
             duration=self.duration,
             mode=self.mode,
+            offer_id=self.offer_id,
         )
 
 
@@ -1999,12 +3081,252 @@ class PlanComponentDefinition(BaseModel):
     current: PlanActionDefinition | None = None
 
 
+type CriterionValue = StrictBool | StrictInt | StrictFloat | StrictStr
+
+
+class EventMatchCriterionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["event_match"]
+    event_type: str = Field(min_length=1)
+    payload_subset: dict[str, JsonValue] = Field(default_factory=dict)
+    effect: GoalCriterionEffect = GoalCriterionEffect.SUCCESS
+
+    def to_domain(self) -> EventMatchCriterion:
+        return EventMatchCriterion(
+            event_type=self.event_type,
+            payload_subset=self.payload_subset,
+            effect=self.effect,
+        )
+
+
+class StateComparisonCriterionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["state_comparison"]
+    component: GoalStateComponent
+    field: str = Field(min_length=1)
+    comparator: GoalComparator
+    value: CriterionValue
+    effect: GoalCriterionEffect = GoalCriterionEffect.SUCCESS
+
+    @model_validator(mode="after")
+    def field_and_comparator_are_safe(
+        self,
+    ) -> "StateComparisonCriterionDefinition":
+        fields = {
+            GoalStateComponent.HOMEOSTASIS: {
+                "satiety",
+                "energy",
+                "stress",
+            },
+            GoalStateComponent.ACTIVITY: {"current"},
+            GoalStateComponent.CONTROLLER: {
+                "enabled",
+                "state_revision",
+                "last_outcome",
+                "request_pending",
+            },
+            GoalStateComponent.PLANNER: {
+                "needs_plan",
+                "request_count",
+                "failure_count",
+                "request_pending",
+            },
+        }
+        if self.field not in fields[self.component]:
+            raise ValueError(
+                f"field {self.field!r} is not available on "
+                f"{self.component.value}"
+            )
+        if self.comparator not in {GoalComparator.EQ, GoalComparator.NE} and (
+            isinstance(self.value, bool)
+            or not isinstance(self.value, int | float)
+        ):
+            raise ValueError("ordered state comparisons require a numeric value")
+        return self
+
+    def to_domain(self) -> StateComparisonCriterion:
+        return StateComparisonCriterion(
+            component=self.component,
+            field=self.field,
+            comparator=self.comparator,
+            value=self.value,
+            effect=self.effect,
+        )
+
+
+class LocationMatchCriterionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["location_match"]
+    location_id: str = Field(min_length=1)
+    location_kind: GoalLocationKind = GoalLocationKind.ANY
+    effect: GoalCriterionEffect = GoalCriterionEffect.SUCCESS
+
+    def to_domain(self) -> LocationMatchCriterion:
+        return LocationMatchCriterion(
+            location_id=self.location_id,
+            location_kind=self.location_kind,
+            effect=self.effect,
+        )
+
+
+class PossessionThresholdCriterionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["possession_threshold"]
+    item_id: str = Field(min_length=1)
+    comparator: GoalComparator = GoalComparator.GTE
+    quantity: int = Field(ge=0)
+    effect: GoalCriterionEffect = GoalCriterionEffect.SUCCESS
+
+    @field_validator("comparator")
+    @classmethod
+    def comparator_is_ordered(
+        cls, value: GoalComparator
+    ) -> GoalComparator:
+        if value is GoalComparator.NE:
+            raise ValueError("possession threshold does not support ne")
+        return value
+
+    def to_domain(self) -> PossessionThresholdCriterion:
+        return PossessionThresholdCriterion(
+            item_id=self.item_id,
+            comparator=self.comparator,
+            quantity=self.quantity,
+            effect=self.effect,
+        )
+
+
+class ActionOutcomeCriterionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["action_outcome"]
+    action: ActionType
+    outcome: ActionOutcome
+    target: str | None = Field(default=None, min_length=1)
+    effect: GoalCriterionEffect = GoalCriterionEffect.SUCCESS
+
+    def to_domain(self) -> ActionOutcomeCriterion:
+        return ActionOutcomeCriterion(
+            action=self.action,
+            outcome=self.outcome,
+            target=self.target,
+            effect=self.effect,
+        )
+
+
+class InteractionCountCriterionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["interaction_count"]
+    interaction_type: InteractionType
+    minimum_count: int = Field(gt=0)
+    target_id: str | None = Field(default=None, min_length=1)
+    effect: GoalCriterionEffect = GoalCriterionEffect.SUCCESS
+
+    def to_domain(self) -> InteractionCountCriterion:
+        return InteractionCountCriterion(
+            interaction_type=self.interaction_type,
+            minimum_count=self.minimum_count,
+            target_id=self.target_id,
+            effect=self.effect,
+        )
+
+
+class SimulationTimeCriterionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["simulation_time"]
+    comparator: GoalComparator = GoalComparator.GTE
+    simulation_time: float = Field(ge=0)
+    effect: GoalCriterionEffect = GoalCriterionEffect.SUCCESS
+
+    @field_validator("comparator")
+    @classmethod
+    def comparator_is_ordered(
+        cls, value: GoalComparator
+    ) -> GoalComparator:
+        if value in {GoalComparator.EQ, GoalComparator.NE}:
+            raise ValueError(
+                "simulation time threshold requires an ordered comparator"
+            )
+        return value
+
+    def to_domain(self) -> SimulationTimeCriterion:
+        return SimulationTimeCriterion(
+            comparator=self.comparator,
+            simulation_time=self.simulation_time,
+            effect=self.effect,
+        )
+
+
+type GoalCriterionDefinition = Annotated[
+    EventMatchCriterionDefinition
+    | StateComparisonCriterionDefinition
+    | LocationMatchCriterionDefinition
+    | PossessionThresholdCriterionDefinition
+    | ActionOutcomeCriterionDefinition
+    | InteractionCountCriterionDefinition
+    | SimulationTimeCriterionDefinition,
+    Field(discriminator="type"),
+]
+
+
+class GoalDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    priority: int = Field(default=0, ge=0, le=100)
+    tags: list[str] = Field(default_factory=list)
+    activation_time: float | None = Field(default=None, ge=0)
+    deadline_time: float | None = Field(default=None, ge=0)
+    completion_policy: GoalCompletionPolicy = GoalCompletionPolicy.ALL
+    criteria: list[GoalCriterionDefinition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def window_and_tags_are_valid(self) -> "GoalDefinition":
+        if (
+            self.activation_time is not None
+            and self.deadline_time is not None
+            and self.deadline_time < self.activation_time
+        ):
+            raise ValueError("deadline_time must not precede activation_time")
+        if any(not tag.strip() for tag in self.tags):
+            raise ValueError("goal tags must not be empty")
+        if len(self.tags) != len(set(self.tags)):
+            raise ValueError("goal tags must be unique")
+        return self
+
+    def to_domain(self) -> DomainGoalDefinition:
+        return DomainGoalDefinition(
+            id=self.id,
+            description=self.description,
+            priority=self.priority,
+            tags=tuple(self.tags),
+            activation_time=self.activation_time,
+            deadline_time=self.deadline_time,
+            completion_policy=self.completion_policy,
+            criteria=tuple(criterion.to_domain() for criterion in self.criteria),
+        )
+
+
 class PlannerComponentDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     daily_goals: list[str] = Field(default_factory=list)
     current_priorities: list[str] = Field(default_factory=list)
+    goals: list[GoalDefinition] = Field(default_factory=list)
     needs_plan: bool = True
+
+    @model_validator(mode="after")
+    def goal_ids_are_unique(self) -> "PlannerComponentDefinition":
+        goal_ids = [goal.id for goal in self.goals]
+        if len(goal_ids) != len(set(goal_ids)):
+            raise ValueError("structured goal IDs must be unique")
+        return self
 
 
 class InitialInformationSourceDefinition(BaseModel):
@@ -2166,11 +3488,56 @@ def _build_world(definition: WorldDefinition) -> WorldMap:
         )
         for station in definition.stations
     )
-    return WorldMap(grid=grid, zones=zones, stations=stations)
+    transaction_points = tuple(
+        point.to_domain() for point in definition.transaction_points
+    )
+    return WorldMap(
+        grid=grid,
+        zones=zones,
+        stations=stations,
+        transaction_points=transaction_points,
+    )
 
 
 def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
     bounds = definition.city.bounds_meters
+    room_worlds = {
+        room.id: _build_world(room.world)
+        for room in definition.rooms
+    }
+    rooms = tuple(
+        Room(
+            id=room.id,
+            key=room.key,
+            name=room.name,
+            room_type=room.type,
+            building_id=room.building_id,
+            offset=room.offset.to_domain(),
+            world=room_worlds[room.id],
+        )
+        for room in definition.rooms
+    )
+    objects = tuple(
+        WorldObject(
+            id=item.id,
+            name=item.name,
+            object_kind=item.object_kind,
+            building_id=item.building_id,
+            room_id=item.room_id,
+            position=item.position.to_domain(),
+            station=(
+                room_worlds[item.room_id].station(item.id)
+                if item.object_kind == "affordance"
+                else None
+            ),
+            transaction_point=(
+                room_worlds[item.room_id].transaction_point(item.id)
+                if item.object_kind == "transaction"
+                else None
+            ),
+        )
+        for item in definition.objects
+    )
     return CityWorld(
         id=definition.city.id,
         name=definition.city.name,
@@ -2184,16 +3551,21 @@ def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
             District(item.id, item.name, item.center.to_domain())
             for item in definition.districts
         ),
+        city_zones=tuple(
+            CityZone(item.id, item.name, item.center.to_domain())
+            for item in definition.districts
+        ),
         buildings=tuple(
             Building(
                 id=item.id,
                 name=item.name,
                 district_id=item.district_id,
                 city_position=item.city_position.to_domain(),
-                local_map_id=item.local_map_id,
+                room_ids=tuple(item.room_ids),
                 entrances=tuple(
                     BuildingEntrance(
                         id=entrance.id,
+                        room_id=entrance.room_id,
                         local_coordinate=entrance.local_coordinate.to_domain(),
                         network_node_id=entrance.neighborhood_node_id,
                     )
@@ -2212,10 +3584,21 @@ def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
             )
             for item in definition.outdoor_places
         ),
-        local_maps={
-            map_id: _build_world(local_map)
-            for map_id, local_map in definition.local_maps.items()
-        },
+        rooms=rooms,
+        portals=tuple(
+            BuildingPortal(
+                id=item.id,
+                building_id=item.building_id,
+                from_room_id=item.from_room_id,
+                from_coordinate=item.from_coordinate.to_domain(),
+                to_room_id=item.to_room_id,
+                to_coordinate=item.to_coordinate.to_domain(),
+                bidirectional=item.bidirectional,
+                available=item.available,
+            )
+            for item in definition.portals
+        ),
+        objects=tuple(sorted(objects, key=lambda item: item.id)),
         nodes=tuple(
             TransportNode(
                 id=item.id,
@@ -2280,31 +3663,82 @@ def _build_space_registry(
             kind="city",
         )
     )
-    building_topologies: dict[str, GridTopology] = {}
+    for city_zone in sorted(city.city_zones, key=lambda item: item.id):
+        registry.register_space(
+            Space(
+                id=city_zone.id,
+                topology=ContainerTopology(city_zone.id),
+                kind="city_zone",
+            )
+        )
+        registry.register_containment(city.id, city_zone.id)
     for building in sorted(city.buildings, key=lambda item: item.id):
-        local_map = city.local_map_for_building(building.id)
-        topology = GridTopology(building.id, local_map)
-        building_topologies[building.id] = topology
         registry.register_space(
             Space(
                 id=building.id,
-                topology=topology,
+                topology=ContainerTopology(building.id),
                 kind="building",
-                metadata={"local_map_id": building.local_map_id},
+                metadata={"city_zone_id": building.district_id},
             )
         )
-        registry.register_containment(city.id, building.id)
-        _register_map_destinations(registry, topology, local_map)
+        registry.register_containment(building.district_id, building.id)
+
+    room_topologies: dict[str, GridTopology] = {}
+    for room in sorted(city.rooms, key=lambda item: item.id):
+        building = city.building(room.building_id)
+        topology = GridTopology(room.id, room.world)
+        room_topologies[room.id] = topology
+        registry.register_space(
+            Space(
+                id=room.id,
+                topology=topology,
+                kind="room",
+                metadata={
+                    "building_id": building.id,
+                    "room_key": room.key,
+                    "offset": room.offset.to_payload(),
+                },
+            )
+        )
+        registry.register_containment(building.id, room.id)
+        _register_map_destinations(
+            registry,
+            topology,
+            room.world,
+            space_destination_id=room.id,
+        )
+
+    for portal in sorted(city.portals, key=lambda item: item.id):
+        registry.register_transition(
+            Transition(
+                id=portal.id,
+                from_locator=room_topologies[
+                    portal.from_room_id
+                ].locator(portal.from_coordinate),
+                to_locator=room_topologies[
+                    portal.to_room_id
+                ].locator(portal.to_coordinate),
+                traversal_kind="room_portal",
+                executor_id="portal",
+                cost_model_id="portal",
+                bidirectional=portal.bidirectional,
+                metadata={
+                    "building_id": portal.building_id,
+                    "available": portal.available,
+                },
+            )
+        )
 
     for building in sorted(city.buildings, key=lambda item: item.id):
-        topology = building_topologies[building.id]
         for entrance in sorted(building.entrances, key=lambda item: item.id):
-            building_locator = topology.locator(entrance.local_coordinate)
+            room_locator = room_topologies[entrance.room_id].locator(
+                entrance.local_coordinate
+            )
             city_locator = city_topology.node_locator(entrance.network_node_id)
             registry.register_transition(
                 Transition(
                     id=entrance.id,
-                    from_locator=building_locator,
+                    from_locator=room_locator,
                     to_locator=city_locator,
                     traversal_kind="building_entrance",
                     executor_id="travel",
@@ -2312,11 +3746,12 @@ def _build_space_registry(
                     bidirectional=True,
                     metadata={
                         "building_id": building.id,
+                        "room_id": entrance.room_id,
                         "network_node_id": entrance.network_node_id,
                     },
                 )
             )
-            registry.register_destination(building.id, building_locator)
+            registry.register_destination(building.id, room_locator)
 
     for place in sorted(city.outdoor_places, key=lambda item: item.id):
         registry.register_destination(
@@ -2330,7 +3765,18 @@ def _register_map_destinations(
     registry: SpaceRegistry,
     topology: GridTopology,
     world: WorldMap,
+    *,
+    space_destination_id: str | None = None,
 ) -> None:
+    if space_destination_id is not None:
+        for y in range(world.grid.height):
+            for x in range(world.grid.width):
+                coordinate = Coordinate(x, y)
+                if world.grid.is_walkable(coordinate):
+                    registry.register_destination(
+                        space_destination_id,
+                        topology.locator(coordinate),
+                    )
     for zone in sorted(world.zones, key=lambda item: item.id):
         for coordinate in sorted(zone.tiles, key=lambda item: (item.y, item.x)):
             registry.register_destination(
@@ -2341,6 +3787,11 @@ def _register_map_destinations(
         registry.register_destination(
             station.id,
             topology.locator(station.position),
+        )
+    for point in sorted(world.transaction_points, key=lambda item: item.id):
+        registry.register_destination(
+            point.id,
+            topology.locator(point.position),
         )
 
 
@@ -2386,6 +3837,7 @@ def _synthesize_navigation_knowledge(
                         ActionType.MOVE_TO,
                         ActionType.TRAVEL_TO,
                         ActionType.NAVIGATE,
+                        ActionType.TRANSACT,
                     }
                     or action.target is None
                     or action.target in known_ids
@@ -2488,32 +3940,33 @@ def _synthesize_navigation_knowledge(
             )
 
 
-def _initial_city_local_map(
+def _initial_city_room_world(
     scenario: ScenarioDefinition,
     city: CityWorld,
 ) -> WorldMap:
     for entity in scenario.entities:
         raw = entity.components.get("spatial_location")
-        if not raw or raw.get("scale") != SpatialScale.BUILDING.value:
+        if not raw or raw.get("local_coordinate") is None:
             continue
         place_id = raw.get("place_id")
         if isinstance(place_id, str):
-            return city.local_map_for_building(place_id)
-    return city.local_maps[sorted(city.local_maps)[0]]
+            return city.room_world(place_id)
+    if not city.rooms:
+        raise ValueError("city world requires at least one room")
+    return city.rooms[0].world
 
 
 def _validate_spatial_location(
     city: CityWorld,
     location: WorldLocation,
 ) -> None:
-    if location.scale is SpatialScale.BUILDING:
-        local_map = city.local_map_for_building(location.place_id)
+    if location.local_coordinate is not None:
+        room_world = city.room_world(location.place_id)
         if (
-            location.local_coordinate is None
-            or not local_map.grid.is_walkable(location.local_coordinate)
+            not room_world.grid.is_walkable(location.local_coordinate)
         ):
             raise ValueError(
-                f"invalid local coordinate for building {location.place_id}"
+                f"invalid local coordinate for room {location.place_id}"
             )
     elif location.network_node_id is not None:
         city.node(location.network_node_id)

@@ -6,10 +6,21 @@ from dataclasses import dataclass
 from enum import StrEnum
 from uuid import uuid4
 
+from stage0_sim.application.data_capture import (
+    BufferedResearchRecorder,
+    ResearchRecorder,
+    RunnerPhase,
+)
 from stage0_sim.domain.clock import SimulationClock
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.events import DomainEvent, EventBus
+from stage0_sim.domain.npcs import NpcControlMode
 from stage0_sim.domain.systems import SystemContext, SystemExecutor
+
+RunnerPhaseHandler = Callable[
+    [RunnerPhase, "SimulationRunner", SystemContext],
+    None,
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +30,8 @@ class RunConfiguration:
     speed: float = 1.0
     run_id: str | None = None
     cognition_execution_mode: str = "global_barrier"
+    npc_control_mode: NpcControlMode = NpcControlMode.AUTO
+    effective_npc_control_mode: NpcControlMode = NpcControlMode.DETERMINISTIC
 
     def __post_init__(self) -> None:
         if self.dt <= 0:
@@ -58,20 +71,38 @@ class SimulationRunner:
         registry: Registry | None = None,
         systems: SystemExecutor | None = None,
         events: EventBus | None = None,
+        research_recorder: BufferedResearchRecorder | None = None,
     ) -> None:
         self.configuration = configuration
         self.clock = SimulationClock(dt=configuration.dt)
         self.registry = registry or Registry()
         self.systems = systems or SystemExecutor()
         self.events = events or EventBus(configuration.run_id or str(uuid4()))
+        self.research_recorder = research_recorder or BufferedResearchRecorder()
+        self.research_recorder.bind_clock(
+            lambda: self.clock.tick,
+            lambda: self.clock.simulation_time,
+        )
+        if not self.registry.has_resource(BufferedResearchRecorder):
+            self.registry.set_resource(self.research_recorder)
+        for _resource_type, resource in self.registry.resource_items():
+            binder = getattr(resource, "bind_research_recorder", None)
+            if callable(binder):
+                binder(self.research_recorder)
         self.rng = random.Random(configuration.seed)
         self.speed = configuration.speed
         self.status = RunnerStatus.CREATED
         self.cognition_phase = CognitionPhase.IDLE
         self._cognition_wait_started_at: float | None = None
         self._tick_completed_handlers: list[Callable[[DomainEvent], None]] = []
+        self._phase_handlers: list[RunnerPhaseHandler] = []
+        self._run_final_notified = False
         self._advancing = False
         self._stop_requested = False
+
+    @property
+    def research(self) -> ResearchRecorder:
+        return self.research_recorder
 
     @property
     def context(self) -> SystemContext:
@@ -83,9 +114,18 @@ class SimulationRunner:
         if self.status is not RunnerStatus.CREATED:
             return
         self.status = RunnerStatus.RUNNING
+        self._notify_phase(RunnerPhase.RUN_INITIAL)
         self._emit(
             "simulation.started",
-            {"seed": self.configuration.seed, "dt": self.configuration.dt, "speed": self.speed},
+            {
+                "seed": self.configuration.seed,
+                "dt": self.configuration.dt,
+                "speed": self.speed,
+                "npc_control_mode": self.configuration.npc_control_mode.value,
+                "effective_npc_control_mode": (
+                    self.configuration.effective_npc_control_mode.value
+                ),
+            },
         )
 
     def pause(self) -> None:
@@ -119,6 +159,7 @@ class SimulationRunner:
     def _finalize_stop(self) -> None:
         self._prepare_stop()
         self._stop_requested = False
+        self.notify_run_final()
         self._emit("simulation.stopped")
 
     def _prepare_stop(self) -> None:
@@ -152,6 +193,17 @@ class SimulationRunner:
         handler: Callable[[DomainEvent], None],
     ) -> None:
         self._tick_completed_handlers.append(handler)
+
+    def subscribe_phase(self, handler: RunnerPhaseHandler) -> None:
+        """Subscribe a read-only observer to runner lifecycle boundaries."""
+        self._phase_handlers.append(handler)
+
+    def notify_run_final(self) -> None:
+        """Notify observers of final state once, including external finalizers."""
+        if self._run_final_notified:
+            return
+        self._run_final_notified = True
+        self._notify_phase(RunnerPhase.RUN_FINAL)
 
     def set_speed(self, speed: float) -> None:
         if speed <= 0:
@@ -239,7 +291,9 @@ class SimulationRunner:
         try:
             event_start = len(self.events.events)
             self.clock.advance()
+            self._notify_phase(RunnerPhase.TICK_PRE_SYSTEMS)
             self.systems.update(self.context)
+            self._notify_phase(RunnerPhase.TICK_POST_SYSTEMS)
             coordinator = (
                 self.registry.get_resource(AgentWorkCoordinator)
                 if self.registry.has_resource(AgentWorkCoordinator)
@@ -330,6 +384,7 @@ class SimulationRunner:
                 tick_event = self._emit("simulation.tick", {"dt": self.clock.dt})
             if self._stop_requested:
                 self._prepare_stop()
+            self._notify_phase(RunnerPhase.TICK_POST_COGNITION)
             for handler in tuple(self._tick_completed_handlers):
                 handler(tick_event)
             if self._stop_requested:
@@ -343,6 +398,11 @@ class SimulationRunner:
 
     def _mark_cognition_applying(self) -> None:
         self.cognition_phase = CognitionPhase.APPLYING
+
+    def _notify_phase(self, phase: RunnerPhase) -> None:
+        context = self.context
+        for handler in tuple(self._phase_handlers):
+            handler(phase, self, context)
 
     def _emit(
         self,

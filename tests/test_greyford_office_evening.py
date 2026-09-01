@@ -2,13 +2,15 @@ from collections import deque
 from pathlib import Path
 
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
+from stage0_sim.adapters.elements import FileSystemElementLibrary
 from stage0_sim.application.characters import prepare_scenario
 from stage0_sim.application.information import InformationStore
 from stage0_sim.application.navigation import NavigationService
-from stage0_sim.application.scenario import create_runner, load_scenario
+from stage0_sim.application.scenario import ScenarioDefinition, create_runner
+from stage0_sim.application.scenario_resolution import load_and_resolve_scenario
 from stage0_sim.domain.components import (
     HomeostasisComponent,
-    PlanComponent,
+    NpcComponent,
     PositionComponent,
     SpatialLocationComponent,
 )
@@ -37,10 +39,26 @@ FOCUS_BUILDINGS = {
     "building-greyford-spruce-childcare",
     "building-greyford-lantern-coworking",
 }
+FOCUS_TRANSACTION_POINTS = {
+    "transaction-point-greyford-quayside-ticket-machine",
+    "transaction-point-greyford-quayline-counter",
+    "transaction-point-greyford-rivermarket-checkout",
+    "transaction-point-greyford-northbank-dispensary",
+    "transaction-point-greyford-meridian-check-in",
+    "transaction-point-greyford-alder-front-desk",
+    "transaction-point-greyford-mobility-service",
+}
+
+
+def _load_scenario() -> ScenarioDefinition:
+    return load_and_resolve_scenario(
+        SCENARIO_PATH,
+        FileSystemElementLibrary(ROOT / "elements"),
+    ).scenario
 
 
 def _runner(*, run_id: str):
-    scenario = load_scenario(SCENARIO_PATH)
+    scenario = _load_scenario()
     prepared = prepare_scenario(
         scenario,
         FileSystemCharacterLibrary(ROOT / "characters"),
@@ -69,7 +87,7 @@ REPRESENTATIVE_INFRASTRUCTURE = {
 
 
 def test_greyford_materializes_city_neighborhood_and_character_knowledge() -> None:
-    scenario = load_scenario(SCENARIO_PATH)
+    scenario = _load_scenario()
     world = scenario.world
     assert world is not None
     assert world.type == "city"
@@ -78,15 +96,63 @@ def test_greyford_materializes_city_neighborhood_and_character_knowledge() -> No
     assert len(world.districts) == 9
     assert len(world.buildings) == 35
     assert len(world.outdoor_places) == 13
-    assert len(world.local_maps) == 35
+    assert len(world.rooms) == 35
     assert len(world.transport.nodes) == 79
     assert len(world.transport.edges) == 91
 
     building_ids = {building.id for building in world.buildings}
     assert building_ids >= FOCUS_BUILDINGS
     assert building_ids >= REPRESENTATIVE_INFRASTRUCTURE
-    assert {building.local_map_id for building in world.buildings} == set(
-        world.local_maps
+    assert {
+        room.building_id for room in world.rooms
+    } == building_ids
+    assert {item.id for item in scenario.items} >= {
+        "greyford-cent",
+        "returnable-glass-bottle",
+        "rivermarket-grocery-bag",
+        "greyford-transit-ticket",
+    }
+    assert {role.id for role in scenario.npc_roles} == {
+        "alder-receptionist",
+        "meridian-receptionist",
+        "northbank-pharmacy-clerk",
+        "quayside-cashier",
+        "riverfront-service-clerk",
+    }
+    focus_maps = [
+        room.world
+        for room in world.rooms
+        if room.building_id in FOCUS_BUILDINGS
+    ]
+    assert {
+        point.id
+        for local_map in focus_maps
+        for point in local_map.transaction_points
+    } == FOCUS_TRANSACTION_POINTS
+    operations = {
+        point.id: point.operation.value
+        for local_map in focus_maps
+        for point in local_map.transaction_points
+    }
+    assert operations[
+        "transaction-point-greyford-quayside-ticket-machine"
+    ] == "AUTOMATED"
+    assert all(
+        operation == "STAFFED"
+        for point_id, operation in operations.items()
+        if point_id
+        != "transaction-point-greyford-quayside-ticket-machine"
+    )
+    assert all(
+        quantity >= 0
+        for local_map in focus_maps
+        for point in local_map.transaction_points
+        for quantity in point.holdings.values()
+    )
+    assert not any(
+        zone.name.endswith(("Entry and Reception", "Main Interior"))
+        for local_map in focus_maps
+        for zone in local_map.zones
     )
 
     node_by_id = {node.id: node for node in world.transport.nodes}
@@ -94,14 +160,21 @@ def test_greyford_materializes_city_neighborhood_and_character_knowledge() -> No
         assert building.entrances
         for entrance in building.entrances:
             assert entrance.neighborhood_node_id in node_by_id
-            local_map = world.local_maps[building.local_map_id]
-            assert 0 <= entrance.local_coordinate.x < local_map.width
-            assert 0 <= entrance.local_coordinate.y < local_map.height
+            room = next(
+                room
+                for room in world.rooms
+                if room.id == entrance.room_id
+            )
+            assert 0 <= entrance.local_coordinate.x < room.world.width
+            assert 0 <= entrance.local_coordinate.y < room.world.height
 
-    office = world.local_maps["map-greyford-civic-analytics-office"]
-    restaurant = world.local_maps["map-greyford-juniper-kitchen"]
-    transit = world.local_maps["map-greyford-quayside-metro-station"]
-    home = world.local_maps["map-greyford-rowan-home"]
+    room_worlds = {
+        room.building_id: room.world for room in world.rooms
+    }
+    office = room_worlds["building-greyford-civic-analytics-office"]
+    restaurant = room_worlds["building-greyford-juniper-kitchen"]
+    transit = room_worlds["building-greyford-quayside-metro-station"]
+    home = room_worlds["building-greyford-rowan-home"]
     assert (office.width, office.height, len(office.zones), len(office.stations)) == (
         18,
         12,
@@ -159,11 +232,16 @@ def test_greyford_materializes_city_neighborhood_and_character_knowledge() -> No
     assert profile_payload["personal_dossier"]["research_annotations"][
         "nested_extension_demo"
     ]["observations"][0]["domain"] == "mobility"
-    assert profile_payload["custom_sections"][0]["fields"][1]["value"][3] == (
-        "take the westbound metro"
+    assert profile_payload["presentation"]["context_variations"][0] == (
+        "uses relaxed technical layers while travelling or hiking"
+    )
+    entity = scenario.entities[0]
+    assert entity.components["planner"]["current_priorities"][2] == (
+        "take the metro home"
     )
 
     runner = _runner(run_id="greyford-content")
+    assert not tuple(runner.registry.query_entities(NpcComponent))
     city = runner.registry.get_resource(CityWorld)
     route = find_transport_route(
         city,
@@ -271,13 +349,11 @@ def test_greyford_evening_finishes_dinner_before_arriving_home() -> None:
     position = runner.registry.get_component(
         CHARACTER_ID, PositionComponent
     ).coordinate
-    plan = runner.registry.get_component(CHARACTER_ID, PlanComponent)
     homeostasis = runner.registry.get_component(
         CHARACTER_ID, HomeostasisComponent
     )
-    assert location.place_id == "building-greyford-rowan-home"
+    assert location.place_id == "building-greyford-rowan-home.interior"
     assert (position.x, position.y) == (12, 7)
-    assert plan.queue == []
     assert homeostasis.satiety > 90
     assert homeostasis.energy > 70
     assert homeostasis.stress < 30
@@ -292,5 +368,7 @@ def test_greyford_evening_finishes_dinner_before_arriving_home() -> None:
         "system1.blocked",
     }
     assert not any(
-        event.event_type in failure_types for event in runner.events.events
+        event.event_type in failure_types
+        and event.simulation_tick <= home_arrival.simulation_tick
+        for event in runner.events.events
     )

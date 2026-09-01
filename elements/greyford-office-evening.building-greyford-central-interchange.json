@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-central-interchange-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 4
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-central-interchange",
+  "kind": "building",
+  "name": "Greyford Central Rail and Metro Interchange",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "94fbfe02c8d1dd16d51883252f7e09442203422487b42bbd7409cb527442fc93",
+        "id": "greyford-office-evening.map-greyford-central-interchange",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

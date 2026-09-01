@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import dataclass
 
@@ -13,6 +14,14 @@ from stage0_sim.application.agents.contracts import (
 )
 from stage0_sim.application.agents.prompts import PROMPT_VERSION, build_messages
 from stage0_sim.application.agents.tools import ToolRegistry, ToolValidationError
+from stage0_sim.application.data_capture import (
+    DecisionId,
+    ModelRequestId,
+    RecordCategory,
+    RecordJoinIds,
+    RecordSource,
+    ResearchRecorder,
+)
 
 
 @dataclass(slots=True)
@@ -23,6 +32,7 @@ class ToolCallingCharacterController(CharacterController):
     timeout_seconds: float = 30.0
     max_output_tokens: int = 512
     max_read_tool_rounds: int = 1
+    research_recorder: ResearchRecorder | None = None
 
     @property
     def synchronous(self) -> bool:
@@ -46,7 +56,76 @@ class ToolCallingCharacterController(CharacterController):
                 max_output_tokens=self.max_output_tokens,
                 prompt_version=PROMPT_VERSION,
             )
-            turn = await self.model_client.complete(model_request)
+            joins = RecordJoinIds(
+                decision_id=DecisionId(request.decision_id),
+                model_request_id=ModelRequestId(model_request.request_id),
+            )
+            if self.research_recorder is not None:
+                self.research_recorder.record(
+                    "model_request",
+                    {
+                        "operation": "character_decision",
+                        "round": round_number,
+                        "request": model_request,
+                    },
+                    category=RecordCategory.MODEL,
+                    source=RecordSource.MODEL_PROVIDER,
+                    subject_id=request.agent_id,
+                    correlation_id=request.decision_id,
+                    joins=joins,
+                    ordinal=round_number,
+                )
+            try:
+                turn = await self.model_client.complete(model_request)
+            except BaseException as error:
+                if self.research_recorder is not None:
+                    self.research_recorder.record(
+                        "model_error",
+                        {
+                            "operation": "character_decision",
+                            "round": round_number,
+                            "model_request_id": model_request.request_id,
+                            "status": (
+                                "cancelled"
+                                if isinstance(error, asyncio.CancelledError)
+                                else "timeout"
+                                if isinstance(error, TimeoutError)
+                                or getattr(error, "reason", None)
+                                == "provider_timeout"
+                                else "failed"
+                            ),
+                            "error_type": type(error).__name__,
+                            "reason": getattr(error, "reason", None),
+                            "message": str(error),
+                        },
+                        category=RecordCategory.MODEL,
+                        source=RecordSource.MODEL_PROVIDER,
+                        subject_id=request.agent_id,
+                        correlation_id=request.decision_id,
+                        joins=joins,
+                        ordinal=round_number,
+                    )
+                raise
+            if self.research_recorder is not None:
+                self.research_recorder.record(
+                    "model_turn",
+                    {
+                        "operation": "character_decision",
+                        "round": round_number,
+                        "model_request_id": model_request.request_id,
+                        "turn": turn,
+                        "nondeterministic_fields": [
+                            "turn.latency_ms",
+                            "turn.provider_request_id",
+                        ],
+                    },
+                    category=RecordCategory.MODEL,
+                    source=RecordSource.MODEL_PROVIDER,
+                    subject_id=request.agent_id,
+                    correlation_id=request.decision_id,
+                    joins=joins,
+                    ordinal=round_number,
+                )
             turns.append(turn)
             aggregate = _aggregate_turns(turns)
             if len(turn.tool_calls) != 1:

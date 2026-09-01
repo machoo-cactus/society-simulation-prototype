@@ -1,0 +1,186 @@
+{
+  "blocked": [
+    {
+      "x": 6,
+      "y": 0
+    },
+    {
+      "x": 6,
+      "y": 1
+    },
+    {
+      "x": 6,
+      "y": 3
+    },
+    {
+      "x": 6,
+      "y": 4
+    },
+    {
+      "x": 6,
+      "y": 7
+    },
+    {
+      "x": 6,
+      "y": 8
+    },
+    {
+      "x": 6,
+      "y": 10
+    },
+    {
+      "x": 6,
+      "y": 11
+    },
+    {
+      "x": 10,
+      "y": 7
+    },
+    {
+      "x": 11,
+      "y": 7
+    },
+    {
+      "x": 12,
+      "y": 7
+    },
+    {
+      "x": 14,
+      "y": 7
+    },
+    {
+      "x": 15,
+      "y": 7
+    },
+    {
+      "x": 16,
+      "y": 7
+    },
+    {
+      "x": 3,
+      "y": 8
+    },
+    {
+      "x": 4,
+      "y": 8
+    },
+    {
+      "x": 3,
+      "y": 9
+    },
+    {
+      "x": 4,
+      "y": 9
+    },
+    {
+      "x": 15,
+      "y": 1
+    },
+    {
+      "x": 16,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 12,
+  "id": "greyford-office-evening.map-greyford-civic-analytics-office",
+  "kind": "room",
+  "name": "Greyford Civic Analytics Centre interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "373a764f424ce6328b09bcd443d5c056f3a044c4b9d5b0e953607cf5e1b61a73",
+        "id": "greyford-office-evening.station-greyford-office-mara-workstation",
+        "kind": "object"
+      },
+      "id": "station-greyford-office-mara-workstation",
+      "key": "station-greyford-office-mara-workstation",
+      "position": {
+        "x": 14,
+        "y": 3
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "9027165f35c166aaddc40e325436a636883ea07b0b5c7328c2ff1bb2dfbd9593",
+        "id": "greyford-office-evening.station-greyford-office-break-table",
+        "kind": "object"
+      },
+      "id": "station-greyford-office-break-table",
+      "key": "station-greyford-office-break-table",
+      "position": {
+        "x": 2,
+        "y": 10
+      },
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "90c2d6c3837124f436094aca40afb716ce2b41df9238bc4454012cbe76629b36",
+        "id": "greyford-office-evening.station-greyford-office-quiet-chair",
+        "kind": "object"
+      },
+      "id": "station-greyford-office-quiet-chair",
+      "key": "station-greyford-office-quiet-chair",
+      "position": {
+        "x": 11,
+        "y": 9
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 18,
+  "zones": [
+    {
+      "bounds": {
+        "height": 5,
+        "width": 5,
+        "x": 0,
+        "y": 4
+      },
+      "id": "zone-greyford-office-lobby",
+      "name": "Civic Analytics Centre Lobby",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 7,
+        "width": 11,
+        "x": 7,
+        "y": 0
+      },
+      "id": "zone-greyford-office-open-plan",
+      "name": "Transport Analytics Open Office",
+      "tiles": null,
+      "type": "WORKSPACE"
+    },
+    {
+      "bounds": {
+        "height": 5,
+        "width": 11,
+        "x": 7,
+        "y": 7
+      },
+      "id": "zone-greyford-office-collaboration",
+      "name": "Project and Meeting Rooms",
+      "tiles": null,
+      "type": "MEETING"
+    },
+    {
+      "bounds": {
+        "height": 4,
+        "width": 6,
+        "x": 0,
+        "y": 8
+      },
+      "id": "zone-greyford-office-breakroom",
+      "name": "Staff Kitchen and Breakroom",
+      "tiles": null,
+      "type": "AMENITY"
+    }
+  ]
+}

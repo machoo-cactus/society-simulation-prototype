@@ -18,6 +18,48 @@ from stage0_sim.domain.world.topology import (
 
 
 @dataclass(frozen=True, slots=True)
+class ContainerTopology:
+    space_id: str
+
+    def resolve(self, reference: JsonValue) -> Locator:
+        if not isinstance(reference, dict) or reference.get("kind") != "anchor":
+            raise ValueError("container locator must be an anchor reference")
+        anchor_id = reference.get("anchor_id")
+        if not isinstance(anchor_id, str) or not anchor_id:
+            raise ValueError("container anchor requires a non-empty anchor_id")
+        return Locator(
+            self.space_id,
+            {"kind": "anchor", "anchor_id": anchor_id},
+        )
+
+    def plan_local_route(
+        self,
+        origin: Locator,
+        destination: Locator,
+        traversal_context: TraversalContext,
+    ) -> LocalRoute | None:
+        del traversal_context
+        if origin.space_id != self.space_id or destination.space_id != self.space_id:
+            raise ValueError(f"locator is not in space {self.space_id}")
+        if origin != destination:
+            return None
+        return LocalRoute(
+            origin=origin,
+            destination=destination,
+            legs=(),
+            total_cost=0.0,
+        )
+
+    def outgoing_transitions(
+        self,
+        locator: Locator,
+    ) -> tuple[Transition, ...]:
+        if locator.space_id != self.space_id:
+            raise ValueError(f"locator is not in space {self.space_id}")
+        return ()
+
+
+@dataclass(frozen=True, slots=True)
 class GridTopology:
     space_id: str
     world: WorldMap

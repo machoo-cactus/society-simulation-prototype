@@ -65,11 +65,56 @@ class ModelClientError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class ObservedTarget:
     id: str
-    kind: Literal["zone", "station", "character", "building", "outdoor"]
+    kind: Literal[
+        "zone",
+        "station",
+        "transaction_point",
+        "character",
+        "building",
+        "outdoor",
+    ]
     name: str
     supported_actions: tuple[str, ...] = ()
+    offers: tuple["ObservedOffer", ...] = ()
     available: bool = True
     last_observed_tick: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedItemAmount:
+    item_id: str
+    item_name: str
+    unit: str
+    quantity: int
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedOffer:
+    id: str
+    name: str
+    character_gives: tuple[ObservedItemAmount, ...]
+    character_receives: tuple[ObservedItemAmount, ...]
+    duration: float
+    available: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedPossession:
+    item_id: str
+    item_name: str
+    unit: str
+    quantity: int
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedServiceRequest:
+    request_id: str
+    customer_id: str
+    customer_name: str
+    point_id: str
+    offer_id: str
+    offer_name: str
+    requested_at: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +142,15 @@ class EnvironmentObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservedGoal:
+    id: str
+    description: str
+    status: str
+    priority: int
+    tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class CharacterObservation:
     agent_id: str
     display_name: str
@@ -104,9 +158,9 @@ class CharacterObservation:
     simulation_time: float
     location_id: str | None
     activity: str
-    satiety: float
-    energy: float
-    stress: float
+    satiety: float | None
+    energy: float | None
+    stress: float | None
     targets: tuple[ObservedTarget, ...]
     facts: tuple[ObservationFact, ...]
     recent_outcome: str | None
@@ -115,6 +169,9 @@ class CharacterObservation:
     available_travel_modes: tuple[str, ...] = ()
     calendar_time: CalendarTimeObservation | None = None
     environment: EnvironmentObservation | None = None
+    possessions: tuple[ObservedPossession, ...] = ()
+    service_requests: tuple[ObservedServiceRequest, ...] = ()
+    structured_goals: tuple[ObservedGoal, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,7 +189,10 @@ class CharacterDecisionRequest:
     observation: CharacterObservation
     memories: tuple[str, ...]
     allowed_tools: tuple[str, ...]
+    actor_kind: Literal["character", "npc"] = "character"
     situation_description: str = ""
+    situation_content_hash: str = ""
+    situation_input_hash: str = ""
     retrieved_information: tuple[InformationContextCapsule, ...] = ()
     information_retrieval_performed: bool = False
     information_query: str = ""

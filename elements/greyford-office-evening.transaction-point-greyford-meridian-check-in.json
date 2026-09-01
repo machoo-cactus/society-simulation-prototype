@@ -1,0 +1,45 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {
+    "meridian-appointment-receipt": 80
+  },
+  "id": "greyford-office-evening.transaction-point-greyford-meridian-check-in",
+  "kind": "object",
+  "name": "Meridian Clinic Check-in Desk",
+  "npc_role": {
+    "content_hash": "8095740f938a9f827e4e43971f8bfcc0a9987aec7e63edd8ca1b95212d6277cf",
+    "id": "meridian-receptionist",
+    "kind": "npc_role"
+  },
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "greyford-cent",
+          "quantity": 2500
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "meridian-appointment-receipt",
+          "quantity": 1
+        }
+      ],
+      "duration": 10.0,
+      "id": "pay-meridian-consultation-fee",
+      "name": "Pay a walk-in consultation fee"
+    }
+  ],
+  "operation": "STAFFED",
+  "request_timeout": 120.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

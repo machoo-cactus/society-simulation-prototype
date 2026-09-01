@@ -1,0 +1,38 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "id": "entrance-greyford-harcourt-main",
+      "key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "greyford-office-evening.building-greyford-harcourt-residences",
+  "kind": "building",
+  "name": "Harcourt River Residences",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "b6951eef238a10c1645fd80b5f43a5a2321ce3fece195289296a0c66df4fd926",
+        "id": "greyford-office-evening.map-greyford-harcourt-residences",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 1
+}

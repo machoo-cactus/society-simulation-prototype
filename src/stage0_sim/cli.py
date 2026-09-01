@@ -7,10 +7,16 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
+from stage0_sim.adapters.elements import FileSystemElementLibrary
 from stage0_sim.adapters.persistence import SQLiteDatasetStore
+from stage0_sim.application.character_synthesis import (
+    ModelCharacterSituationSynthesizer,
+    compose_character_situations,
+)
 from stage0_sim.application.characters import (
     CharacterConflictError,
     CharacterDefinition,
+    PreparedScenario,
     prepare_scenario,
 )
 from stage0_sim.application.collection import RunDataCollector
@@ -18,10 +24,14 @@ from stage0_sim.application.scenario import (
     ScenarioDefinition,
     ScenarioLoadError,
     create_runner,
-    load_scenario,
+)
+from stage0_sim.application.scenario_resolution import (
+    ScenarioResolutionError,
+    load_and_resolve_scenario,
 )
 from stage0_sim.config import create_model_client, get_settings
 from stage0_sim.domain.events import DomainEvent
+from stage0_sim.domain.npcs import NpcControlMode
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,12 +41,18 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("scenario", type=Path)
     run_parser.add_argument("--ticks", type=int, default=10)
     run_parser.add_argument("--speed", type=float)
+    run_parser.add_argument(
+        "--npc-control",
+        choices=[mode.value for mode in NpcControlMode],
+        help="override automatic, model, or deterministic NPC control",
+    )
     run_parser.add_argument("--realtime", action="store_true")
     run_parser.add_argument("--full-events", action="store_true")
     run_parser.add_argument("--output", type=Path)
     run_parser.add_argument("--database", type=Path)
     run_parser.add_argument("--export", type=Path)
     run_parser.add_argument("--characters-dir", type=Path)
+    run_parser.add_argument("--elements-dir", type=Path)
     run_parser.add_argument(
         "--character",
         action="append",
@@ -74,8 +90,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     try:
-        scenario = load_scenario(args.scenario)
         settings = get_settings()
+        resolved = load_and_resolve_scenario(
+            args.scenario,
+            FileSystemElementLibrary(
+                args.elements_dir or settings.element_directory
+            ),
+        )
+        scenario = resolved.scenario
+        scenario_source = resolved.source.model_dump(mode="json")
+        resolved_elements = resolved.provenance_payload()
         character_directory = args.characters_dir or settings.character_directory
         assignments = _parse_character_assignments(args.character)
         prepared = prepare_scenario(
@@ -83,13 +107,36 @@ def main(argv: Sequence[str] | None = None) -> int:
             FileSystemCharacterLibrary(character_directory),
             assignments,
         )
+        model_client = create_model_client(settings)
+        situations = asyncio.run(
+            compose_character_situations(
+                scenario=prepared.scenario,
+                assignments=prepared.assignments,
+                characters=prepared.characters,
+                synthesizer=(
+                    ModelCharacterSituationSynthesizer(model_client)
+                    if model_client is not None
+                    else None
+                ),
+            )
+        )
+        prepared = PreparedScenario(
+            scenario=prepared.scenario,
+            assignments=prepared.assignments,
+            characters=prepared.characters,
+            situations=situations,
+            scenario_source=scenario_source,
+            resolved_elements=resolved_elements,
+        )
         runner = create_runner(
-            scenario,
+            prepared.scenario,
             resolved_characters=prepared.runtime_characters(),
+            resolved_situations=prepared.runtime_situations(),
             speed=args.speed,
-            model_client=create_model_client(settings),
+            model_client=model_client,
             model_max_output_tokens=settings.llm_max_output_tokens,
             model_max_concurrency=settings.llm_max_concurrency,
+            npc_control_mode=args.npc_control,
         )
         database_path = args.database or (
             Path("data/runs") / f"{runner.events.run_id}.sqlite3"
@@ -99,8 +146,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             store=store,
             runner=runner,
             scenario=prepared.dataset_payload(),
+            private_provenance=prepared.private_research_provenance(),
         )
-    except (ScenarioLoadError, ValueError) as error:
+    except (
+        OSError,
+        json.JSONDecodeError,
+        ScenarioLoadError,
+        ScenarioResolutionError,
+        ValueError,
+    ) as error:
         print(str(error), file=sys.stderr)
         return 2
 

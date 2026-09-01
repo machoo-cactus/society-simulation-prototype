@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from stage0_sim.application.cognition import (
     LocationContext,
     PlannerContext,
+    PlannerGoalContext,
     PlanResult,
     PlanValidationError,
     StationContext,
@@ -14,6 +15,7 @@ from stage0_sim.domain.components import (
     AffordanceExecutionComponent,
     ControllerComponent,
     DriveComponent,
+    GoalComponent,
     HomeostasisComponent,
     MemoryComponent,
     PlanAction,
@@ -26,6 +28,7 @@ from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.plans import is_dialogue_capable
+from stage0_sim.domain.systems.spatial_context import local_world_for_agent
 from stage0_sim.domain.world import WorldMap
 
 
@@ -42,7 +45,6 @@ class MacroPlanningSystem:
 
         if not context.registry.has_resource(WorldMap):
             return
-        world = context.registry.get_resource(WorldMap)
         coordinator = context.registry.get_resource(MacroWorkCoordinator)
         for agent_id in context.registry.query_entities(
             PlannerComponent,
@@ -80,8 +82,14 @@ class MacroPlanningSystem:
                 memory = context.registry.get_component(agent_id, MemoryComponent)
                 memory_query = _memory_query(context, agent_id, planner_state)
                 top_k = memory.top_k
+            world = local_world_for_agent(context.registry, agent_id)
+            if world is None:
+                continue
             planner_context = build_planner_context(
-                context, agent_id, world, planner_state
+                context,
+                agent_id,
+                world,
+                planner_state,
             )
             planner_state.request_pending = True
             coordinator.enqueue_planning(
@@ -90,6 +98,10 @@ class MacroPlanningSystem:
                     context=planner_context,
                     memory_query=memory_query,
                     top_k=top_k,
+                    operation_id=(
+                        f"planner:{agent_id}:"
+                        f"{planner_state.request_count + 1:08d}"
+                    ),
                 )
             )
 
@@ -106,6 +118,9 @@ def validate_plan(
         raise PlanValidationError("planner returned more than 16 actions")
     zone_ids = {zone.id for zone in world.zones}
     stations = {station.id: station for station in world.stations}
+    transaction_points = {
+        point.id: point for point in world.transaction_points
+    }
     timed_actions = {
         ActionType.WORK,
         ActionType.SOCIALIZE,
@@ -124,6 +139,22 @@ def validate_plan(
                 )
         elif action.action in timed_actions and action.duration is None:
             raise PlanValidationError(f"{action.action.value} requires a duration")
+        elif action.action is ActionType.TRANSACT:
+            if action.target is None or action.offer_id is None:
+                raise PlanValidationError(
+                    "TRANSACT requires a target and offer_id"
+                )
+            point = transaction_points.get(action.target)
+            if point is None:
+                raise PlanValidationError(
+                    f"TRANSACT target does not exist: {action.target}"
+                )
+            if not any(
+                offer.id == action.offer_id for offer in point.offers
+            ):
+                raise PlanValidationError(
+                    f"TRANSACT offer does not exist: {action.offer_id}"
+                )
 
         if action.action is ActionType.SOCIALIZE and (
             action.target is None
@@ -180,6 +211,7 @@ def build_planner_context(
         ),
         daily_goals=planner_state.daily_goals,
         memories=memories,
+        structured_goals=_planner_goals(context.registry, agent_id),
     )
 
 
@@ -196,6 +228,24 @@ def _memory_query(
     )
 
 
+def _planner_goals(
+    registry: Registry,
+    agent_id: str,
+) -> tuple[PlannerGoalContext, ...]:
+    if not registry.has_component(agent_id, GoalComponent):
+        return ()
+    return tuple(
+        PlannerGoalContext(
+            id=goal.definition.id,
+            description=goal.definition.description,
+            status=goal.status.value,
+            priority=goal.definition.priority,
+            tags=goal.definition.tags,
+        )
+        for goal in registry.get_component(agent_id, GoalComponent).goals
+    )
+
+
 def action_payload(action: PlanAction) -> dict[str, JsonValue]:
     payload: dict[str, JsonValue] = {"action": action.action.value}
     if action.target is not None:
@@ -204,4 +254,6 @@ def action_payload(action: PlanAction) -> dict[str, JsonValue]:
         payload["duration"] = action.duration
     if action.mode is not None:
         payload["mode"] = action.mode.value
+    if action.offer_id is not None:
+        payload["offer_id"] = action.offer_id
     return payload

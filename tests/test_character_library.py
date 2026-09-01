@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,8 @@ from stage0_sim.application.characters import (
     CharacterDefinition,
     CharacterLibraryError,
     CharacterNotFoundError,
+    age_on,
+    character_age,
     character_content_hash,
     prepare_scenario,
 )
@@ -128,6 +131,134 @@ def test_character_definition_rejects_scenario_owned_state() -> None:
         )
 
 
+def test_version_two_character_uses_canonical_hard_facts() -> None:
+    character = CharacterDefinition.model_validate(
+        {
+            "schema_version": 2,
+            "id": "alex",
+            "identity": {
+                "display_name": "Alex",
+                "birth_date": "1990-02-14",
+            },
+            "body_measurements": {
+                "measured_on": "2026-08-12",
+                "height_cm": 178.0,
+                "weight_kg": 69.4,
+            },
+            "financial_situation": {
+                "as_of_date": "2026-08-31",
+                "currency": "cad",
+                "annual_gross_income": 128000,
+            },
+            "family": {
+                "members": [
+                    {
+                        "member_id": "mei",
+                        "display_name": "Mei",
+                        "relationship": "Sister",
+                        "living_status": "alive",
+                    }
+                ]
+            },
+            "health": {
+                "as_of_date": "2026-08-12",
+                "allergies": [
+                    {
+                        "substance": "Pollen",
+                        "reaction": "Rhinitis",
+                        "severity": "mild",
+                    }
+                ],
+            },
+        }
+    )
+
+    assert character.identity.birth_date == date(1990, 2, 14)
+    assert character.body_measurements.height_cm == 178.0
+    assert character.financial_situation.currency == "CAD"
+    assert character.family.members[0].member_id == "mei"
+    assert character.health.allergies[0].substance == "Pollen"
+
+    with pytest.raises(ValidationError, match="identity.age is legacy"):
+        CharacterDefinition.model_validate(
+            {
+                "schema_version": 2,
+                "id": "legacy-age",
+                "identity": {"display_name": "Legacy", "age": 34},
+            }
+        )
+    with pytest.raises(ValidationError, match="appearance.height is legacy"):
+        CharacterDefinition.model_validate(
+            {
+                "schema_version": 2,
+                "id": "legacy-height",
+                "identity": {"display_name": "Legacy"},
+                "appearance": {"height": "178 cm"},
+            }
+        )
+
+
+def test_age_is_derived_from_scenario_date_with_leap_day_rule() -> None:
+    assert age_on(date(1990, 9, 1), date(2026, 8, 31)) == 35
+    assert age_on(date(1990, 9, 1), date(2026, 9, 1)) == 36
+    assert age_on(date(2000, 2, 29), date(2025, 2, 28)) == 24
+    assert age_on(date(2000, 2, 29), date(2025, 3, 1)) == 25
+
+
+def test_birth_date_age_constraints_use_scenario_calendar(
+    tmp_path: Path,
+) -> None:
+    library = FileSystemCharacterLibrary(tmp_path / "characters")
+    candidate = library.create(
+        CharacterDefinition.model_validate(
+            {
+                "schema_version": 2,
+                "id": "dated-character",
+                "identity": {
+                    "display_name": "Dated Character",
+                    "birth_date": "1990-09-01",
+                },
+            }
+        )
+    )
+    scenario = ScenarioDefinition.model_validate(
+        {
+            "name": "dated-constraint",
+            "calendar": {"start_datetime": "2026-08-31T09:00:00+00:00"},
+            "entities": [
+                {
+                    "id": "agent-001",
+                    "components": {
+                        "character_slot": {
+                            "label": "Thirty-five year old",
+                            "default_character_id": candidate.id,
+                            "constraints": {
+                                "minimum_age": 35,
+                                "maximum_age": 35,
+                            },
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    assert prepare_scenario(scenario, library).assignments == {
+        "agent-001": candidate.id
+    }
+    assert character_age(candidate, date(2026, 8, 31)) == 35
+
+    without_calendar = scenario.model_copy(
+        update={"calendar": None},
+        deep=True,
+    )
+    with pytest.raises(
+        CharacterLibraryError,
+        match="scenario calendar is required",
+    ):
+        prepare_scenario(without_calendar, library)
+
+
 def test_prepared_scenario_freezes_character_for_later_run(
     tmp_path: Path,
 ) -> None:
@@ -138,7 +269,7 @@ def test_prepared_scenario_freezes_character_for_later_run(
             dataset_store=SQLiteDatasetStore(tmp_path / "runs.sqlite3"),
             character_library=library,
         )
-        scenario_id = manager.add_scenario(external_scenario("alex"))
+        scenario_id = await manager.add_scenario(external_scenario("alex"))
         library.update(
             "alex",
             character("alex", "Changed Alex"),
@@ -192,7 +323,9 @@ def test_character_api_crud_uses_content_hashes(tmp_path: Path) -> None:
         )
         content_hash = created.json()["content_hash"]
         assert created.status_code == 201
-        assert client.get("/characters").json()["characters"][0]["id"] == "alex"
+        summary = client.get("/characters").json()["characters"][0]
+        assert summary["id"] == "alex"
+        assert summary["birth_date"] is None
 
         updated_character = character("alex", "Alex Chen")
         updated = client.put(

@@ -3,7 +3,7 @@
 **Audience:** Developers, architects, reviewers, and coding agents  
 **Purpose:** Provide one definitive mental model of the project's goals,
 vocabulary, current implementation, planned direction, and engineering rules  
-**Status date:** 2026-08-31
+**Status date:** 2026-09-01
 
 ## 1. How to use this guide
 
@@ -102,6 +102,24 @@ simulation internals.
 Runs should produce versioned, analyzable records independent of the browser
 interface.
 
+The implemented data foundation preserves an immutable raw record stream,
+normalized relational projections, and versioned derived features. It captures
+authoritative phase state, opportunities, causal lineage, interactions, and
+private controller/model traces without allowing research data to become
+simulation authority, character perception, memory input, or character-
+controller context.
+
+### 4.7 Measurable goals
+
+Scenarios may define strict structured goals with stable IDs, priorities,
+activation/deadline windows, and closed typed success or failure criteria.
+Goal evaluation observes authoritative events and state after physical
+transitions. It never interprets prose or changes physical state.
+
+Legacy `daily_goals` and `current_priorities` remain valid controller/planner
+context. They receive stable generated IDs for lineage but have an `unknown`
+terminal result unless replaced by measurable structured goals.
+
 ## 5. Explicit non-goals
 
 The following are not part of the current Stage 0 target:
@@ -139,17 +157,53 @@ A character may have:
 - a structured profile, senses, knowledge, and an optional LLM controller.
 
 Character profiles are reusable, structured library records. The built-in
-`human-v1` template covers identity, appearance, personality, background,
-stable motivations, capabilities, preferences, relationships, and ordered
-custom experimental sections. Reusable profiles live in independent character
-JSON files. Scenarios own abstract character slots, temporary role briefings,
-goals, priorities, and initial episodic memory; browser operators compose a
-simulation situation by assigning eligible library characters to those slots
-before starting a run.
+`human-v1` template covers identity with a canonical birth date, dated metric
+body measurements, intrinsic appearance, stable health facts, personality,
+background, dated financial facts, stable motivations, capabilities,
+preferences, detailed presentation style, usual dispositions, communication
+and manner, decision and coping patterns, life structure, hard-fact family
+records, relationships, and ordered custom experimental sections.
+Reusable profiles describe enduring defaults, ranges, and conditional
+tendencies, not exact current clothing, affect, carried items, or immediate
+tasks. They live in independent character JSON files.
+
+Age is derived from birth date against the scenario calendar when age-based
+selection is required. Financial, measurement, and health values are explicit
+as-of snapshots. These dossier facts remain informational: they do not create
+money, inventory, family entities, physical capabilities, or live
+physiological state.
+
+Scenarios own abstract character slots, role briefings, goals, priorities,
+initial physical state, world context, and initial episodic memory. After every
+required slot has a valid effective assignment, an optional application-layer
+LLM composition step may instantiate each stable person into a short-term
+character situation. It runs as one transactional batch: no model call starts
+before the assignment set is complete, and no partial batch is staged.
+
+The synthesized situation is frozen, private, descriptive context. It may
+express a current outfit, grooming, affect, recent context, and how existing
+dispositions manifest now. It cannot rewrite the stable profile or create
+authoritative goals, resources, permissions, relationships, affordances, or
+outcomes. Live physiology, perception, memory, plans, and movement remain a
+separate fourth layer controlled by the simulation.
 
 The code currently uses ECS entity IDs such as `agent-001`. The conceptual term
 for a simulated person is **character**, not "LLM agent." This distinction avoids
 confusing the simulated person with the software controlling it.
+
+#### 6.1.1 Transient NPC
+
+A **transient NPC** is a run-scoped character entity created from a compact
+scenario role rather than a durable `human-v1` library record. NPCs reuse
+ordinary position, occupancy, perception, speech, plan, tool-intent, and
+telemetry behavior, so they are visible embodied people rather than hidden
+building logic.
+
+NPC roles contain only a display name, service briefing, restricted tools, and
+sensing limits. Their controller context omits physiology, dossiers, episodic
+memory, broad topology, and unrelated knowledge. Transient means the identity
+is recreated for each run; once lazily spawned, the initial implementation
+keeps it present until that run ends.
 
 ### 6.2 Character controller agent
 
@@ -240,6 +294,14 @@ ordered micro-tick. Systems may update domain state and emit events.
 
 System ordering is part of simulation semantics and must be explicit.
 
+Structured measurable goals are evaluated by the application-layer
+`goal_evaluation` system at order 280. This is after authoritative physical
+transitions and perception (through order 250), but before memory, planning,
+and controller scheduling (orders 290 and later). The evaluator may update only
+goal runtime state and emit `goal.*` lifecycle events; it must never mutate
+physical world state. Legacy string goals keep deterministic generated IDs and
+an unknown outcome rather than being inferred successful.
+
 ### 6.11 Zone
 
 A **zone** is a named set of grid tiles with a functional meaning, such as an
@@ -264,6 +326,25 @@ Examples:
 Stations define availability, capacity, action duration, and deterministic
 effects.
 
+#### 6.12.1 Item catalog and possessions
+
+The **item catalog** defines the stable IDs, display names, and units used by a
+scenario. A character's **possessions** component is the authoritative live
+record of non-negative integer quantities held by that character. Currency is
+an ordinary catalog item expressed in minor units; profile prose about finances
+does not create authoritative funds.
+
+#### 6.12.2 Transaction point and offer
+
+A **transaction point** is an explicit fixed object in a room grid. It has its
+own finite mutable holdings, availability, capacity, and configured offers. It
+is not a magical property of its containing building.
+
+An **offer** declares exact `character_gives` and `character_receives` item
+amounts. The point receives and gives the inverse amounts. This explicit
+counterparty boundary can later be operated or gated by a temporary cashier or
+receptionist character without changing the exchange contract.
+
 ### 6.13 Affordance
 
 An **affordance** is an action the world permits under explicit preconditions.
@@ -276,10 +357,30 @@ for example `IDLE`, `WALKING`, `WORKING`, `EATING`, `SLEEPING`, or `RELAXING`.
 
 Activity affects homeostatic rates.
 
+#### 6.14.1 Goal
+
+A **goal** is a scenario-authored desired condition associated with one
+character. A structured goal has a stable ID, description, priority, optional
+tags and simulation-time window, an `all` or `any` completion policy, and a
+closed set of measurable criteria.
+
+Criteria may match structured events, allowed state fields, locations,
+possession thresholds, authoritative action outcomes, interaction counts, or
+simulation-time thresholds. Criteria can contribute success or failure
+evidence. Runtime states are `pending`, `active`, `succeeded`, `failed`,
+`expired`, `retired`, and `unknown`.
+
+Goal links on actions distinguish declared intent from contextual association.
+The research dataset records definitions, evidence, transitions, links, and
+terminal episodes. A goal description is not permission, an action, or proof
+of success.
+
 ### 6.15 Plan
 
 A **plan** is the character's current and queued sequence of intentional
-`PlanAction` values.
+action instances. Each runtime instance wraps an immutable `PlanAction`
+specification and adds action identity, origin, plan revision, goal links,
+decision/tool lineage, creation time, and root correlation.
 
 Plans are private character state. They are visible to the operator but must not
 be exposed automatically to other characters.
@@ -298,6 +399,7 @@ A **plan action** is a validated command from the closed domain vocabulary:
 - `IDLE`
 - `TRAVEL_TO`
 - `NAVIGATE`
+- `TRANSACT`
 
 `NAVIGATE` retains one generalized route and progress record while compiling
 physical work into existing local movement and city travel primitives.
@@ -316,6 +418,7 @@ Initial tools:
 - `say`
 - `wait`
 - `skip`
+- `transact`
 
 A tool call expresses what the controller wants the character to attempt. It
 does not prove that the action happened.
@@ -396,7 +499,8 @@ episode or observation.
 **Telemetry** is operator-facing realtime data used for visualization,
 inspection, and debugging.
 
-Telemetry may be omniscient. It must not be used as character perception.
+Telemetry may be omniscient. It must never be used as character perception or
+character-controller context. It is distinct from exhaustive research capture.
 
 ### 6.28 Domain event
 
@@ -414,9 +518,16 @@ can be compared between equivalent runs.
 
 ### 6.30 Dataset record
 
-A **dataset record** is a versioned persisted research record derived from a run.
-Dataset records include events, state vectors, trajectories, activity intervals,
-plan transitions, affordances, dialogue, memory references, and model metadata.
+A **dataset record** is an immutable, versioned persisted research record
+derived from a run. The `stage0.dataset.v2` envelope includes stable record and
+run identity, monotonic sequence, schema/category/source/phase/visibility,
+simulation time, entity references, causal IDs, typed goal/plan/action/decision/
+model/tool/interaction/perception/memory/transaction/operator joins, and a
+complete JSON payload.
+
+The raw record stream is the source of truth. SQLite relational tables and
+derived features are query-oriented projections. See
+[Research Data Collection](DATA_COLLECTION.md) for the complete contract.
 
 ### 6.31 Scenario
 
@@ -431,10 +542,19 @@ resource ID is the filename stem and is deliberately separate from the
 scenario's `name`. Editing or saving a library file does not mutate the
 operator's currently staged scenario or an active run.
 
-Staging is an explicit application boundary. It resolves character references
-and freezes a separate process-local prepared scenario snapshot. Starting a run
-is another explicit operation after staging; neither library browsing nor
-staging advances simulation time.
+Staging is an explicit application boundary. It resolves and validates all
+character references, freezes the complete assignment map and source snapshots,
+optionally synthesizes every assigned character situation, and publishes a
+separate process-local prepared scenario only after the whole composition
+succeeds. Starting a run is another explicit operation after staging and never
+performs synthesis; neither library browsing nor staging advances simulation
+time.
+
+Real synthesis output is nondeterministic input. The frozen situation, canonical
+input and content hashes, prompt/schema versions, provider/model identity, and
+usage metadata are stored with the prepared scenario and run dataset.
+Deterministic request IDs allow existing model recording and replay to reproduce
+the composition without network access.
 
 ### 6.32 Run
 
@@ -554,6 +674,7 @@ Current high-level tick behavior:
 
 ```text
 advance fixed clock
+  -> capture tick_pre_systems
   -> start/progress current plan execution
   -> pathfind
   -> apply movement-related activity state
@@ -565,9 +686,11 @@ advance fixed clock
   -> queue memory work
   -> queue dialogue work
   -> queue planning work
-  -> emit simulation.tick
-  -> drain safe macro work after the system pass
-  -> persist post-cognition boundary
+  -> capture tick_post_systems
+  -> global_barrier: drain/wait/apply all cognition, then emit simulation.tick
+     background: emit simulation.tick, then apply currently settled cognition
+  -> capture tick_post_cognition
+  -> commit the tick's dataset transaction
 ```
 
 The exact system order is code-level semantics. Do not reorder systems based only
@@ -665,29 +788,43 @@ Current implementation:
 
 ## 12. Movement and spatial grounding
 
-Local maps are rectangular discrete grids where a character occupies one tile.
-The implemented navigation abstraction represents grids, sparse city graphs,
-and buildings as registered spaces with typed locators and transitions. The
-recursive planner composes local topology routes with cross-space transitions;
-it does not flatten the world into one giant graph.
+Room maps are rectangular discrete grids where a character occupies one tile.
+Rooms are the sole interior grid execution spaces. Buildings and city zones
+are containment spaces, while the city owns the sparse exterior transport
+network. The recursive planner composes room-grid routes, explicit room
+portals, building entrances, and sparse transport legs without flattening the
+world into one giant graph.
 
-Schema-version-2 city scenarios add an explicit hierarchy above local grids:
+Reference-format city scenarios add an explicit hierarchy above local grids:
 
 ```text
-city -> district -> building -> local map -> zone -> tile/station
+city -> city zone -> building -> room -> object/tile
 ```
 
+Buildings, rooms, objects, and transient NPC roles may be reusable,
+hash-pinned element-library resources. Scenario validation resolves these
+references and typed overrides before runner construction; ordered simulation
+systems never perform filesystem lookups or lazy element resolution. Runtime
+and dataset projections retain the resolved hierarchy and exact element
+provenance.
+
 Exterior movement uses sparse typed transport nodes and edges rather than a
-city-sized dense grid. `SpatialLocationComponent` remains authoritative across
-building, neighborhood, and city scales; `TravelComponent` records route legs,
-mode, progress, vehicle, and interruption state. `NavigationComponent` retains
-the generalized route, compiled primitive progress, status, and failure reason.
-Authoritative execution always resolves against `SpaceRegistry`.
+city-sized dense grid. An interior `SpatialLocationComponent` identifies the
+authoritative room space plus a room-local coordinate. Its `SpatialScale`
+value is compatibility output, not the source of containment or movement
+authority. `TravelComponent` records route legs, mode, progress, vehicle, and
+interruption state. `NavigationComponent` retains the generalized route,
+compiled primitive progress, status, and failure reason. Authoritative
+execution always resolves against `SpaceRegistry`.
 
 The operator map camera, semantic zoom level, inspected character, and optional
 follow mode are presentation state only. They do not change
 `SpatialLocationComponent`, navigation, character perception, or controller
 context. An operator may view the world without inspecting any character.
+
+Operator semantic zoom now distinguishes city, city-zone, building, and room
+detail. City-zone, room, and world-object read APIs expose the same containment
+IDs used by telemetry and `SpaceRegistry`.
 
 Controller destination context comes from the character's
 `KnownTopologyProjection`, backed by `knowledge.place` and `knowledge.route`
@@ -698,11 +835,12 @@ are treated as locally aware. Explicitly queued scenario destinations may
 receive deterministic compatibility knowledge so legacy scenarios continue to
 run without all-city omniscience.
 
-The current execution compiler supports grid movement, building entrances, and
-sparse city travel. Other transition executors can be planned but fail
-explicitly until an execution adapter exists. Stale or invalid known locators
-also fail explicitly when checked against authoritative topology. Successful
-general navigation and standalone travel create deterministic, private
+The execution compiler supports room-grid movement, explicit room portals,
+building entrances, and sparse city travel. Portal traversal validates the
+current locator, destination occupancy, and availability before changing room
+space. Stale or invalid known locators fail explicitly when checked against
+authoritative topology. Successful general navigation and standalone travel
+create deterministic, private
 `knowledge.route` documents for the navigating character. The documents record
 the final locator, route transition IDs, simulation time, and causal event
 references with `DIRECT_EXPERIENCE` provenance, and are immediately reusable by
@@ -739,6 +877,61 @@ Affordances are deterministic state machines with:
 An LLM may request `perform(action="EAT")`, but it cannot specify
 `satiety_delta=100`. Effects belong to scenario/world configuration.
 
+### 13.1 Transaction execution
+
+Transactions are deterministic, all-or-nothing state machines. A `TRANSACT`
+plan action identifies one observable transaction point and one configured
+offer. Execution validates:
+
+- the point and offer exist in the character's current local map;
+- the character is at the point;
+- the point is currently available and below capacity;
+- the character can supply every `character_gives` amount;
+- the point can supply every `character_receives` amount.
+
+`transaction.started` and progress events transfer nothing. Immediately before
+completion, volatile preconditions and both holdings are checked again. The
+character and point holdings are then changed together and a structured
+`transaction.completed` event records the before/after state. Failure,
+cancellation, or System 1 preemption transfers nothing.
+
+Competing characters are processed in stable character-ID order. Capacity
+limits concurrent work, and completion-time stock validation prevents
+overselling even when capacity is greater than one.
+
+Buildings remain spatial containers. They neither mint items nor execute
+transactions. Direct character-to-character trading, credit, negotiated
+prices, and purchased-item consumption are separate future behaviors.
+
+Transaction points declare one operation mode:
+
+- `AUTOMATED` executes the configured exchange directly and is reserved for
+  explicitly automated services such as ticket machines.
+- `STAFFED` queues the customer request and requires the assigned NPC to commit
+  `serve_transaction(request_id)` before the exchange may start.
+
+Staffed points define distinct adjacent customer and staff tiles. The first
+queued request lazily creates the run-scoped NPC at the staff tile. Occupied
+staff tiles cause explicit spawn-blocked events and retries; an unserved
+request eventually fails at its simulation-time timeout.
+
+The point continues to own its stock and funds. The NPC authorizes a configured
+request but cannot alter terms or claim success. Deterministic and model-backed
+NPCs use the same tool, intent, plan, and domain-validation path.
+
+### 13.2 Interaction episodes
+
+Research capture groups multi-entity activity into deterministic interaction
+lifecycles. Implemented families include direct speech, generated dialogue,
+transactions, co-presence, observer/subject visibility intervals, and shared-
+resource contention.
+
+An interaction retains its stable ID, ordered participant roles, constituent
+event IDs, location/environment context, content visibility, initiating
+lineage, simulation-time duration, and terminal status. This grouping is an
+analytical projection only: it cannot make private plans, reasons, prompts,
+model text, or memories perceptible to another character.
+
 ## 14. Cognition isolation
 
 Cognition has three separable concerns:
@@ -765,6 +958,14 @@ result is checked for:
 - current action eligibility;
 - current target/preconditions.
 
+The exhaustive research recorder observes this boundary without becoming part
+of it. It records every scheduler eligibility evaluation, complete structured
+decision request, retrieval context, rendered provider-neutral model request,
+normalized model turn/error, read-tool round, budget/barrier metadata, and
+eventual decision result. These traces are `PRIVATE_RESEARCH`; they are not
+domain events and never enter perception, memory routing, normal realtime
+telemetry, or a later controller request merely because they were captured.
+
 ## 15. Character-controller model
 
 The character controller receives:
@@ -786,6 +987,17 @@ It is instructed:
 The first version permits at most one state-changing tool call per cognition
 opportunity.
 
+Transient NPC controllers receive a smaller request containing only their
+role, local embodied state, assigned point and public offers, visible
+characters, perceptible facts, and assigned request IDs. They do not receive
+customer balances, private plans or reasons, point-wide hidden stock, stable
+character dossiers, or memory retrieval.
+
+NPC control resolves once at run creation. `auto` selects model control when a
+provider is configured and deterministic control otherwise. `model` requires a
+provider, while `deterministic` performs no NPC model calls. A model failure is
+explicit and never silently falls back to deterministic service.
+
 ### 15.1 Initial tools
 
 | Tool | Meaning | Typical domain translation |
@@ -794,6 +1006,7 @@ opportunity.
 | `go_to(target_id, reason)` | Compatibility alias for a known local target | `NAVIGATE` |
 | `travel_to(target_id, mode, reason)` | Compatibility alias for known city travel | `NAVIGATE` |
 | `perform(action, target_id, duration, reason)` | Attempt a supported activity | Timed action or affordance request |
+| `serve_transaction(request_id, reason)` | Authorize one assigned staffed-point request | `SERVE_TRANSACTION` |
 | `say(target_id, text, reason)` | Speak exact in-world words | Speech intent |
 | `wait(duration, reason)` | Intentionally remain idle | `IDLE` |
 | `skip(reconsider_after_seconds, reason)` | No useful decision is needed now | No physical plan; defer cognition eligibility |
@@ -956,13 +1169,27 @@ Avoid event text as the only representation of meaning.
 Event visibility is not implicit. A global event can remain admin-only while a
 separate privacy-safe perceptible fact is routed to local observers.
 
+The collector mirrors every domain event into the immutable research stream
+while preserving source event, causation, correlation, entity, and typed
+lineage IDs. Application-only records capture private provider/controller
+boundaries that must not be broadcast as events. The two paths meet only in the
+dataset; recording a private trace does not make it observable in-world.
+
+Simulation-owned identities and record sequence are stable within a run.
+`causation_id` identifies an immediate cause, `correlation_id` groups a
+workflow, and typed joins connect goals, plans, decisions, model rounds, tools,
+actions, interactions, perception facts, memories, transaction requests, and
+operator interventions without parsing event prose.
+
 ## 19. Telemetry
 
 Telemetry is a realtime operator projection:
 
 - world grid and zones;
 - stations;
+- transaction-point definitions, live holdings, and availability;
 - character positions and paths;
+- character possessions;
 - homeostatic values;
 - System 1 state;
 - plans and activities;
@@ -983,28 +1210,63 @@ document refresh. Neither path maintains a client-side telemetry model. The
 browser does not own simulation behavior.
 
 Telemetry snapshots may reveal more than any character could know. Never pass a
-telemetry snapshot directly into an LLM character controller.
+telemetry snapshot directly or indirectly into a character controller.
+Exhaustive research capture is also separate: private prompts, model text,
+retrieval context, and full authoritative phase snapshots are excluded from
+normal live panels and realtime telemetry.
 
 ## 20. Persistence and datasets
 
-SQLite stores:
+SQLite schema version 6 stores the `stage0.dataset.v2` immutable raw record log
+plus normalized and derived projections. Capture includes:
 
-- run manifest and seed;
-- scenario;
-- canonical records;
-- state vectors;
-- trajectories;
-- activity intervals;
-- threshold crossings;
-- plans and affordances;
-- dialogue and memory references;
-- provider usage metadata;
-- durable episodic memories.
+- run provenance, scenario, seed, configuration, ordered system and projector
+  coverage manifests, and resolved character/situation identities;
+- `run_initial`, `tick_pre_systems`, `tick_post_systems`,
+  `tick_post_cognition`, and `run_final` authoritative state;
+- state deltas, trajectories, population/resource samples, opportunities, and
+  resource flows;
+- goals, plans, actions, decisions, model rounds, tools, interactions,
+  perception, memory, information retrieval, and their lineage;
+- derived transition, action, decision, goal, and interaction episodes;
+- durable episodic memories and information-document revisions.
 
-JSONL export begins with a run manifest followed by ordered versioned records.
+Raw records are the source of truth. Normalized tables retain useful scalar
+columns plus complete JSON and inherit visibility from the linked raw record.
+Rebuildable analysis projections can be regenerated transactionally from the
+raw stream; a failed rebuild rolls back without deleting raw data or replacing
+the previous projections.
 
-Telemetry sampling is separate from canonical logging. Increasing browser update
-frequency must not change research records.
+The summary reports counts and capture completeness. A run is capture-complete
+only when it ended `completed` or `stopped` and recorded `run_final`; it also
+reports coverage-manifest presence and sequence gaps. Research sink/projection
+failures are explicit and mark the run `capture_failed`.
+
+The compatibility JSONL export begins with a run manifest followed by all
+ordered records, including private research. Filtered NDJSON and analysis ZIP
+exports exclude `PRIVATE_RESEARCH` by default and require
+`include_private=true` for explicit disclosure. The ZIP contains a manifest,
+data dictionary, filtered raw NDJSON, and CSVs for normalized/derived tables.
+
+The server-rendered dataset explorer provides summary, schema, raw-record,
+goal/decision/action/interaction, state-transition, population, and resource
+views with entity/time/status/lineage filters. Its private-data control is an
+explicit opt-in and ordinary GET forms remain the no-JavaScript fallback.
+
+The separate Data Management page catalogs all runs in the configured shared
+API/UI database, including historical and reconciled-interrupted runs.
+Dataset-store ownership leases prevent another live process from being mistaken
+for an abandoned owner during reconciliation or deletion. Server-side selection
+supports pooled and per-run macro aggregates, explicit mixed-run compatibility
+groups, deterministic exports, and token-bound atomic deletion of finalized
+runs. Private-derived aggregates are included by default with a warning and
+exclusion control, but raw private payloads are never rendered there. Deletion
+does not stop active runs or automatically compact the SQLite file.
+
+Telemetry sampling is separate from canonical logging. Increasing browser
+update frequency must not change research records. Datasets are research
+records, not checkpoints; see
+[Research Data Collection](DATA_COLLECTION.md).
 
 ## 21. Determinism model
 
@@ -1030,11 +1292,18 @@ Nondeterministic inputs are captured as explicit records and applied at
 deterministic boundaries. A live model run may not reproduce model text from the
 seed alone; recording and replay are required for behavioral reproduction.
 
+Read-only capture phase hooks and derived projectors must not change the domain
+event stream. Stable record order, run-local IDs, serialization, projection
+order, and feature construction are deterministic for equivalent captured
+inputs. Capture failure is explicit rather than silently dropping rows.
+
 ### 21.3 Canonical comparison
 
-Canonical logs omit run IDs and wall-clock identity where necessary. Provider
-record/replay will make accepted tool calls reproducible independently of a live
-provider.
+Canonical event comparisons omit run IDs and wall-clock identity where
+necessary. Dataset records keep those fields so provenance is complete, but the
+data dictionary labels wall time, provider IDs, latency, and provider metadata
+as nondeterministic/non-canonical. Provider record/replay makes accepted tool
+calls reproducible independently of a live provider.
 
 ## 22. Failure philosophy
 
@@ -1087,19 +1356,21 @@ Do not make a provider swap require changes to domain systems.
 | Fixed-step deterministic runner | Implemented | Pause, resume, step, speed, realtime pacing |
 | ECS registry and ordered systems | Implemented | Stable entity and system ordering |
 | Grid, zones, stations, A* | Implemented | Occupancy-aware movement and retries |
-| Sparse city hierarchy and transport | Implemented, initial | Buildings, local maps, WALK/CYCLE/CAR, direct METRO edges |
+| Sparse city hierarchy and transport | Implemented | Container buildings, authoritative room grids and portals, WALK/CYCLE/CAR, direct METRO edges |
 | Homeostatic integration | Implemented | Satiety, energy, stress |
 | System 1 preemption/recovery | Implemented | Three drives, hysteresis, blocked state |
 | Deterministic affordances | Implemented | Duration, effects, capacity, failures |
+| Possessions and transactions | Implemented | Catalog items, finite point holdings, atomic configured exchanges |
+| Transient service NPCs | Implemented | On-demand staffed counters, restricted context, model/deterministic modes |
 | System 2 plans | Implemented | Closed action vocabulary |
 | Fake/scripted planning | Implemented | No external model required |
 | Generated social dialogue | Implemented, transitional | Separate dialogue generator after social action |
 | Episodic memory/retrieval | Implemented | Durable SQLite episodes and in-memory retrieval |
 | Telemetry API/WebSocket | Implemented | Operator-facing, omniscient API for external clients |
 | Server-rendered operator UI | Implemented | Accessible HTML/SVG, direct forms, ARIA-tested with Playwright |
-| Ground-truth dataset export | Implemented | SQLite and JSONL |
+| Exhaustive research-data foundation | Implemented | Dataset v2 raw log, normalized projections, private traces, phase state, lineage, features, queries, explorer, and filtered exports |
 | Real LLM model client | Implemented, opt-in | OpenAI-compatible async HTTP adapter |
-| Typed controller tools | Implemented | `go_to`, `travel_to`, `perform`, `say`, `wait`, `skip` |
+| Typed controller tools | Implemented | `navigate_to`, `go_to`, `travel_to`, `perform`, `transact`, `say`, `wait`, `skip` |
 | Observer-specific sensing | Implemented | Vision, hearing, inbox, timestamped knowledge |
 | Optional narrator | Planned, optional | Non-authoritative translation only |
 | Async model worker pool | Implemented | Global-barrier default, background compatibility, bounded concurrency, deterministic commit |
@@ -1360,7 +1631,10 @@ Before accepting a substantial feature, confirm:
 - `docs/README.md`: index of active and archived documentation.
 - `docs/PROJECT_STATUS.md`: current implemented capabilities and limitations.
 - `docs/CONCEPT_GUIDE.md`: canonical vocabulary and advanced mental model.
+- `docs/DATA_COLLECTION.md`: research record, visibility, lineage, query,
+  export, projection, and capture-completeness contract.
 - `docs/CHARACTER_PROFILE_GUIDE.md`: reusable profile schema and authoring.
+- `docs/SCENARIO_EDITOR_GUIDE.md`: scenario library and structured editor.
 - `docs/UI_TESTING.md`: mandatory browser-testing workflow.
 - `docs/roadmaps/INFORMATION_AND_NAVIGATION.md`: active follow-on roadmap.
 - `docs/legacy/README.md`: index of completed, superseded, or historical design

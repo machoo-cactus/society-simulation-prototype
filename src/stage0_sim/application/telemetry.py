@@ -4,6 +4,7 @@ from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import SimulationRunner
 from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
+    ActionInstance,
     ActivityComponent,
     CharacterProfileComponent,
     CharacterSituationComponent,
@@ -14,13 +15,21 @@ from stage0_sim.domain.components import (
     MemoryComponent,
     MovementComponent,
     NavigationComponent,
+    NpcComponent,
     PerceptionComponent,
     PlanAction,
     PlanComponent,
     PlannerComponent,
     PositionComponent,
+    PossessionsComponent,
     SpatialLocationComponent,
+    TransactionRequestComponent,
     TravelComponent,
+)
+from stage0_sim.domain.economy import (
+    ItemCatalog,
+    TransactionPoint,
+    TransactionPointRegistry,
 )
 from stage0_sim.domain.environment import (
     EnvironmentAvailabilityRegistry,
@@ -30,6 +39,7 @@ from stage0_sim.domain.environment import (
     wetness_band,
 )
 from stage0_sim.domain.events import DomainEvent, JsonValue
+from stage0_sim.domain.npcs import NpcPoolRegistry
 from stage0_sim.domain.world import CityWorld, VehicleRegistry, WorldMap
 
 TELEMETRY_SCHEMA_VERSION = "stage0.telemetry.v2"
@@ -118,6 +128,9 @@ class TelemetryBroker:
         )
 
     def _on_event(self, event: DomainEvent) -> None:
+        if event.payload.get("visibility") == "private":
+            self._domain_event_offset += 1
+            return
         self.publish_event(event)
 
     def publish_snapshot(self) -> TelemetryMessage:
@@ -209,6 +222,55 @@ def build_ui_bootstrap(runner: SimulationRunner) -> dict[str, JsonValue]:
                 }
                 for station in sorted(world.stations, key=lambda item: item.id)
             ],
+            "transaction_points": [
+                {
+                    "id": point.id,
+                    "name": point.name,
+                    "position": point.position.to_payload(),
+                    "available": point.available,
+                    "capacity": point.capacity,
+                    "operation": point.operation.value,
+                    "staffing": (
+                        {
+                            "role_id": point.staffing.role_id,
+                            "staff_position": (
+                                point.staffing.staff_position.to_payload()
+                            ),
+                            "request_timeout": (
+                                point.staffing.request_timeout
+                            ),
+                        }
+                        if point.staffing is not None
+                        else None
+                    ),
+                    "offers": [
+                        {
+                            "id": offer.id,
+                            "name": offer.name,
+                            "duration": offer.duration,
+                            "character_gives": [
+                                {
+                                    "item_id": amount.item_id,
+                                    "quantity": amount.quantity,
+                                }
+                                for amount in offer.character_gives
+                            ],
+                            "character_receives": [
+                                {
+                                    "item_id": amount.item_id,
+                                    "quantity": amount.quantity,
+                                }
+                                for amount in offer.character_receives
+                            ],
+                        }
+                        for offer in point.offers
+                    ],
+                }
+                for point in sorted(
+                    world.transaction_points,
+                    key=lambda item: item.id,
+                )
+            ],
         }
     city_payload: dict[str, JsonValue] | None = None
     if registry.has_resource(CityWorld):
@@ -230,33 +292,152 @@ def build_ui_bootstrap(runner: SimulationRunner) -> dict[str, JsonValue]:
                 }
                 for item in city.districts
             ],
+            "city_zones": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "center": item.center.to_payload(),
+                }
+                for item in city.city_zones
+            ],
             "buildings": [
                 {
                     "id": item.id,
                     "name": item.name,
                     "district_id": item.district_id,
+                    "city_zone_id": item.district_id,
                     "position": item.city_position.to_payload(),
-                    "local_map_id": item.local_map_id,
+                    "room_ids": list(item.room_ids),
                     "entrances": [
                         {
                             "id": entrance.id,
+                            "room_id": entrance.room_id,
                             "network_node_id": entrance.network_node_id,
                             "local_coordinate": entrance.local_coordinate.to_payload(),
                         }
                         for entrance in item.entrances
                     ],
-                    "outdoor_places": [
-                        {
-                            "id": item.id,
-                            "name": item.name,
-                            "district_id": item.district_id,
-                            "position": item.city_position.to_payload(),
-                            "network_node_id": item.network_node_id,
-                        }
-                        for item in city.outdoor_places
-                    ],
                 }
                 for item in city.buildings
+            ],
+            "outdoor_places": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "district_id": item.district_id,
+                    "city_zone_id": item.district_id,
+                    "position": item.city_position.to_payload(),
+                    "network_node_id": item.network_node_id,
+                }
+                for item in city.outdoor_places
+            ],
+            "rooms": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "type": item.room_type,
+                    "building_id": item.building_id,
+                    "key": item.key,
+                    "offset": item.offset.to_payload(),
+                    "map": {
+                        "width": item.world.grid.width,
+                        "height": item.world.grid.height,
+                        "blocked": [
+                            coordinate.to_payload()
+                            for coordinate in sorted(item.world.grid.blocked)
+                        ],
+                        "zones": [
+                            {
+                                "id": zone.id,
+                                "name": zone.name,
+                                "type": zone.zone_type,
+                                "tiles": [
+                                    coordinate.to_payload()
+                                    for coordinate in sorted(zone.tiles)
+                                ],
+                            }
+                            for zone in item.world.zones
+                        ],
+                        "stations": [
+                            {
+                                "id": station.id,
+                                "name": station.name,
+                                "position": station.position.to_payload(),
+                                "supported_actions": list(
+                                    station.supported_actions
+                                ),
+                                "available": station.available,
+                                "capacity": station.capacity,
+                            }
+                            for station in item.world.stations
+                        ],
+                        "transaction_points": [
+                            {
+                                "id": point.id,
+                                "name": point.name,
+                                "position": point.position.to_payload(),
+                                "available": point.available,
+                                "capacity": point.capacity,
+                                "operation": point.operation.value,
+                                "offers": [
+                                    {
+                                        "id": offer.id,
+                                        "name": offer.name,
+                                        "duration": offer.duration,
+                                    }
+                                    for offer in point.offers
+                                ],
+                            }
+                            for point in item.world.transaction_points
+                        ],
+                    },
+                    "object_ids": [
+                        world_object.id
+                        for world_object in city.objects
+                        if world_object.room_id == item.id
+                    ],
+                }
+                for item in city.rooms
+            ],
+            "portals": [
+                {
+                    "id": item.id,
+                    "building_id": item.building_id,
+                    "from_room_id": item.from_room_id,
+                    "from_coordinate": item.from_coordinate.to_payload(),
+                    "to_room_id": item.to_room_id,
+                    "to_coordinate": item.to_coordinate.to_payload(),
+                    "bidirectional": item.bidirectional,
+                    "available": item.available,
+                }
+                for item in city.portals
+            ],
+            "objects": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "kind": item.object_kind,
+                    "building_id": item.building_id,
+                    "room_id": item.room_id,
+                    "position": item.position.to_payload(),
+                    "supported_actions": (
+                        list(item.station.supported_actions)
+                        if item.station is not None
+                        else []
+                    ),
+                    "offers": (
+                        [
+                            {
+                                "id": offer.id,
+                                "name": offer.name,
+                            }
+                            for offer in item.transaction_point.offers
+                        ]
+                        if item.transaction_point is not None
+                        else []
+                    ),
+                }
+                for item in city.objects
             ],
             "nodes": [
                 {
@@ -296,6 +477,18 @@ def build_ui_bootstrap(runner: SimulationRunner) -> dict[str, JsonValue]:
     return {
         "world": world_payload,
         "city": city_payload,
+        "item_catalog": [
+            {
+                "id": item.id,
+                "name": item.name,
+                "unit": item.unit,
+            }
+            for item in (
+                registry.get_resource(ItemCatalog).items
+                if registry.has_resource(ItemCatalog)
+                else ()
+            )
+        ],
         "agents": [
             _build_agent_static_snapshot(runner, entity_id)
             for entity_id in registry.entities()
@@ -329,10 +522,22 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
     registry = runner.registry
     station_states: list[JsonValue] = []
     if registry.has_resource(WorldMap):
+        stations = {
+            station.id: station
+            for station in registry.get_resource(WorldMap).stations
+        }
+        if registry.has_resource(CityWorld):
+            stations.update(
+                {
+                    item.id: item.station
+                    for item in registry.get_resource(CityWorld).objects
+                    if item.station is not None
+                }
+            )
         station_states = [
             {"id": station.id, "available": station.available}
             for station in sorted(
-                registry.get_resource(WorldMap).stations,
+                stations.values(),
                 key=lambda item: item.id,
             )
         ]
@@ -348,6 +553,76 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
             }
             for vehicle_id, state in sorted(
                 registry.get_resource(VehicleRegistry).states.items()
+            )
+        ]
+    transaction_point_states: list[JsonValue] = []
+    if registry.has_resource(TransactionPointRegistry):
+        queued_requests: dict[str, int] = {}
+        for _, request in registry.query(TransactionRequestComponent):
+            if request.status in {
+                "awaiting_staff",
+                "awaiting_authorization",
+                "authorized",
+                "running",
+            }:
+                queued_requests[request.point_id] = (
+                    queued_requests.get(request.point_id, 0) + 1
+                )
+        points: dict[str, TransactionPoint] = {}
+        if registry.has_resource(WorldMap):
+            points.update(
+                {
+                    point.id: point
+                    for point in registry.get_resource(
+                        WorldMap
+                    ).transaction_points
+                }
+            )
+        if registry.has_resource(CityWorld):
+            points.update(
+                {
+                    item.id: item.transaction_point
+                    for item in registry.get_resource(CityWorld).objects
+                    if item.transaction_point is not None
+                }
+            )
+        availability_registry = (
+            registry.get_resource(EnvironmentAvailabilityRegistry)
+            if registry.has_resource(EnvironmentAvailabilityRegistry)
+            else None
+        )
+        transaction_point_states = [
+            {
+                "id": point_id,
+                "holdings": dict(sorted(state.holdings.items())),
+                "available": (
+                    availability_registry.state(
+                        point_id,
+                        base_available=points[point_id].available,
+                    ).available
+                    if availability_registry is not None
+                    else points[point_id].available
+                ),
+                "operation": points[point_id].operation.value,
+                "queued_request_count": queued_requests.get(point_id, 0),
+                "staffing": (
+                    {
+                        "npc_id": registry.get_resource(
+                            NpcPoolRegistry
+                        ).staffing(point_id).npc_id,
+                        "role_id": registry.get_resource(
+                            NpcPoolRegistry
+                        ).staffing(point_id).assignment.role_id,
+                    }
+                    if points[point_id].staffing is not None
+                    and registry.has_resource(NpcPoolRegistry)
+                    else None
+                ),
+            }
+            for point_id, state in sorted(
+                registry.get_resource(
+                    TransactionPointRegistry
+                ).states.items()
             )
         ]
     calendar_time = (
@@ -419,6 +694,12 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
         "cognition_wait_elapsed_seconds": (
             runner.cognition_wait_elapsed_seconds
         ),
+        "npc_control": {
+            "requested": runner.configuration.npc_control_mode.value,
+            "effective": (
+                runner.configuration.effective_npc_control_mode.value
+            ),
+        },
         "tick": runner.clock.tick,
         "simulation_time": runner.clock.simulation_time,
         "calendar_time": calendar_time,
@@ -426,6 +707,7 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
         "world": {
             "station_states": station_states,
             "vehicle_states": vehicle_states,
+            "transaction_point_states": transaction_point_states,
         },
         "agents": [
             build_agent_snapshot(runner, entity_id, include_profile=False)
@@ -442,6 +724,18 @@ def build_agent_snapshot(
 ) -> dict[str, JsonValue]:
     registry = runner.registry
     payload: dict[str, JsonValue] = {"id": agent_id}
+    if registry.has_component(agent_id, NpcComponent):
+        npc = registry.get_component(agent_id, NpcComponent)
+        payload["actor_kind"] = "npc"
+        payload["npc"] = {
+            "role_id": npc.role_id,
+            "role_name": npc.role_name,
+            "staffed_point_id": npc.staffed_point_id,
+            "spawn_sequence": npc.spawn_sequence,
+            "spawned_at": npc.spawned_at,
+            "control_mode": npc.control_mode.value,
+            "transient": npc.transient,
+        }
     if (
         include_profile
         and registry.has_component(agent_id, CharacterProfileComponent)
@@ -464,9 +758,48 @@ def build_agent_snapshot(
         location = registry.get_component(
             agent_id, SpatialLocationComponent
         ).location
+        room_id = None
+        building_id = None
+        city_zone_id = None
+        hierarchy_path: list[JsonValue] = []
+        if registry.has_resource(CityWorld):
+            city = registry.get_resource(CityWorld)
+            try:
+                room = city.room(location.place_id)
+            except KeyError:
+                room = None
+            if room is not None:
+                building = city.building(room.building_id)
+                room_id = room.id
+                building_id = building.id
+                city_zone_id = building.district_id
+                hierarchy_path = [
+                    city.id,
+                    city_zone_id,
+                    building_id,
+                    room_id,
+                ]
+            else:
+                try:
+                    outdoor = city.outdoor_place(location.place_id)
+                except KeyError:
+                    outdoor = None
+                if outdoor is not None:
+                    city_zone_id = outdoor.district_id
+                    hierarchy_path = [
+                        city.id,
+                        city_zone_id,
+                        outdoor.id,
+                    ]
+                elif location.place_id == city.id:
+                    hierarchy_path = [city.id]
         payload["spatial_location"] = {
             "scale": location.scale.value,
             "place_id": location.place_id,
+            "room_id": room_id,
+            "building_id": building_id,
+            "city_zone_id": city_zone_id,
+            "hierarchy_path": hierarchy_path,
             "local_coordinate": (
                 location.local_coordinate.to_payload()
                 if location.local_coordinate is not None
@@ -515,6 +848,20 @@ def build_agent_snapshot(
         payload["homeostasis"] = registry.get_component(
             agent_id, HomeostasisComponent
         ).snapshot()
+    if registry.has_component(agent_id, PossessionsComponent):
+        possessions = registry.get_component(
+            agent_id, PossessionsComponent
+        )
+        catalog = registry.get_resource(ItemCatalog)
+        payload["possessions"] = [
+            {
+                "item_id": item_id,
+                "name": catalog.item(item_id).name,
+                "unit": catalog.item(item_id).unit,
+                "quantity": quantity,
+            }
+            for item_id, quantity in sorted(possessions.holdings.items())
+        ]
     if registry.has_component(agent_id, ActivityComponent):
         payload["activity"] = registry.get_component(
             agent_id, ActivityComponent
@@ -572,6 +919,11 @@ def build_agent_snapshot(
             "slot_id": situation.slot_id,
             "label": situation.label,
             "briefing": situation.briefing,
+            "description": situation.description,
+            "content_hash": situation.content_hash,
+            "input_hash": situation.input_hash,
+            "data": situation.data,
+            "generation": situation.generation,
         }
     if registry.has_component(agent_id, PerceptionComponent):
         perception = registry.get_component(agent_id, PerceptionComponent)
@@ -604,6 +956,16 @@ def _build_agent_static_snapshot(
 ) -> dict[str, JsonValue]:
     registry = runner.registry
     payload: dict[str, JsonValue] = {"id": agent_id}
+    if registry.has_component(agent_id, NpcComponent):
+        npc = registry.get_component(agent_id, NpcComponent)
+        payload["actor_kind"] = "npc"
+        payload["npc"] = {
+            "role_id": npc.role_id,
+            "role_name": npc.role_name,
+            "staffed_point_id": npc.staffed_point_id,
+            "control_mode": npc.control_mode.value,
+            "transient": npc.transient,
+        }
     if registry.has_component(agent_id, CharacterProfileComponent):
         profile = registry.get_component(agent_id, CharacterProfileComponent)
         payload["character_profile"] = {
@@ -618,7 +980,9 @@ def _build_agent_static_snapshot(
     return payload
 
 
-def _plan_action_payload(action: PlanAction | None) -> JsonValue:
+def _plan_action_payload(
+    action: PlanAction | ActionInstance | None,
+) -> JsonValue:
     if action is None:
         return None
     payload: dict[str, JsonValue] = {"action": action.action.value}
@@ -628,6 +992,8 @@ def _plan_action_payload(action: PlanAction | None) -> JsonValue:
         payload["duration"] = action.duration
     if action.mode is not None:
         payload["mode"] = action.mode.value
+    if action.offer_id is not None:
+        payload["offer_id"] = action.offer_id
     return payload
 
 
@@ -646,6 +1012,8 @@ def _message_type_for_event(event_type: str) -> str:
         return "perception_event"
     if event_type.startswith(("travel.", "building.", "vehicle.", "metro.")):
         return "travel_event"
-    if event_type.startswith(("agent.", "path.", "activity.", "affordance.")):
+    if event_type.startswith(
+        ("agent.", "path.", "activity.", "affordance.", "transaction.")
+    ):
         return "agent_delta"
     return "event"

@@ -1,25 +1,61 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "jordan-lee",
   "template_id": "human-v1",
   "identity": {
     "display_name": "Jordan Lee",
-    "age": 31,
+    "birth_date": "1995-01-17",
     "gender": "Woman",
     "pronouns": "she/her",
     "occupation": "Operations analyst"
   },
+  "body_measurements": {
+    "measured_on": "2026-08-05",
+    "height_cm": 170.0,
+    "weight_kg": 66.8,
+    "chest_cm": 91.0,
+    "waist_cm": 73.0,
+    "hips_cm": 96.0,
+    "inseam_cm": 79.0,
+    "shoe_size_system": "US women's",
+    "shoe_size_value": 8.5
+  },
   "appearance": {
     "summary": "A quick-moving, athletic woman with an approachable smile and the practical look of someone ready to head straight into the field.",
-    "height": "170 cm",
-    "build": "Athletic build from regular running and weekend rec-league sports",
+    "build": "Lean and athletic",
     "hair": "Chestnut-brown hair usually tied back in a low ponytail or clipped up when concentrating",
     "eyes": "Hazel eyes that stay expressive even when she is trying to sound brisk",
-    "clothing": "Blue overshirt over a plain T-shirt, dark jeans, running shoes, and a watch she checks constantly without seeming rude",
+    "clothing": "",
     "distinguishing_features": [
       "A faint scar near her left eyebrow from a teenage basketball injury",
       "Usually carries a bright reusable water bottle covered in transit and park stickers"
     ]
+  },
+  "health": {
+    "as_of_date": "2026-08-05",
+    "blood_type": "O+",
+    "conditions": [],
+    "allergies": [
+      {
+        "substance": "Pollen",
+        "reaction": "Seasonal rhinitis",
+        "severity": "mild"
+      }
+    ],
+    "medications": [
+      {
+        "name": "Cetirizine",
+        "dose": "10 mg",
+        "schedule": "As needed during pollen season",
+        "purpose": "Seasonal allergy symptoms"
+      }
+    ],
+    "disabilities": [],
+    "vision": "No correction required",
+    "hearing": "No known impairment",
+    "mobility": "Unrestricted",
+    "past_procedures": [],
+    "dietary_restrictions": []
   },
   "personality": {
     "summary": "Energetic, warm, and practical, with a talent for turning confusion into forward motion.",
@@ -50,6 +86,18 @@
     "residence": "A shared townhouse with two close friends near a busy commercial street",
     "education": "Bachelor's degree in industrial engineering with a certificate in project coordination",
     "history": "Jordan grew up helping in her family's small restaurant, where she learned to notice timing, handoffs, and what happens when one missing item slows everyone else down. After university she worked in logistics support and then operations analysis, building a reputation for translating messy, cross-functional work into systems people can actually follow."
+  },
+  "financial_situation": {
+    "as_of_date": "2026-08-31",
+    "currency": "CAD",
+    "annual_gross_income": 92000,
+    "income_band": "Middle individual income",
+    "liquid_assets": 27000,
+    "total_assets": 76000,
+    "total_debt": 22000,
+    "monthly_fixed_expenses": 2650,
+    "housing_tenure": "Shares rented townhouse",
+    "financial_dependents": 0
   },
   "motivations": {
     "values": [
@@ -113,6 +161,175 @@
       "starts the day by scanning upcoming deadlines and likely bottlenecks",
       "takes a brisk walk or stair loop when concentration dips",
       "winds down in the evening with a quick call to family or friends"
+    ]
+  },
+  "presentation": {
+    "aesthetic_identity": "Energetic, approachable, practical, and ready to move between desk work and field activity.",
+    "wardrobe_palette": [
+      "blue",
+      "rust",
+      "black",
+      "white",
+      "bright accent colors"
+    ],
+    "preferred_silhouettes": [
+      "easy layers",
+      "straight jeans or practical trousers",
+      "clothing that permits quick movement"
+    ],
+    "preferred_fabrics": [
+      "washable cotton",
+      "denim",
+      "breathable athletic blends"
+    ],
+    "formality_range": "Casual to polished business casual, with one sharper layer added when she must represent a team externally.",
+    "comfort_priorities": [
+      "walking and stair-friendly shoes",
+      "temperature-flexible layers",
+      "secure pockets"
+    ],
+    "grooming_norms": [
+      "hair tied or clipped back when concentrating",
+      "minimal maintenance during a busy day"
+    ],
+    "usual_accessories": [
+      "practical watch",
+      "bright reusable water bottle",
+      "small hoop earrings"
+    ],
+    "practical_constraints": [
+      "avoids delicate clothing during operational work",
+      "needs freedom of movement"
+    ],
+    "purchase_habits": [
+      "buys durable basics",
+      "adds color through inexpensive accessories",
+      "keeps reliable athletic shoes in rotation"
+    ],
+    "context_variations": [
+      "chooses breathable casual clothing for travel and recreation",
+      "adds a structured overshirt or jacket for formal meetings",
+      "prioritizes weather readiness during field work"
+    ]
+  },
+  "dispositions": {
+    "summary": "Usually energetic, candid, collaborative, protective, and action-oriented.",
+    "emotional_baseline": "Upbeat and engaged, with visible impatience when preventable bottlenecks persist.",
+    "sociability": "High; gains energy from purposeful contact and informal check-ins.",
+    "assertiveness": "Comfortably direct and willing to name ownership or missing decisions.",
+    "patience": "Patient with honest blockers, impatient with avoidance or unclear responsibility.",
+    "conscientiousness": "High for coordination and follow-through, though overcommitment can fragment her attention.",
+    "openness": "Welcomes new people and practical experiments when a useful outcome is visible.",
+    "adaptability": "Rapid; improvises around changing constraints while keeping others informed.",
+    "risk_tolerance": "Moderate and pragmatic; accepts small operational risks to restore momentum.",
+    "ambiguity_tolerance": "Low when ambiguity blocks action, higher when a concrete experiment can reduce it.",
+    "impulse_control": "Generally good, but frustration can sharpen her tone before she notices.",
+    "conflict_style": "Names the issue early, seeks a workable next step, and repairs tone directly if needed.",
+    "cooperation_style": "Coordinates people, timing, ownership, and visible definitions of done.",
+    "trust_formation": "Trusts candor, early warning, and people who acknowledge support work.",
+    "boundary_setting": "Clear for team needs but inconsistent when protecting her own workload.",
+    "help_seeking": "Asks quickly for missing facts but hesitates to admit she personally has too much.",
+    "pressure_response": "Speeds up, triages, delegates, and becomes more directive.",
+    "fatigue_response": "Restless, terse, and less aware of how sharp she sounds.",
+    "novelty_response": "Engages quickly, finds the practical map, and starts meeting people.",
+    "authority_response": "Cooperative when decisions are clear; pushes back when authority obscures ownership.",
+    "crowd_response": "Comfortable navigating groups and scanning for who is excluded or confused."
+  },
+  "communication": {
+    "cadence": "Fast-moving, concrete, and punctuated by short summaries.",
+    "vocabulary": "Plain operational language with vivid examples and action verbs.",
+    "directness": "High, especially about ownership, timing, and blockers.",
+    "politeness": "Friendly and informal; prioritizes clarity over ceremony.",
+    "humor": "Quick, warm, and lightly self-deprecating.",
+    "gesture": "Expressive hands, points toward visible work, and moves while thinking.",
+    "posture": "Open and forward-moving, often standing when a group is stuck.",
+    "facial_expressiveness": "Highly readable enthusiasm, concern, and impatience.",
+    "listening_style": "Tracks the practical implication and invites quieter people to contribute.",
+    "disagreement_style": "Restates the decision needed, names the bottleneck, and proposes a testable alternative.",
+    "apology_style": "Immediate, plain, and followed by a change in behavior.",
+    "with_intimates": "Playful, protective, and candid about other people's needs before her own.",
+    "with_colleagues": "Collaborative, brisk, and generous with coordination labor.",
+    "with_strangers": "Approachable and quick to offer orientation.",
+    "with_authority": "Respectful but persistent about decisions, resources, and accountability."
+  },
+  "decision_coping": {
+    "information_seeking": "Looks first for the bottleneck, owner, timing, and concrete definition of done.",
+    "planning_horizon": "Strong on immediate and weekly coordination; relies on partners for prolonged deep analysis.",
+    "default_heuristics": [
+      "name the bottleneck",
+      "assign the next owner",
+      "confirm timing",
+      "make completion visible"
+    ],
+    "error_sensitivity": "Most sensitive to missed handoffs and silent blockers.",
+    "persistence": "High while people need coordination, but can keep carrying work that should be redistributed.",
+    "recovery_habits": [
+      "brisk walk",
+      "basketball or running",
+      "shared meal",
+      "quick call with a trusted person"
+    ],
+    "self_soothing": [
+      "turning a vague problem into a short action list",
+      "physical movement",
+      "checking in with a friend"
+    ],
+    "stress_signals": [
+      "faster speech",
+      "sharper summaries",
+      "taking ownership of too many tasks"
+    ],
+    "disposition_shifts": [
+      "slows down deliberately when a trusted colleague asks for thinking time",
+      "becomes strongly protective when invisible support work is dismissed"
+    ]
+  },
+  "life_structure": {
+    "household": "Shares a townhouse with two close friends and maintains frequent contact with family.",
+    "recurring_obligations": [
+      "family logistical help",
+      "neighborhood basketball",
+      "informal household coordination"
+    ],
+    "material_habits": [
+      "color-codes notes",
+      "keeps backup practical supplies",
+      "uses visible lists and labels"
+    ],
+    "typical_possessions": [
+      "watch",
+      "reusable water bottle",
+      "color-coded notebook",
+      "phone charger"
+    ],
+    "cultural_practices": [
+      "uses shared food and practical favors to maintain relationships"
+    ],
+    "interests": [
+      "pick-up basketball",
+      "service operations",
+      "neighborhood food",
+      "walking problems through aloud"
+    ],
+    "social_patterns": [
+      "maintains a broad active network",
+      "checks on people early",
+      "often becomes the informal coordinator"
+    ]
+  },
+  "family": {
+    "members": [
+      {
+        "member_id": "micah-lee",
+        "linked_character_id": "micah-lee",
+        "display_name": "Micah Lee",
+        "relationship": "Younger brother",
+        "birth_date": "1999-11-08",
+        "living_status": "alive",
+        "residence": "Calgary, Alberta",
+        "household_member": false,
+        "financial_dependent": false
+      }
     ]
   },
   "relationships": [

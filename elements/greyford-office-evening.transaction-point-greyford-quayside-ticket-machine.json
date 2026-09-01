@@ -1,0 +1,41 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {
+    "greyford-transit-ticket": 200
+  },
+  "id": "greyford-office-evening.transaction-point-greyford-quayside-ticket-machine",
+  "kind": "object",
+  "name": "Quayside Ticket Machine",
+  "npc_role": null,
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "greyford-cent",
+          "quantity": 325
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "greyford-transit-ticket",
+          "quantity": 1
+        }
+      ],
+      "duration": 4.0,
+      "id": "buy-greyford-transit-ticket",
+      "name": "Buy a single-ride transit ticket"
+    }
+  ],
+  "operation": "AUTOMATED",
+  "request_timeout": 60.0,
+  "schema_version": 1,
+  "supported_actions": null
+}

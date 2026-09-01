@@ -1,0 +1,66 @@
+{
+  "blocked": [
+    {
+      "x": 3,
+      "y": 1
+    },
+    {
+      "x": 3,
+      "y": 4
+    },
+    {
+      "x": 5,
+      "y": 1
+    }
+  ],
+  "description": "",
+  "height": 6,
+  "id": "greyford-office-evening.map-greyford-spruce-childcare",
+  "kind": "room",
+  "name": "Spruce Childcare Centre interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "bfd5b8e6e491bc839c1806b2f39a3bf2a81a57a6ccf339bfda97e9fff818bdf5",
+        "id": "greyford-office-evening.station-greyford-spruce-childcare-primary",
+        "kind": "object"
+      },
+      "id": "station-greyford-spruce-childcare-primary",
+      "key": "station-greyford-spruce-childcare-primary",
+      "position": {
+        "x": 6,
+        "y": 3
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "INTERIOR",
+  "schema_version": 1,
+  "width": 8,
+  "zones": [
+    {
+      "bounds": {
+        "height": 4,
+        "width": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": "zone-greyford-spruce-childcare-entry",
+      "name": "Spruce Family Check-in",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 5,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-greyford-spruce-childcare-main",
+      "name": "Spruce Playroom and Family Rooms",
+      "tiles": null,
+      "type": "PUBLIC_INTERIOR"
+    }
+  ]
+}

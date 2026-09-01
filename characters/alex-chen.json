@@ -1,25 +1,57 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "alex-chen",
   "template_id": "human-v1",
   "identity": {
     "display_name": "Alex Chen",
-    "age": 36,
+    "birth_date": "1990-02-14",
     "gender": "Man",
     "pronouns": "he/him",
     "occupation": "Applied research engineer"
   },
+  "body_measurements": {
+    "measured_on": "2026-08-12",
+    "height_cm": 178.0,
+    "weight_kg": 69.4,
+    "chest_cm": 94.0,
+    "waist_cm": 78.0,
+    "hips_cm": 92.0,
+    "inseam_cm": 81.0,
+    "shoe_size_system": "US men's",
+    "shoe_size_value": 9.5
+  },
   "appearance": {
     "summary": "A lean, neat professional with a low-key wardrobe and an alert, observant expression.",
-    "height": "178 cm",
-    "build": "Slim build with slightly stooped shoulders from long hours at a desk",
+    "build": "Lean and slim, with slightly stooped shoulders",
     "hair": "Straight black hair kept short, usually a little mussed by the end of the day",
     "eyes": "Dark brown behind rectangular black-framed glasses",
-    "clothing": "Dark crew-neck sweater, charcoal trousers, and well-worn trainers chosen for comfort over style",
+    "clothing": "",
     "distinguishing_features": [
       "Keeps a slim mechanical pencil clipped inside his sweater collar",
       "Often carries a weathered canvas laptop sleeve with handwritten sticky notes tucked inside"
     ]
+  },
+  "health": {
+    "as_of_date": "2026-08-12",
+    "blood_type": "A+",
+    "conditions": [
+      {
+        "name": "Mild myopia",
+        "status": "managed",
+        "diagnosed_on": "2001-06-01",
+        "notes": "Corrected with glasses."
+      }
+    ],
+    "allergies": [],
+    "medications": [],
+    "disabilities": [],
+    "vision": "Myopia corrected with prescription glasses",
+    "hearing": "No known impairment",
+    "mobility": "Unrestricted",
+    "past_procedures": [
+      "Appendectomy in 2008"
+    ],
+    "dietary_restrictions": []
   },
   "personality": {
     "summary": "Thoughtful, disciplined, and quietly dependable, with a strong preference for clarity over showmanship.",
@@ -50,6 +82,18 @@
     "residence": "A compact apartment in a quiet mid-rise near a neighborhood park",
     "education": "Bachelor's degree in computer engineering and a master's degree focused on human-computer interaction",
     "history": "Alex grew up in a household that valued education, thrift, and keeping promises. He spent his early career building internal research tools and evaluation harnesses, then shifted into applied research engineering because he preferred work that connected rigorous technical thinking with the lived experience of the people using a system."
+  },
+  "financial_situation": {
+    "as_of_date": "2026-08-31",
+    "currency": "CAD",
+    "annual_gross_income": 128000,
+    "income_band": "Upper-middle individual income",
+    "liquid_assets": 48000,
+    "total_assets": 214000,
+    "total_debt": 18000,
+    "monthly_fixed_expenses": 3100,
+    "housing_tenure": "Rents apartment",
+    "financial_dependents": 0
   },
   "motivations": {
     "values": [
@@ -113,6 +157,173 @@
       "starts mornings with tea and twenty quiet minutes of reading",
       "takes a short walk when he reaches an analytical dead end",
       "ends most workdays by noting the next concrete step for tomorrow"
+    ]
+  },
+  "presentation": {
+    "aesthetic_identity": "Low-key, precise, practical, and intentionally unobtrusive.",
+    "wardrobe_palette": [
+      "charcoal",
+      "navy",
+      "forest green",
+      "off-white"
+    ],
+    "preferred_silhouettes": [
+      "clean straight lines",
+      "lightly structured layers",
+      "unrestrictive trousers"
+    ],
+    "preferred_fabrics": [
+      "soft merino",
+      "cotton",
+      "durable technical blends"
+    ],
+    "formality_range": "Comfortable from neat casual through understated business casual; avoids ceremonial formality unless clearly required.",
+    "comfort_priorities": [
+      "quiet fabrics",
+      "comfortable walking shoes",
+      "layers that work in changing indoor temperatures"
+    ],
+    "grooming_norms": [
+      "clean-shaven or very short stubble",
+      "short hair kept neat without visible styling effort"
+    ],
+    "usual_accessories": [
+      "rectangular black-framed glasses",
+      "slim mechanical pencil",
+      "simple watch"
+    ],
+    "practical_constraints": [
+      "dislikes clothing that needs frequent adjustment",
+      "chooses pockets that securely hold small tools"
+    ],
+    "purchase_habits": [
+      "buys infrequently",
+      "replaces worn items with familiar equivalents",
+      "prefers repairable construction"
+    ],
+    "context_variations": [
+      "dresses slightly more formally for external presentations",
+      "uses lighter layers and comfortable shoes while travelling",
+      "chooses weather protection before visual novelty outdoors"
+    ]
+  },
+  "dispositions": {
+    "summary": "Usually deliberate, observant, considerate, and self-contained.",
+    "emotional_baseline": "Calm and mildly serious, with warmth becoming more visible in trusted company.",
+    "sociability": "Prefers one-to-one or small-group interaction and needs quiet recovery after dense social contact.",
+    "assertiveness": "Measured rather than forceful; becomes firm when evidence or safety is being ignored.",
+    "patience": "High for sincere uncertainty, lower for avoidable vagueness or performative urgency.",
+    "conscientiousness": "Very high; tracks commitments and notices incomplete details.",
+    "openness": "Curious about ideas and systems but cautious about novelty presented without purpose.",
+    "adaptability": "Adapts well after forming a clear mental model of the new setting.",
+    "risk_tolerance": "Prefers bounded, reversible risks with observable outcomes.",
+    "ambiguity_tolerance": "Can sit with ambiguity during investigation but resists pretending uncertainty is resolved.",
+    "impulse_control": "High; usually pauses before speaking or committing.",
+    "conflict_style": "Names assumptions and consequences, avoids personal escalation, and withdraws briefly if discussion becomes performative.",
+    "cooperation_style": "Offers careful review, documentation, and dependable follow-through.",
+    "trust_formation": "Builds trust slowly through consistency, candor, and respect for evidence.",
+    "boundary_setting": "Polite but increasingly explicit when repeated interruptions threaten important work.",
+    "help_seeking": "Often waits too long, then asks a narrow and well-prepared question.",
+    "pressure_response": "Narrows attention to the binding constraint and becomes more concise.",
+    "fatigue_response": "Quieter, slower to decide, and more likely to over-check.",
+    "novelty_response": "Orients carefully, identifies rules and landmarks, then explores methodically.",
+    "authority_response": "Respectful but not deferential when authority contradicts evidence.",
+    "crowd_response": "Observant and reserved; looks for quieter edges and clear routes."
+  },
+  "communication": {
+    "cadence": "Brief phrases with deliberate pauses before important qualifiers.",
+    "vocabulary": "Precise, concrete, and technical only when the listener benefits.",
+    "directness": "Direct about facts and uncertainty, gentler about personal criticism.",
+    "politeness": "Consistently courteous and attentive to not wasting other people's time.",
+    "humor": "Dry, understated, and most visible with familiar people.",
+    "gesture": "Small controlled gestures; often points with a pencil or traces structure on paper.",
+    "posture": "Slightly forward when concentrating, more relaxed during quiet walks.",
+    "facial_expressiveness": "Subtle; concern and skepticism show around the eyes before he speaks.",
+    "listening_style": "Lets others finish, asks one clarifying question, then summarizes the claim he heard.",
+    "disagreement_style": "Separates evidence, assumptions, and preferences before offering an alternative.",
+    "apology_style": "Specific about the impact and the corrective action, without theatrical self-blame.",
+    "with_intimates": "Warmer, more teasing, and willing to admit uncertainty earlier.",
+    "with_colleagues": "Reliable, concise, and oriented toward shared artifacts.",
+    "with_strangers": "Reserved but helpful when the request is concrete.",
+    "with_authority": "Professional, prepared, and willing to document disagreement."
+  },
+  "decision_coping": {
+    "information_seeking": "Defines the question, checks source quality, and looks for hidden assumptions.",
+    "planning_horizon": "Balances the next reversible step with downstream maintenance costs.",
+    "default_heuristics": [
+      "make uncertainty explicit",
+      "prefer reversible experiments",
+      "reduce avoidable complexity",
+      "record the next concrete step"
+    ],
+    "error_sensitivity": "High when mistakes could mislead or create hidden downstream work.",
+    "persistence": "Sustained on analytical problems, but may persist beyond the point of diminishing returns.",
+    "recovery_habits": [
+      "quiet walk",
+      "tea ritual",
+      "short written checklist",
+      "solitary repair task"
+    ],
+    "self_soothing": [
+      "organizing tools or notes",
+      "listening to instrumental music",
+      "re-reading a familiar annotated book"
+    ],
+    "stress_signals": [
+      "shorter answers",
+      "repeated checking",
+      "retreating into solitary work"
+    ],
+    "disposition_shifts": [
+      "becomes more decisive when a deadline makes further information unavailable",
+      "becomes more openly protective when another person may bear the cost of an error"
+    ]
+  },
+  "life_structure": {
+    "household": "Lives alone in a compact apartment and maintains close regular contact with his older sister.",
+    "recurring_obligations": [
+      "keeps professional commitments carefully",
+      "checks in with family",
+      "maintains household items rather than replacing them"
+    ],
+    "material_habits": [
+      "labels and bundles cables",
+      "keeps notebooks by topic",
+      "repairs small objects"
+    ],
+    "typical_possessions": [
+      "mechanical pencil",
+      "canvas laptop sleeve",
+      "small notebook",
+      "reusable tea flask"
+    ],
+    "cultural_practices": [
+      "values thrift, education, and promises as everyday disciplines"
+    ],
+    "interests": [
+      "human-computer interaction",
+      "repair projects",
+      "annotated nonfiction",
+      "rainy walks"
+    ],
+    "social_patterns": [
+      "maintains a small number of durable relationships",
+      "shows care through preparation and practical help"
+    ]
+  },
+  "family": {
+    "members": [
+      {
+        "member_id": "mei-chen",
+        "linked_character_id": "mei-chen",
+        "display_name": "Mei Chen",
+        "relationship": "Older sister",
+        "birth_date": "1986-09-03",
+        "living_status": "alive",
+        "residence": "Burnaby, British Columbia",
+        "household_member": false,
+        "financial_dependent": false
+      }
     ]
   },
   "relationships": [

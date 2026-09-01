@@ -37,7 +37,7 @@
     <header class="panel__header">
       <div>
         <h2 id="character-editor-heading">{{ selected.identity.display_name if selected else "New character" }}</h2>
-        <p>Structured human-v1 profile. One list item per line.</p>
+        <p>Structured human-v1 profile. Dates use YYYY-MM-DD, measurements use metric units, and financial amounts use the section currency.</p>
       </div>
       {% if selected %}
         <div class="header-actions">
@@ -57,12 +57,12 @@
         <fieldset>
           <legend>{{ section.title }}</legend>
           {% for name, label, kind, required in section.fields %}
-            <label class="{% if kind in ('textarea', 'list') %}wide{% endif %}">
+            <label class="{% if kind in ('textarea', 'list', 'json_array') %}wide{% endif %}">
               {{ label }}
-              {% if kind in ("textarea", "list") %}
-                <textarea name="{{ section.id }}.{{ name }}" rows="{{ 3 if kind == 'list' else 5 }}" {% if required %}required{% endif %}>{{ field_values.get(section.id ~ "." ~ name, "") }}</textarea>
+              {% if kind in ("textarea", "list", "json_array") %}
+                <textarea name="{{ section.id }}.{{ name }}" rows="{{ 8 if kind == 'json_array' else 3 if kind == 'list' else 5 }}" {% if required %}required{% endif %}>{{ field_values.get(section.id ~ "." ~ name, "") }}</textarea>
               {% else %}
-                <input name="{{ section.id }}.{{ name }}" type="{{ kind }}" value="{{ field_values.get(section.id ~ "." ~ name, "") }}" {% if kind == "number" %}min="0" max="150"{% endif %} {% if required %}required{% endif %}>
+                <input name="{{ section.id }}.{{ name }}" type="{{ 'number' if kind in ('number', 'decimal', 'money') else kind }}" value="{{ field_values.get(section.id ~ "." ~ name, "") }}" {% if kind in ('number', 'decimal', 'money') %}min="0"{% endif %} {% if kind == 'decimal' %}step="0.1"{% elif kind in ('number', 'money') %}step="1"{% endif %} {% if required %}required{% endif %}>
               {% endif %}
             </label>
           {% endfor %}

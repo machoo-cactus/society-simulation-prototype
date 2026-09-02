@@ -42,6 +42,7 @@ requirements are provenance, not operating instructions.
 | Change tick, cognition, perception, or action behavior | [Runtime semantics](RUNTIME.md) |
 | Maintain canonical public vocabulary | [Actions, tools, and events](ACTIONS_AND_EVENTS.md) |
 | Change controller observations, retrieval, tools, intents, or action flow | [Character agent actions and decision flow](CHARACTER_AGENT_ACTIONS.md) |
+| Evaluate consequential free-form and unilateral interaction designs | [Consequential open interaction directions](OPEN_INTERACTION_DIRECTIONS.md) |
 | Change the server-rendered UI or browser tests | [UI architecture and testing](UI_TESTING.md) |
 | Change a content schema or migrator | [Content migration](CONTENT_MIGRATION.md) |
 | Check supported platforms, limitations, and unfinished work | [Status and roadmap](STATUS_AND_ROADMAP.md) |

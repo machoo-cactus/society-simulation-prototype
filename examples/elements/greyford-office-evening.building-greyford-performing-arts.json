@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-performing-arts-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "08d120db0d5a326d8c123c006e6a5a5c9d7696dd707e9de357de600bc07e9f07",
+        "content_hash": "56b58e01fd746b254e7bda99c1f03ed57fe70c2ad09ab9a40171a95e5e3ffae3",
         "id": "greyford-office-evening.map-greyford-performing-arts",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

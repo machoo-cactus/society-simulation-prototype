@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-air-cargo-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "7cd4da1bbc88c16a730ebf4fd2dc0d7ae4423bb5b10655c9a896beb28c5d29a6",
+        "content_hash": "000ce015ec5a34b4142d1d1efa4ec16e43ae5eacafcaa804644376200c893aea",
         "id": "greyford-office-evening.map-greyford-air-cargo",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

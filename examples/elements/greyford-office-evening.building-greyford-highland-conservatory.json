@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-highland-conservatory-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "b0c72646d34f694fd46d3cd0e8d853381adee7f97bcdc934894f11caadbf09c7",
+        "content_hash": "1f3ae09c5575af4c7de090b9bb47aae83879572b09cab1983acbcd4032bd4077",
         "id": "greyford-office-evening.map-greyford-highland-conservatory",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

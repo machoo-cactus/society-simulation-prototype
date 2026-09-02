@@ -1,0 +1,43 @@
+{
+  "blocked": [],
+  "description": "A one-cell legacy room.",
+  "height": 1,
+  "id": "legacy-room",
+  "kind": "room",
+  "name": "Legacy Room",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "2fedecee6380b82382f45e44151be275d1e4a84a71d60853bb668bfb47b655bd",
+        "id": "legacy-object",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "object",
+      "placement": {
+        "anchor": {
+          "x": 4,
+          "y": 4
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "staff_position": null
+    }
+  ],
+  "room_type": "TEST",
+  "schema_version": 2,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
+  "width": 1,
+  "zones": null
+}

@@ -42,6 +42,7 @@ _STATE_FIELDS = {
 _INTERACTION_EVENTS = {
     InteractionType.SPEECH: "speech.started",
     InteractionType.TRANSACTION: "transaction.completed",
+    InteractionType.PHYSICAL: "interaction.completed",
 }
 
 

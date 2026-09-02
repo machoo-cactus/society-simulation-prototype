@@ -17,12 +17,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "3119f555c3c0e05fb218ead6c993a01137b1ce87bef1f3710b1fa39dcb5754e5",
+        "content_hash": "836bb60d9f4448fa96aa78122644072967f9abd140e8cc6280618e26ad04022b",
         "id": "dining-table",
         "kind": "object"
       },
       "id": null,
       "key": "table",
+      "placement": {
+        "anchor": {
+          "x": 22,
+          "y": 22
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 2,
         "y": 2
@@ -31,12 +43,24 @@
     },
     {
       "element": {
-        "content_hash": "834bc68012a48a2c17a241aec8a790d834e9855bd2bb812ba8bac03362bcf9ee",
+        "content_hash": "e39224b78c376397bb1432e0207ff6304f1b71e18d0ee46a81f3154ff95fd091",
         "id": "restaurant-checkout",
         "kind": "object"
       },
       "id": null,
       "key": "checkout",
+      "placement": {
+        "anchor": {
+          "x": 49,
+          "y": 22
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 5,
         "y": 2
@@ -48,7 +72,10 @@
     }
   ],
   "room_type": "DINING",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 7,
   "zones": null
 }

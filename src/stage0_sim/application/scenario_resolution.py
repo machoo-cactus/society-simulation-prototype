@@ -28,6 +28,7 @@ from stage0_sim.application.elements import (
     derive_instance_id,
     element_content_hash,
 )
+from stage0_sim.application.migrations.constants import SCENARIO_SCHEMA_VERSION
 from stage0_sim.application.scenario import (
     BuildingDefinition,
     BuildingEntranceDefinition,
@@ -37,6 +38,8 @@ from stage0_sim.application.scenario import (
     DistrictDefinition,
     NpcRoleDefinition,
     OutdoorPlaceDefinition,
+    PhysicalParentRelationDefinition,
+    PhysicalPlacementDefinition,
     RoomDefinition,
     ScenarioDefinition,
     StationDefinition,
@@ -137,9 +140,12 @@ def load_and_resolve_scenario(
         raise ScenarioResolutionError(
             f"scenario is not valid JSON: {error}"
         ) from error
-    if isinstance(raw, dict) and raw.get("schema_version") != 4:
+    if not isinstance(raw, dict) or raw.get(
+        "schema_version"
+    ) != SCENARIO_SCHEMA_VERSION:
         raise ScenarioResolutionError(
-            "scenario schema version 4 is required"
+            f"scenario schema version {SCENARIO_SCHEMA_VERSION} is required; "
+            "run 'stage0-sim migrate content'"
         )
     try:
         source = ScenarioSourceDefinition.model_validate(raw)
@@ -338,6 +344,14 @@ class _ScenarioResolver:
             stations: list[StationDefinition] = []
             transaction_points: list[TransactionPointDefinition] = []
             disabled_objects = override.disabled_object_keys
+            object_ids_by_key = {
+                object_placement.key: (
+                    object_placement.id
+                    or derive_instance_id(room_id, object_placement.key)
+                )
+                for object_placement in room.objects
+                if object_placement.key not in disabled_objects
+            }
             for object_placement in room.objects:
                 if object_placement.key in disabled_objects:
                     continue
@@ -359,6 +373,66 @@ class _ScenarioResolver:
                 if object_placement.id is not None:
                     object_id = object_placement.id
                 position = object_placement.position
+                physical = object_element.physical
+                physical_placement = object_placement.placement
+                if (physical is None) != (physical_placement is None):
+                    raise ScenarioResolutionError(
+                        f"physical object {object_id} requires matching "
+                        "element physical data and room placement"
+                    )
+                resolved_placement = None
+                if physical is not None and physical_placement is not None:
+                    parent = physical_placement.parent_relation
+                    parent_id = parent.parent_id
+                    if parent_id is None:
+                        if parent.kind.value != "ON_FLOOR":
+                            raise ScenarioResolutionError(
+                                f"physical object {object_id} relation "
+                                f"{parent.kind.value} requires parent_id"
+                            )
+                        parent_id = room_id
+                    else:
+                        parent_id = object_ids_by_key.get(parent_id, parent_id)
+                    if parent_id == object_id:
+                        raise ScenarioResolutionError(
+                            f"physical object {object_id} cannot parent itself"
+                        )
+                    resolved_placement = PhysicalPlacementDefinition(
+                        anchor=physical_placement.anchor,
+                        orientation=physical_placement.orientation,
+                        parent_relation=PhysicalParentRelationDefinition(
+                            kind=parent.kind,
+                            parent_id=parent_id,
+                            slot_id=parent.slot_id,
+                        ),
+                    )
+                    footprint_cells = physical.footprint.to_domain().translated_cells(
+                        physical_placement.anchor.to_domain(),
+                        physical_placement.orientation,
+                    )
+                    width = room.spatial_metric.microcells_per_legacy_cell * room.width
+                    height = room.spatial_metric.microcells_per_legacy_cell * room.height
+                    if any(
+                        cell.x < 0
+                        or cell.y < 0
+                        or cell.x >= width
+                        or cell.y >= height
+                        for cell in footprint_cells
+                    ):
+                        raise ScenarioResolutionError(
+                            f"physical object {object_id} footprint is outside room "
+                            f"{room_id}"
+                        )
+                if position is None:
+                    if physical_placement is None:
+                        raise ScenarioResolutionError(
+                            f"object {object_id} has no resolved position"
+                        )
+                    scale = room.spatial_metric.microcells_per_legacy_cell
+                    position = CoordinateDefinition(
+                        x=physical_placement.anchor.x // scale,
+                        y=physical_placement.anchor.y // scale,
+                    )
                 if object_element.object_type == "affordance":
                     station = StationDefinition(
                         id=object_id,
@@ -381,11 +455,29 @@ class _ScenarioResolver:
                     resolved_objects.append(
                         WorldObjectDefinition(
                             id=object_id,
+                            definition_id=object_element.id,
                             name=station.name,
                             object_kind="affordance",
                             building_id=instance.id,
                             room_id=room_id,
                             position=position,
+                            physical=physical,
+                            placement=resolved_placement,
+                        )
+                    )
+                    continue
+                if object_element.object_type is None:
+                    resolved_objects.append(
+                        WorldObjectDefinition(
+                            id=object_id,
+                            definition_id=object_element.id,
+                            name=object_override.name or object_element.name,
+                            object_kind="physical",
+                            building_id=instance.id,
+                            room_id=room_id,
+                            position=position,
+                            physical=physical,
+                            placement=resolved_placement,
                         )
                     )
                     continue
@@ -405,7 +497,8 @@ class _ScenarioResolver:
                         tool_allowlist=role_element.tool_allowlist,
                         vision_range=role_element.vision_range,
                         recognition_range=role_element.recognition_range,
-                        hearing_multiplier=role_element.hearing_multiplier,
+                        hearing_range=role_element.hearing_range,
+                        smell_range=role_element.smell_range,
                     )
                     roles[role.id] = role
                     if object_placement.staff_position is None:
@@ -445,11 +538,14 @@ class _ScenarioResolver:
                 resolved_objects.append(
                     WorldObjectDefinition(
                         id=object_id,
+                        definition_id=object_element.id,
                         name=point.name,
                         object_kind="transaction",
                         building_id=instance.id,
                         room_id=room_id,
                         position=position,
+                        physical=physical,
+                        placement=resolved_placement,
                     )
                 )
             resolved_rooms.append(
@@ -463,6 +559,7 @@ class _ScenarioResolver:
                     world=WorldDefinition(
                         width=room.width,
                         height=room.height,
+                        spatial_metric=room.spatial_metric,
                         blocked=list(room.blocked),
                         zones=list(room.zones or []),
                         stations=stations,
@@ -498,6 +595,11 @@ class _ScenarioResolver:
                     neighborhood_node_id=instance.entrance_node_ids[
                         entrance.key
                     ],
+                    door_object_id=self._resolve_door_object_id(
+                        entrance.door_object_id,
+                        resolved_objects,
+                        f"entrance {entrance.key}",
+                    ),
                 )
             )
         resolved_portals: list[BuildingPortalRuntimeDefinition] = []
@@ -538,6 +640,11 @@ class _ScenarioResolver:
                     to_coordinate=portal.to_coordinate,
                     bidirectional=portal.bidirectional,
                     available=portal.available,
+                    door_object_id=self._resolve_door_object_id(
+                        portal.door_object_id,
+                        resolved_objects,
+                        f"portal {portal.key}",
+                    ),
                 )
             )
         resolved_name = instance.overrides.name or building.name
@@ -613,6 +720,28 @@ class _ScenarioResolver:
             return element
         finally:
             self._resolving.pop()
+
+    @staticmethod
+    def _resolve_door_object_id(
+        requested_id: str | None,
+        objects: list[WorldObjectDefinition],
+        context: str,
+    ) -> str | None:
+        if requested_id is None:
+            return None
+        exact = [item.id for item in objects if item.id == requested_id]
+        if exact:
+            return exact[0]
+        matches = [
+            item.id
+            for item in objects
+            if item.definition_id == requested_id
+        ]
+        if len(matches) != 1:
+            raise ScenarioResolutionError(
+                f"{context} door object {requested_id} must resolve uniquely"
+            )
+        return matches[0]
 
     @staticmethod
     def _validate_building_overrides(

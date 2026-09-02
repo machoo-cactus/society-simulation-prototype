@@ -6,7 +6,7 @@ from typing import NewType, Self, cast
 from stage0_sim.domain.events import JsonValue
 
 DATASET_SCHEMA_ID = "stage0.dataset"
-DATASET_SCHEMA_VERSION = "stage0.dataset.v3"
+DATASET_SCHEMA_VERSION = "stage0.dataset.v4"
 
 GoalId = NewType("GoalId", str)
 PlanId = NewType("PlanId", str)
@@ -271,7 +271,16 @@ class DatasetRecordFilter:
     operator_intervention_id: str | None = None
     status: str | None = None
     outcome: str | None = None
-    include_private: bool = True
+    object_id: str | None = None
+    room_id: str | None = None
+    parent_id: str | None = None
+    relation_kind: str | None = None
+    phase: RunnerPhase | None = None
+    is_open: bool | None = None
+    is_locked: bool | None = None
+    interaction_verb: str | None = None
+    interaction_type: str | None = None
+    include_private: bool = False
     after_sequence: int | None = None
     limit: int = 100
 
@@ -326,6 +335,15 @@ class DatasetQueryFilter:
     operator_intervention_id: str | None = None
     status: str | None = None
     outcome: str | None = None
+    object_id: str | None = None
+    room_id: str | None = None
+    parent_id: str | None = None
+    relation_kind: str | None = None
+    phase: RunnerPhase | None = None
+    is_open: bool | None = None
+    is_locked: bool | None = None
+    interaction_verb: str | None = None
+    interaction_type: str | None = None
     include_private: bool = False
     cursor: str | None = None
     limit: int = 100

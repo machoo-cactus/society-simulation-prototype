@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-meridian-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "323b50fe024800092168e0e3b0cad108f68def3b1f59a53525fbc9ec80ba1122",
+        "content_hash": "5bba66eb1bd9a451951fb094224920df43818e7c0f6b4acd9751356aa39d2388",
         "id": "greyford-office-evening.map-greyford-meridian-clinic",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

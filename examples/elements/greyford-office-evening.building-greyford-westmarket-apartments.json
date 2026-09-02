@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-westmarket-apartments-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "91f5707e7429d08a152c0510ea326a62d416cb04dd0eca29651f908f6d7b84bf",
+        "content_hash": "7e9a2547d7523c88ce5266ee326b1c0dee8d2399408208a3e3602879ccfd4b73",
         "id": "greyford-office-evening.map-greyford-westmarket-apartments",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

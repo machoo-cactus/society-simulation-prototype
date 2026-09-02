@@ -69,12 +69,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "2611c0f812ffb5b827845f3a0da40ac536e3952f7c3966ed2391d3f64f8bebe4",
+        "content_hash": "c639a7fc321f9e21c906b284cb9b6f84fd1f6e72b7f11192a9780ea2502344c4",
         "id": "greyford-office-evening.station-greyford-quayside-platform-bench",
         "kind": "object"
       },
       "id": "station-greyford-quayside-platform-bench",
       "key": "station-greyford-quayside-platform-bench",
+      "placement": {
+        "anchor": {
+          "x": 130,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 14,
         "y": 4
@@ -83,12 +95,24 @@
     },
     {
       "element": {
-        "content_hash": "1d0fcba2ae08f959ef77f989663efc0542bc6800628139ceefa7181f910db2b2",
+        "content_hash": "1f920592a9710397ab999819dcd5bc035e6b624c94eafe30d0ab4f36c8a83955",
         "id": "greyford-office-evening.station-greyford-quayside-information-desk",
         "kind": "object"
       },
       "id": "station-greyford-quayside-information-desk",
       "key": "station-greyford-quayside-information-desk",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 3,
         "y": 3
@@ -97,12 +121,24 @@
     },
     {
       "element": {
-        "content_hash": "4ceadcbba62bcb934b50778b71eabcbb747d3d0676a92a1bcab01cb08a93342a",
+        "content_hash": "121967e30c10b77cd5ba209652111c541fae028546d7c234ed531d66e3f1f6ef",
         "id": "greyford-office-evening.transaction-point-greyford-quayside-ticket-machine",
         "kind": "object"
       },
       "id": "transaction-point-greyford-quayside-ticket-machine",
       "key": "transaction-point-greyford-quayside-ticket-machine",
+      "placement": {
+        "anchor": {
+          "x": 40,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 4,
         "y": 4
@@ -111,7 +147,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 16,
   "zones": [
     {

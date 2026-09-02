@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-home",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "c896beb8fd0d781f24354b9b8936b0b8674decc3578cfae9d7b725250c51d917",
+        "content_hash": "6bc75498989dd84d29809ffc2a82299e6c0ad32dc5a1767129b2ea6a1b7284ae",
         "id": "sparse-city-car-demo.map-home",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

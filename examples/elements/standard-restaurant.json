@@ -3,6 +3,7 @@
   "description": "A reusable compact restaurant with dining and staffed checkout service.",
   "entrances": [
     {
+      "door_object_id": null,
       "id": null,
       "key": "front",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "1b266b20a6cebb3155f618effd53b78d9f1f1e5bf8019541f9b71444f1340538",
+        "content_hash": "a616ea75f1e522de56dfd9aad8a15684b1d995924bba336fd7b7e408d62e556c",
         "id": "standard-restaurant-room",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

@@ -84,7 +84,7 @@ class AggregateRunsRequest(BaseModel):
     run_ids: list[str] = Field(min_length=1, max_length=500)
     selection_fingerprint: str = Field(min_length=64, max_length=64)
     selection_filters: RunSelectionFilters | None = None
-    include_private_derived: bool = True
+    include_private_derived: bool = False
 
     def selection(self) -> RunSelection:
         selection = RunSelection.create(
@@ -133,7 +133,7 @@ class AggregateExportParameters(BaseModel):
     run_id: list[str] = Field(min_length=1, max_length=500)
     selection_fingerprint: str = Field(min_length=64, max_length=64)
     selection_filters: str | None = None
-    include_private_derived: bool = True
+    include_private_derived: bool = False
 
     def request_body(self) -> AggregateRunsRequest:
         parsed_filters = (
@@ -210,7 +210,18 @@ def _aggregate_export(
     return StreamingResponse(
         iter((output.getvalue(),)),
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Stage0-Private-Included": str(
+                body.include_private_derived
+            ).lower(),
+            "X-Stage0-Privacy-Warning": (
+                "Aggregate includes PRIVATE_RESEARCH-derived statistics; "
+                "raw private payloads are not included."
+                if body.include_private_derived
+                else "Private research data excluded."
+            ),
+        },
     )
 
 
@@ -290,5 +301,4 @@ async def delete_persisted_runs(
     if callable(cleanup):
         cleanup(result.run_ids)
     return result.to_dict()
-
 

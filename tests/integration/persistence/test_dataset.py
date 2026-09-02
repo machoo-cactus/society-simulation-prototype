@@ -136,13 +136,14 @@ def test_unknown_payload_fields_survive_sqlite_restart(tmp_path: Path) -> None:
     reopened.close()
 
     assert records[1]["record_type"] == "future_component"
+    assert records[1]["schema_version"] == DATASET_SCHEMA_VERSION
     assert records[1]["payload"] == {
         "known": 1,
         "future_nested_field": {"version": 7, "values": [1, 2, 3]},
     }
 
 
-def test_v3_record_envelope_round_trips_all_dataset_metadata() -> None:
+def test_v4_record_envelope_round_trips_all_dataset_metadata() -> None:
     record = DatasetRecord(
         run_id="round-trip",
         sequence=7,
@@ -234,7 +235,7 @@ def test_noncurrent_database_schema_is_rejected_without_modification(
     with pytest.raises(
         RuntimeError,
         match=(
-            "unsupported SQLite schema version 3; expected 8. "
+            "unsupported SQLite schema version 3; expected 10. "
             "Existing databases are not migrated"
         ),
     ):
@@ -246,6 +247,38 @@ def test_noncurrent_database_schema_is_rejected_without_modification(
     connection.close()
     assert version == 3
     assert sentinel == "preserve-me"
+
+
+def test_nonempty_schema_8_database_is_rejected_without_migration(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "schema-8.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.executescript(
+        """
+        CREATE TABLE runs (run_id TEXT PRIMARY KEY);
+        INSERT INTO runs VALUES ('preserve-schema-8');
+        PRAGMA user_version = 8;
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            "unsupported SQLite schema version 8; expected 10. "
+            "Existing databases are not migrated"
+        ),
+    ):
+        SQLiteDatasetStore(database)
+
+    connection = sqlite3.connect(database)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+    assert connection.execute("SELECT run_id FROM runs").fetchone()[0] == (
+        "preserve-schema-8"
+    )
+    connection.close()
 
 
 def test_fresh_database_creates_only_the_current_schema(tmp_path: Path) -> None:
@@ -262,12 +295,44 @@ def test_fresh_database_creates_only_the_current_schema(tmp_path: Path) -> None:
         row[1]: row[4]
         for row in connection.execute("PRAGMA table_info(action_instances)")
     }
+    physical_state_columns = {
+        row[1]
+        for row in connection.execute(
+            "PRAGMA table_info(physical_object_states)"
+        )
+    }
+    interaction_columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(interactions)")
+    }
     connection.close()
 
-    assert version == 8
+    assert version == 10
     assert "subject_id" in record_columns
     assert "agent_id" not in record_columns
     assert action_columns["root_correlation_id"] is None
+    assert {
+        "object_id",
+        "room_id",
+        "parent_id",
+        "relation_kind",
+        "is_open",
+        "is_locked",
+        "spatial_index_revision",
+        "topology_revision",
+        "state_json",
+    } <= physical_state_columns
+    assert {
+        "interaction_verb",
+        "actor_id",
+        "target_id",
+        "destination_id",
+        "slot_id",
+        "action_id",
+        "decision_id",
+        "tool_call_id",
+        "correlation_id",
+    } <= interaction_columns
 
 
 def test_unversioned_existing_database_is_rejected_without_recreation(
@@ -286,7 +351,7 @@ def test_unversioned_existing_database_is_rejected_without_recreation(
 
     with pytest.raises(
         RuntimeError,
-        match="unsupported SQLite schema version 0; expected 8",
+        match="unsupported SQLite schema version 0; expected 10",
     ):
         SQLiteDatasetStore(database)
 
@@ -346,6 +411,8 @@ def test_relational_foundation_tables_and_explicit_projection_writes(
         "record_relations",
         "state_samples",
         "state_deltas",
+        "physical_object_states",
+        "physical_relation_samples",
         "goals",
         "goal_transitions",
         "decisions",
@@ -480,7 +547,8 @@ def test_summary_includes_category_visibility_and_schema_counts(
     )
     store.flush()
 
-    summary = store.summary("summary-v2")
+    public_summary = store.summary("summary-v2")
+    summary = store.summary("summary-v2", include_private=True)
     store.close()
 
     assert summary["record_counts"] == {"decision": 1}
@@ -488,6 +556,8 @@ def test_summary_includes_category_visibility_and_schema_counts(
     assert summary["visibility_counts"] == {"PRIVATE_RESEARCH": 1}
     assert summary["schema_counts"] == {"stage0.decision.v1": 1}
     assert summary["schema_version_counts"] == {"1": 1}
+    assert public_summary["record_counts"] == {}
+    assert public_summary["entity_counts"] == {}
 
 
 def test_private_decision_context_uses_private_projection_visibility(
@@ -660,7 +730,11 @@ def test_api_exposes_summary_and_versioned_jsonl_export() -> None:
         client.post(f"/simulation/runs/{run_id}/pause")
         client.post(f"/simulation/runs/{run_id}/step")
         client.post(f"/simulation/runs/{run_id}/stop")
-        summary = client.get(f"/simulation/runs/{run_id}/data")
+        public_summary = client.get(f"/simulation/runs/{run_id}/data")
+        summary = client.get(
+            f"/simulation/runs/{run_id}/data",
+            params={"include_private": True},
+        )
         export = client.get(
             f"/simulation/runs/{run_id}/exports/complete"
         )
@@ -668,6 +742,7 @@ def test_api_exposes_summary_and_versioned_jsonl_export() -> None:
     assert summary.status_code == 200
     assert summary.json()["schema_version"] == DATASET_SCHEMA_VERSION
     assert summary.json()["record_counts"]["state_vector"] == 2
+    assert "state_vector" not in public_summary.json()["record_counts"]
     assert export.status_code == 200
     assert export.headers["content-type"].startswith("application/x-ndjson")
     lines = [json.loads(line) for line in export.text.splitlines()]
@@ -715,7 +790,7 @@ def test_newer_database_schema_is_rejected_explicitly(tmp_path: Path) -> None:
 
     with pytest.raises(
         RuntimeError,
-        match="unsupported SQLite schema version 999; expected 8",
+        match="unsupported SQLite schema version 999; expected 10",
     ):
         SQLiteDatasetStore(database)
 

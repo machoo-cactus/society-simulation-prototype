@@ -50,6 +50,7 @@ def _library(tmp_path: Path) -> tuple[
                 "id": "dining-table",
                 "name": "Dining Table",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "affordance",
                 "actions": [
                     {
@@ -67,6 +68,7 @@ def _library(tmp_path: Path) -> tuple[
                 "id": "restaurant-checkout",
                 "name": "Restaurant Checkout",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "transaction",
                 "offers": [
                     {
@@ -108,6 +110,10 @@ def _library(tmp_path: Path) -> tuple[
                             element_content_hash(table),
                         ),
                         "position": {"x": 2, "y": 2},
+                        "placement": {
+                            "anchor": {"x": 22, "y": 22},
+                            "parent_relation": {"kind": "ON_FLOOR"},
+                        },
                     },
                     {
                         "key": "checkout",
@@ -117,6 +123,10 @@ def _library(tmp_path: Path) -> tuple[
                             element_content_hash(checkout),
                         ),
                         "position": {"x": 4, "y": 2},
+                        "placement": {
+                            "anchor": {"x": 40, "y": 22},
+                            "parent_relation": {"kind": "ON_FLOOR"},
+                        },
                         "staff_position": {"x": 4, "y": 1},
                     },
                 ],
@@ -162,7 +172,7 @@ def _source(
     )
     return ScenarioSourceDefinition.model_validate(
         {
-            "schema_version": 4,
+            "schema_version": 6,
             "name": "Two restaurants",
             "items": [
                 {"id": "credit", "name": "Credit", "unit": "credit"},
@@ -328,6 +338,6 @@ def test_loader_rejects_schema_v2_with_explicit_message(
 
     with pytest.raises(
         ScenarioResolutionError,
-        match="scenario schema version 4 is required",
+        match="scenario schema version 6 is required",
     ):
         load_and_resolve_scenario(scenario_path, library)

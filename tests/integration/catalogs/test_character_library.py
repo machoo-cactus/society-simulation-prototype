@@ -212,6 +212,21 @@ def test_version_two_character_uses_canonical_hard_facts() -> None:
         )
 
 
+def test_character_library_rejects_legacy_content_with_migration_command(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "old-character.json").write_text(
+        '{"schema_version":1,"id":"old-character",'
+        '"identity":{"display_name":"Old Character"}}',
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        CharacterLibraryError,
+        match="stage0-sim migrate content",
+    ):
+        FileSystemCharacterLibrary(tmp_path).get("old-character")
+
+
 def test_age_is_derived_from_scenario_date_with_leap_day_rule() -> None:
     assert age_on(date(1990, 9, 1), date(2026, 8, 31)) == 35
     assert age_on(date(1990, 9, 1), date(2026, 9, 1)) == 36

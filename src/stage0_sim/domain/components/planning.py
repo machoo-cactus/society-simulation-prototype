@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from stage0_sim.domain.components.physiology import ActivityType
+from stage0_sim.domain.interactions import InteractionSpecification
 from stage0_sim.domain.world import TravelMode
 
 
@@ -16,6 +17,8 @@ class ActionType(StrEnum):
     NAVIGATE = "NAVIGATE"
     TRANSACT = "TRANSACT"
     SERVE_TRANSACTION = "SERVE_TRANSACTION"
+    INTERACT = "INTERACT"
+    DRINK = "DRINK"
 
 
 class ActionOrigin(StrEnum):
@@ -37,11 +40,27 @@ class PlanAction:
     duration: float | None = None
     mode: TravelMode | None = None
     offer_id: str | None = None
+    interaction: InteractionSpecification | None = None
 
     def __post_init__(self) -> None:
         if self.duration is not None and self.duration <= 0:
             raise ValueError("action duration must be greater than zero")
-        if self.action is ActionType.TRANSACT:
+        if self.action is ActionType.INTERACT:
+            if self.interaction is None:
+                raise ValueError("INTERACT requires an interaction specification")
+            if self.target is None:
+                object.__setattr__(self, "target", self.interaction.target_id)
+            elif self.target != self.interaction.target_id:
+                raise ValueError(
+                    "INTERACT target must match its interaction specification"
+                )
+            if self.mode is not None or self.offer_id is not None:
+                raise ValueError(
+                    "INTERACT does not accept mode or offer_id"
+                )
+        elif self.interaction is not None:
+            raise ValueError("interaction is only valid for INTERACT")
+        elif self.action is ActionType.TRANSACT:
             if self.target is None or self.offer_id is None:
                 raise ValueError("TRANSACT requires target and offer_id")
             if self.mode is not None:
@@ -127,6 +146,14 @@ class ActionInstance:
         return self.specification.offer_id if self.specification is not None else None
 
     @property
+    def interaction(self) -> InteractionSpecification | None:
+        return (
+            self.specification.interaction
+            if self.specification is not None
+            else None
+        )
+
+    @property
     def goal_ids(self) -> tuple[str, ...]:
         return tuple(link.goal_id for link in self.goal_links)
 
@@ -161,6 +188,7 @@ class PlanComponent:
     previous_activity: ActivityType | None = None
     waiting_for_affordance: bool = False
     waiting_for_transaction: bool = False
+    waiting_for_interaction: bool = False
     current_started: bool = False
     plan_id: str | None = None
     plan_revision: int = 0
@@ -175,6 +203,7 @@ class PlanComponent:
         self.previous_activity = None
         self.waiting_for_affordance = False
         self.waiting_for_transaction = False
+        self.waiting_for_interaction = False
         self.current_started = False
         self.plan_id = None
         self.plan_revision = 0

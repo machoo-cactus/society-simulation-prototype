@@ -11,12 +11,16 @@ from stage0_sim.domain.components import (
     DriveComponent,
     DriveType,
     HomeostasisComponent,
+    InteractionExecutionComponent,
+    InteractionRequestComponent,
     MovementComponent,
     NavigationComponent,
     NavigationStatus,
+    PhysicalStateComponent,
     PlanAction,
     PlanComponent,
     PositionComponent,
+    SpatialIndex,
     SpatialLocationComponent,
     System1Configuration,
     System1State,
@@ -34,6 +38,10 @@ from stage0_sim.domain.lineage import (
 )
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.affordances import cancel_affordance
+from stage0_sim.domain.systems.interactions import (
+    cancel_interaction,
+    interaction_approach_anchors,
+)
 from stage0_sim.domain.systems.spatial_context import (
     local_world_for_agent,
     shares_local_map,
@@ -41,6 +49,7 @@ from stage0_sim.domain.systems.spatial_context import (
 from stage0_sim.domain.systems.transactions import cancel_transaction
 from stage0_sim.domain.world import (
     AffordanceStation,
+    CardinalOrientation,
     CityWorld,
     Coordinate,
     Locator,
@@ -138,8 +147,15 @@ class System1ArbitrationSystem:
                         )
                         self._clear_affordance_request(context, agent_id)
                         self._clear_transaction_request(context, agent_id)
+                        cancel_interaction(
+                            context,
+                            agent_id,
+                            "drive_priority_changed",
+                        )
+                        self._clear_interaction_request(context, agent_id)
                         drive.active_drive = selected
                         drive.target_station_id = None
+                        drive.target_position = None
                         self._clear_movement(context, agent_id)
                         changed = self._emit(
                             context,
@@ -221,8 +237,10 @@ class System1ArbitrationSystem:
         self._clear_movement(context, agent_id)
         cancel_affordance(context, agent_id, "system1_preemption")
         cancel_transaction(context, agent_id, "system1_preemption")
+        cancel_interaction(context, agent_id, "system1_preemption")
         self._clear_affordance_request(context, agent_id)
         self._clear_transaction_request(context, agent_id)
+        self._clear_interaction_request(context, agent_id)
         self._clear_activity(context, agent_id)
         drive.correction_action = new_action_instance(
             context,
@@ -296,22 +314,27 @@ class System1ArbitrationSystem:
             cancel_affordance(context, agent_id, "corrective_station_unavailable")
             self._clear_movement(context, agent_id)
             drive.target_station_id = None
+            drive.target_position = None
             self._block(context, agent_id, drive, "no_reachable_corrective_station")
             return
 
-        station, path_cost, room_id = selected
+        station, target_position, path_cost, room_id = selected
         movement = context.registry.get_component(agent_id, MovementComponent)
-        if drive.target_station_id != station.id:
+        if (
+            drive.target_station_id != station.id
+            or drive.target_position != target_position
+        ):
             previous_target = drive.target_station_id
             if context.registry.has_component(
                 agent_id, AffordanceExecutionComponent
             ):
                 cancel_affordance(context, agent_id, "corrective_station_changed")
             drive.target_station_id = station.id
+            drive.target_position = target_position
             payload: dict[str, JsonValue] = {
                 "drive": drive.active_drive.value,
                 "station_id": station.id,
-                "position": station.position.to_payload(),
+                "position": target_position.to_payload(),
                 "path_cost": path_cost,
             }
             if previous_target is not None:
@@ -363,15 +386,15 @@ class System1ArbitrationSystem:
             )
             return
 
-        if position.coordinate == station.position:
+        if position.coordinate == target_position:
             movement.destination = None
             movement.path = ()
             self._transition(
                 context, agent_id, drive, System1State.EXECUTING_CORRECTION
             )
         else:
-            if movement.destination != station.position:
-                movement.destination = station.position
+            if movement.destination != target_position:
+                movement.destination = target_position
                 movement.path = ()
                 movement.retry_after_tick = 0
                 movement.path_correlation_id = (
@@ -394,7 +417,7 @@ class System1ArbitrationSystem:
         origin: Coordinate,
         world: WorldMap,
         corrective_action: str,
-    ) -> tuple[AffordanceStation, float, str | None] | None:
+    ) -> tuple[AffordanceStation, Coordinate, float, str | None] | None:
         occupied = frozenset(
             position.coordinate
             for other_id, position in context.registry.query(PositionComponent)
@@ -428,7 +451,7 @@ class System1ArbitrationSystem:
                         if room.building_id == current_room.building_id
                     ]
         candidates: list[
-            tuple[float, str, str, AffordanceStation]
+            tuple[float, str, str, AffordanceStation, Coordinate]
         ] = []
         for room_id, candidate_world in candidate_worlds:
             for station in candidate_world.stations:
@@ -448,7 +471,7 @@ class System1ArbitrationSystem:
                     candidates.append(candidate)
         if not candidates:
             return None
-        path_cost, _, room_sort_id, station = min(
+        path_cost, _, room_sort_id, station, target_position = min(
             candidates,
             key=lambda candidate: (
                 candidate[0],
@@ -456,7 +479,7 @@ class System1ArbitrationSystem:
                 candidate[2],
             ),
         )
-        return station, path_cost, room_sort_id or None
+        return station, target_position, path_cost, room_sort_id or None
 
     @staticmethod
     def _station_candidate(
@@ -471,7 +494,7 @@ class System1ArbitrationSystem:
         current_room_id: str | None,
         current_locator: Locator | None,
         occupied: frozenset[Coordinate],
-    ) -> tuple[float, str, str, AffordanceStation] | None:
+    ) -> tuple[float, str, str, AffordanceStation, Coordinate] | None:
         available = station.available
         if context.registry.has_resource(EnvironmentAvailabilityRegistry):
             available = context.registry.get_resource(
@@ -502,14 +525,69 @@ class System1ArbitrationSystem:
         if active_count + reserved_count >= station.capacity:
             return None
         if room_id is None or room_id == current_room_id:
-            path = find_path(world.grid, origin, station.position, occupied)
-            if path is None:
+            actor_state = (
+                context.registry.get_component(
+                    agent_id,
+                    PhysicalStateComponent,
+                )
+                if context.registry.has_component(
+                    agent_id,
+                    PhysicalStateComponent,
+                )
+                else None
+            )
+            index = (
+                context.registry.get_resource(SpatialIndex)
+                if context.registry.has_resource(SpatialIndex)
+                else None
+            )
+            reachable = []
+            for approach in interaction_approach_anchors(
+                context.registry,
+                station.id,
+                station.position,
+            ):
+                path = find_path(
+                    world.grid,
+                    origin,
+                    approach,
+                    occupied,
+                    footprint=(
+                        actor_state.footprint
+                        if actor_state is not None
+                        else None
+                    ),
+                    orientation=(
+                        actor_state.pose.orientation
+                        if actor_state is not None
+                        else CardinalOrientation.NORTH
+                    ),
+                    spatial_index=index if actor_state is not None else None,
+                    room_id=(
+                        actor_state.pose.room_id
+                        if actor_state is not None
+                        else None
+                    ),
+                    entity_id=agent_id if actor_state is not None else None,
+                )
+                if path is not None:
+                    reachable.append((len(path), approach))
+            if not reachable:
                 return None
+            path_length, approach = min(
+                reachable,
+                key=lambda item: (
+                    item[0],
+                    item[1].y,
+                    item[1].x,
+                ),
+            )
             return (
-                float(len(path)),
+                float(path_length),
                 station.id,
                 room_id or "",
                 station,
+                approach,
             )
         if (
             current_locator is None
@@ -540,16 +618,40 @@ class System1ArbitrationSystem:
                 TraversalContext(
                     character_id=agent_id,
                     occupied_locators=occupied_locators,
+                    actor_footprint=(
+                        context.registry.get_component(
+                            agent_id,
+                            PhysicalStateComponent,
+                        ).footprint
+                        if context.registry.has_component(
+                            agent_id,
+                            PhysicalStateComponent,
+                        )
+                        else None
+                    ),
                 ),
                 allowed_transition_ids=allowed_transition_ids,
             )
         except NavigationPlanningError:
             return None
+        destination_reference = route.destination.local_reference
+        destination_coordinate = station.position
+        if isinstance(destination_reference, dict):
+            x = destination_reference.get("x")
+            y = destination_reference.get("y")
+            if (
+                isinstance(x, int)
+                and not isinstance(x, bool)
+                and isinstance(y, int)
+                and not isinstance(y, bool)
+            ):
+                destination_coordinate = Coordinate(x, y)
         return (
             sum(leg.cost for leg in route.legs),
             station.id,
             room_id,
             station,
+            destination_coordinate,
         )
 
     @staticmethod
@@ -767,6 +869,7 @@ class System1ArbitrationSystem:
         drive.correction_action_started = False
         drive.active_drive = None
         drive.target_station_id = None
+        drive.target_position = None
         self._transition(context, agent_id, drive, System1State.NORMAL)
 
     def _block(
@@ -872,6 +975,28 @@ class System1ArbitrationSystem:
         ):
             context.registry.remove_component(
                 agent_id, TransactionRequestComponent
+            )
+
+    @staticmethod
+    def _clear_interaction_request(
+        context: SystemContext,
+        agent_id: str,
+    ) -> None:
+        if context.registry.has_component(
+            agent_id,
+            InteractionRequestComponent,
+        ):
+            context.registry.remove_component(
+                agent_id,
+                InteractionRequestComponent,
+            )
+        if context.registry.has_component(
+            agent_id,
+            InteractionExecutionComponent,
+        ):
+            context.registry.remove_component(
+                agent_id,
+                InteractionExecutionComponent,
             )
 
     @staticmethod

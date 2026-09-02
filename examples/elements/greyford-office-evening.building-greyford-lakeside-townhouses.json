@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-lakeside-townhouses-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "0d6967a52696fa19d0f81b345dd54219da90b2e282743ee816bf51c046fb0f77",
+        "content_hash": "29e1b49a83b5173631583e059359cc598ac6657e682114fbf7f509ae2312b8e7",
         "id": "greyford-office-evening.map-greyford-lakeside-townhouses",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

@@ -2,6 +2,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from stage0_sim.domain.components import ActionType
+from stage0_sim.domain.interactions import (
+    InteractionSpecification,
+    InteractionVerb,
+)
 from stage0_sim.domain.world import TravelMode
 
 
@@ -13,6 +17,7 @@ class IntentKind(StrEnum):
     NAVIGATE = "navigate"
     TRANSACT = "transact"
     SERVE_TRANSACTION = "serve_transaction"
+    INTERACT = "interact"
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,3 +68,11 @@ class TransactionIntent(CharacterIntent):
 @dataclass(frozen=True, slots=True)
 class ServeTransactionIntent(CharacterIntent):
     request_id: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class InteractionIntent(CharacterIntent):
+    specification: InteractionSpecification = InteractionSpecification(
+        verb=InteractionVerb.USE,
+        target_id="target",
+    )

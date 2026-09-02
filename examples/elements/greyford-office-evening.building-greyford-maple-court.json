@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-maple-court-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "f9730f76eb1706019b9ab8ab0b8557ee1a96586ac86936ef48dbdac8dd34840f",
+        "content_hash": "681edb72167179a98d16b76ab93ecfa839435bc78d9297e3b6c10d59fc10c945",
         "id": "greyford-office-evening.map-greyford-maple-court",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

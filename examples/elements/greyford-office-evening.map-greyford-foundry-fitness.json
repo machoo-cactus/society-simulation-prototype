@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "729b81f621456be379b38c2efe7f8295318190051919dbf47e5ec1bde254a055",
+        "content_hash": "834d646239d69a2639f42246d56378dcb188f6c7b113658c5a1a8b59527f6ff8",
         "id": "greyford-office-evening.station-greyford-foundry-fitness-primary",
         "kind": "object"
       },
       "id": "station-greyford-foundry-fitness-primary",
       "key": "station-greyford-foundry-fitness-primary",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 6,
         "y": 3
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 8,
   "zones": [
     {

@@ -1,11 +1,16 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from stage0_sim.domain.components import (
     ActionInstance,
     ActionType,
     DriveComponent,
+    OpenableComponent,
+    PhysicalInteractionRegistry,
+    PhysicalStateComponent,
     PlanComponent,
     PositionComponent,
+    SpatialIndex,
+    SpatialIndexEntry,
     SpatialLocationComponent,
     System1State,
     TravelComponent,
@@ -21,8 +26,11 @@ from stage0_sim.domain.lineage import (
     action_lineage_payload,
 )
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.systems.interactions import sync_held_object_poses
 from stage0_sim.domain.world import (
     CityWorld,
+    Coordinate,
+    SpaceRegistry,
     SpatialScale,
     TravelMode,
     TravelStatus,
@@ -153,6 +161,7 @@ class TravelSystem:
             else ""
         )
         origin_node, origin_failure = self._origin_node(
+            context,
             city,
             location.location,
             outbound_transition_id=outbound_transition_id,
@@ -316,6 +325,10 @@ class TravelSystem:
         if location.local_coordinate is not None:
             city = context.registry.get_resource(CityWorld)
             building = city.building_for_room(location.place_id)
+            if context.registry.has_resource(
+                SpatialIndex
+            ) and context.registry.get_resource(SpatialIndex).contains(agent_id):
+                context.registry.get_resource(SpatialIndex).remove(agent_id)
             context.events.emit(
                 "building.exited",
                 simulation_tick=context.clock.tick,
@@ -489,17 +502,97 @@ class TravelSystem:
                 ),
                 destination.entrances[0],
             )
+            if context.registry.has_resource(PhysicalInteractionRegistry):
+                door_id = context.registry.get_resource(
+                    PhysicalInteractionRegistry
+                ).door_for_transition(entrance.id)
+                if (
+                    door_id is not None
+                    and context.registry.has_component(
+                        door_id,
+                        OpenableComponent,
+                    )
+                    and context.registry.get_component(
+                        door_id,
+                        OpenableComponent,
+                    ).is_locked
+                ):
+                    TravelSystem._block_at_node(
+                        context,
+                        agent_id,
+                        travel,
+                        (
+                            travel.route[-1].to_node_id
+                            if travel.route
+                            else entrance.network_node_id
+                        ),
+                        "object_locked",
+                    )
+                    return
+            entrance_coordinate = TravelSystem._entrance_coordinate(
+                context,
+                entrance.id,
+                entrance.local_coordinate,
+            )
+            if context.registry.has_component(
+                agent_id,
+                PhysicalStateComponent,
+            ) and context.registry.has_resource(SpatialIndex):
+                state = context.registry.get_component(
+                    agent_id,
+                    PhysicalStateComponent,
+                )
+                next_state = replace(
+                    state,
+                    pose=replace(
+                        state.pose,
+                        room_id=entrance.room_id,
+                        anchor=entrance_coordinate,
+                    ),
+                )
+                world = city.room_world(entrance.room_id)
+                spatial_index = context.registry.get_resource(SpatialIndex)
+                selected_state = TravelSystem._arrival_state(
+                    world,
+                    spatial_index,
+                    next_state,
+                )
+                if selected_state is None:
+                    TravelSystem._block_at_node(
+                        context,
+                        agent_id,
+                        travel,
+                        (
+                            travel.route[-1].to_node_id
+                            if travel.route
+                            else entrance.network_node_id
+                        ),
+                        "entrance_footprint_blocked",
+                    )
+                    return
+                next_state = selected_state
+                entrance_coordinate = next_state.pose.anchor
+                spatial_index.add(
+                    SpatialIndexEntry(agent_id, next_state, dynamic=True)
+                )
+                context.registry.set_component(agent_id, next_state)
+                sync_held_object_poses(
+                    context.registry,
+                    agent_id,
+                    next_state.pose.room_id,
+                    next_state.pose.anchor,
+                )
             context.registry.get_component(
                 agent_id, SpatialLocationComponent
             ).location = WorldLocation(
                 scale=SpatialScale.BUILDING,
                 place_id=entrance.room_id,
-                local_coordinate=entrance.local_coordinate,
+                local_coordinate=entrance_coordinate,
             )
             if context.registry.has_component(agent_id, PositionComponent):
                 context.registry.get_component(
                     agent_id, PositionComponent
-                ).coordinate = entrance.local_coordinate
+                ).coordinate = entrance_coordinate
             context.events.emit(
                 "building.entered",
                 simulation_tick=context.clock.tick,
@@ -553,6 +646,41 @@ class TravelSystem:
             correlation_id=travel.correlation_id,
         )
         TravelSystem._complete_plan(context, agent_id)
+
+    @staticmethod
+    def _arrival_state(
+        world: object,
+        spatial_index: SpatialIndex,
+        desired: PhysicalStateComponent,
+    ) -> PhysicalStateComponent | None:
+        from stage0_sim.domain.world import WorldMap
+
+        if not isinstance(world, WorldMap):
+            return None
+        candidates = (
+            Coordinate(x, y)
+            for y in range(world.grid.height)
+            for x in range(world.grid.width)
+        )
+        for coordinate in sorted(
+            candidates,
+            key=lambda item: (
+                abs(item.x - desired.pose.anchor.x)
+                + abs(item.y - desired.pose.anchor.y),
+                item.y,
+                item.x,
+            ),
+        ):
+            candidate = replace(
+                desired,
+                pose=replace(desired.pose, anchor=coordinate),
+            )
+            if (
+                world.grid.are_walkable(candidate.occupied_cells)
+                and spatial_index.can_place(candidate)
+            ):
+                return candidate
+        return None
 
     @staticmethod
     def _cancel_at_node(
@@ -654,6 +782,7 @@ class TravelSystem:
 
     @staticmethod
     def _origin_node(
+        context: SystemContext,
         city: CityWorld,
         location: WorldLocation,
         *,
@@ -675,6 +804,47 @@ class TravelSystem:
                 )
                 if entrance is None:
                     return None, "invalid_origin_entrance"
+                if context.registry.has_resource(SpaceRegistry):
+                    topology = context.registry.get_resource(SpaceRegistry)
+                    try:
+                        transition = topology.transition(entrance_id)
+                    except KeyError:
+                        transition = None
+                    if transition is not None:
+                        expected = (
+                            transition.reverse()
+                            if outbound_transition_id.endswith(":reverse")
+                            else transition
+                        )
+                        reference = expected.from_locator.local_reference
+                        expected_x = (
+                            reference.get("x")
+                            if isinstance(reference, dict)
+                            else None
+                        )
+                        expected_y = (
+                            reference.get("y")
+                            if isinstance(reference, dict)
+                            else None
+                        )
+                        if (
+                            expected.from_locator.space_id != room.id
+                            or not isinstance(expected_x, int)
+                            or not isinstance(expected_y, int)
+                            or location.local_coordinate
+                            != Coordinate(expected_x, expected_y)
+                        ):
+                            return None, "origin_entrance_mismatch"
+                        destination_reference = (
+                            expected.to_locator.local_reference
+                        )
+                        node_id = (
+                            destination_reference.get("node_id")
+                            if isinstance(destination_reference, dict)
+                            else None
+                        )
+                        if isinstance(node_id, str):
+                            return node_id, None
                 if (
                     entrance.room_id != room.id
                     or location.local_coordinate
@@ -732,6 +902,32 @@ class TravelSystem:
         if location.network_node_id is not None:
             return location.network_node_id, None
         return None, None
+
+    @staticmethod
+    def _entrance_coordinate(
+        context: SystemContext,
+        entrance_id: str,
+        fallback: Coordinate,
+    ) -> Coordinate:
+        if not context.registry.has_resource(SpaceRegistry):
+            return fallback
+        try:
+            transition = context.registry.get_resource(
+                SpaceRegistry
+            ).transition(entrance_id)
+        except KeyError:
+            return fallback
+        reference = transition.from_locator.local_reference
+        x = reference.get("x") if isinstance(reference, dict) else None
+        y = reference.get("y") if isinstance(reference, dict) else None
+        if (
+            not isinstance(x, int)
+            or isinstance(x, bool)
+            or not isinstance(y, int)
+            or isinstance(y, bool)
+        ):
+            return fallback
+        return Coordinate(x, y)
 
     @staticmethod
     def _emit_leg(

@@ -13,12 +13,17 @@ from stage0_sim.domain.intents import (
     ActivityIntent,
     CharacterIntent,
     IntentKind,
+    InteractionIntent,
     NavigationIntent,
     ServeTransactionIntent,
     SkipIntent,
     SpeechIntent,
     TransactionIntent,
     WaitIntent,
+)
+from stage0_sim.domain.interactions import (
+    InteractionSpecification,
+    InteractionVerb,
 )
 from stage0_sim.domain.world import TravelMode
 
@@ -31,7 +36,7 @@ class ToolValidationError(ValueError):
 
 class PerformArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    action: Literal["WORK", "READ", "EAT", "SLEEP", "RELAX"]
+    action: Literal["WORK", "READ", "DRINK", "EAT", "SLEEP", "RELAX"]
     target_id: str | None = None
     duration_seconds: float | None = Field(default=None, gt=0, le=3600)
     reason: str | None = Field(default=None, max_length=300)
@@ -76,6 +81,15 @@ class ServeTransactionArguments(BaseModel):
     reason: str | None = Field(default=None, max_length=300)
 
 
+class InteractWithArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    verb: InteractionVerb
+    target_id: str = Field(min_length=1)
+    destination_id: str | None = Field(default=None, min_length=1)
+    slot_id: str | None = Field(default=None, min_length=1)
+    reason: str | None = Field(default=None, max_length=300)
+
+
 class CheckEnvironmentArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
     topics: list[
@@ -91,6 +105,7 @@ ToolArguments = Annotated[
     | NavigateToArguments
     | TransactArguments
     | ServeTransactionArguments
+    | InteractWithArguments
     | CheckEnvironmentArguments,
     Field(discriminator=None),
 ]
@@ -106,6 +121,7 @@ class ToolRegistry:
             "navigate_to": NavigateToArguments,
             "transact": TransactArguments,
             "serve_transaction": ServeTransactionArguments,
+            "interact_with": InteractWithArguments,
             "check_environment": CheckEnvironmentArguments,
         }
 
@@ -205,6 +221,9 @@ class ToolRegistry:
                 "station",
                 "building",
                 "outdoor",
+                "room",
+                "physical_object",
+                "transaction_point",
             }:
                 raise ToolValidationError(
                     "destination_not_known", args.target_id
@@ -296,6 +315,45 @@ class ToolRegistry:
                 args.reason,
                 args.request_id,
             )
+        if isinstance(args, InteractWithArguments):
+            target = targets.get(args.target_id)
+            if target is None:
+                raise ToolValidationError(
+                    "target_not_observable",
+                    args.target_id,
+                )
+            if args.verb.value not in target.available_interactions:
+                raise ToolValidationError(
+                    "interaction_not_available",
+                    f"{args.target_id} does not advertise {args.verb.value}",
+                )
+            if args.destination_id is not None:
+                destination = targets.get(args.destination_id)
+                if destination is None:
+                    raise ToolValidationError(
+                        "target_not_observable",
+                        args.destination_id,
+                    )
+            try:
+                specification = InteractionSpecification(
+                    args.verb,
+                    args.target_id,
+                    args.destination_id,
+                    args.slot_id,
+                )
+            except ValueError as error:
+                raise ToolValidationError(
+                    "invalid_arguments",
+                    str(error),
+                ) from error
+            return InteractionIntent(
+                request.decision_id,
+                call.call_id,
+                request.agent_id,
+                IntentKind.INTERACT,
+                args.reason,
+                specification,
+            )
         raise ToolValidationError("invalid_arguments", call.name)
 
     def is_read_only(self, name: str) -> bool:
@@ -357,6 +415,9 @@ _DESCRIPTIONS = {
     "serve_transaction": (
         "Authorize one assigned observable transaction request at the staffed "
         "point."
+    ),
+    "interact_with": (
+        "Attempt one advertised physical interaction with an observable target."
     ),
     "check_environment": (
         "Read the currently available time, weather, surface, or availability "

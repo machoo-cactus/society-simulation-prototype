@@ -9,6 +9,7 @@ class DisclosureClass(StrEnum):
     DIRECT_PARTICIPANTS = "DIRECT_PARTICIPANTS"
     LOCAL_VISUAL = "LOCAL_VISUAL"
     LOCAL_AUDITORY = "LOCAL_AUDITORY"
+    LOCAL_OLFACTORY = "LOCAL_OLFACTORY"
     PUBLIC_WORLD = "PUBLIC_WORLD"
     ADMIN_ONLY = "ADMIN_ONLY"
 
@@ -17,6 +18,7 @@ class Modality(StrEnum):
     SELF = "self"
     VISUAL = "visual"
     AUDITORY = "auditory"
+    OLFACTORY = "olfactory"
     ENVIRONMENTAL = "environmental"
 
 

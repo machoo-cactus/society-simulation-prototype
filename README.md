@@ -9,6 +9,17 @@ an operator UI, and reproducible research datasets.
 Version **0.2.0** supports Python 3.12 or newer. Linux is the primary CI/runtime
 platform; Windows is a first-class development and CI platform.
 
+Current content contracts are scenario source version 6, reusable element
+version 3, character version 2 with `human-v1`, dataset
+`stage0.dataset.v4`, fresh-only SQLite schema 10, and telemetry
+`stage0.telemetry.v3`. Local physical execution uses 9 microcells per legacy
+cell, 5×5-microcell character bodies, cardinal object footprints, live
+movement and per-sense obstruction, semantic mass/dimensions, equipment and
+typed sense effects, slots/relations/hands/posture/custody, footprint-aware
+sensory sweeps, and deterministic interaction/door traversal. It is discrete
+spatial simulation, not full
+rigid-body physics.
+
 ## Quick start
 
 ### Windows PowerShell
@@ -37,6 +48,8 @@ Open <http://127.0.0.1:8000/ui/>. OpenAPI is at
 
 Existing checkouts can run `.\update.ps1` on Windows or `bash ./update.sh` on
 Linux. Add `-Pull` or `--pull` for an explicit fast-forward-only source update.
+These update scripts do not rewrite content. Check or upgrade catalogs with
+[`stage0-sim migrate content`](docs/CONTENT_MIGRATION.md).
 
 ## Run a simulation
 
@@ -81,7 +94,7 @@ stage0-sim run examples\scenarios\provider-character-controller.json `
 
 ## Core workflows
 
-- **CLI:** run schema-version-4 scenarios, assign character slots, select an
+- **CLI:** run schema-version-6 scenarios, assign character slots, select an
   element library, write canonical events, and persist/export datasets.
 - **Simulation UI (`/ui/`):** stage without starting; assign characters; start,
   pause, resume, single-step, stop, inspect, and export.
@@ -106,9 +119,12 @@ and redaction controls.
 - [Runtime semantics](docs/RUNTIME.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Scenario and element authoring](docs/SCENARIO_EDITOR_GUIDE.md)
+- [Content migration](docs/CONTENT_MIGRATION.md)
 - [Character authoring](docs/CHARACTER_PROFILE_GUIDE.md)
 - [Actions, tools, and events](docs/ACTIONS_AND_EVENTS.md)
 - [Research data](docs/DATA_COLLECTION.md)
 - [API and UI workflows](docs/API_AND_UI.md)
+- [UI architecture and testing](docs/UI_TESTING.md)
+- [Concept guide](docs/CONCEPT_GUIDE.md)
 - [Status and roadmap](docs/STATUS_AND_ROADMAP.md)
 - [Development history and legacy archive](docs/legacy/README.md)

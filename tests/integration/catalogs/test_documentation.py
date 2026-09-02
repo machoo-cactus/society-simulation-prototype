@@ -59,9 +59,9 @@ def test_current_contracts_are_documented() -> None:
     for action in ActionType:
         assert f"`{action.value}`" in vocabulary
 
-    assert "stage0.dataset.v3" in (
+    assert "stage0.dataset.v4" in (
         REPOSITORY_ROOT / "docs" / "DATA_COLLECTION.md"
     ).read_text(encoding="utf-8")
-    assert "schema 8" in (
+    assert "schema 10" in (
         REPOSITORY_ROOT / "docs" / "STATUS_AND_ROADMAP.md"
     ).read_text(encoding="utf-8")

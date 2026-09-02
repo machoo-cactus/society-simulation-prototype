@@ -62,9 +62,14 @@
           {% if schema.required and validate %}required{% endif %}
         >
           {% if not schema.required %}<option value="">Not set</option>{% endif %}
+          {% set selected_option = namespace(found=false) %}
           {% for value, label in schema.options %}
+            {% if node.value == value %}{% set selected_option.found = true %}{% endif %}
             <option value="{{ value }}" {% if node.value == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
+          {% if node.value and not selected_option.found %}
+            <option value="{{ node.value }}" selected>Invalid submitted value: {{ node.value }}</option>
+          {% endif %}
         </select>
       {% else %}
         <input

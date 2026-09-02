@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-northgate-apartments-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "be4649839c2622d75d49a031f68105bc631ef499b4e74ba78bebaa34c6884c2a",
+        "content_hash": "cc5fe6ae5eafadb8efdf4e337a4f8ec52da0528e97c1d7b6dcd8e526f67e4e61",
         "id": "greyford-office-evening.map-greyford-northgate-apartments",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

@@ -23,7 +23,9 @@ GENERAL_CHARACTER_CONTROLLER_PROMPT = (
     "only to inspect available current environment information; after any read "
     "you must still choose exactly one state-changing action tool. Never invent "
     "environment information marked unavailable. Give only a short decision "
-    "reason, never hidden reasoning."
+    "reason, never hidden reasoning. Use interact_with only for an interaction "
+    "advertised on an observable physical target; navigating near an object "
+    "does not itself interact with it."
 )
 
 NPC_CONTROLLER_PROMPT = (

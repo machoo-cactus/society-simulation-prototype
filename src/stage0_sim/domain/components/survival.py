@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from stage0_sim.domain.components.planning import ActionInstance, ActionType
+from stage0_sim.domain.world.model import Coordinate
 
 
 class DriveType(StrEnum):
@@ -97,6 +98,7 @@ class DriveComponent:
     state: System1State = System1State.NORMAL
     active_drive: DriveType | None = None
     target_station_id: str | None = None
+    target_position: Coordinate | None = None
     critical_drives: frozenset[DriveType] = frozenset()
     correction_action: ActionInstance | None = None
     correction_action_started: bool = False

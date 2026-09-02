@@ -1,3 +1,4 @@
+import json
 from collections import deque
 from dataclasses import dataclass
 
@@ -5,10 +6,21 @@ from stage0_sim.application.environment import EnvironmentInformationService
 from stage0_sim.application.navigation import NavigationService
 from stage0_sim.domain.components import (
     ActivityComponent,
+    CustodyComponent,
+    EffectiveSensesComponent,
+    ObjectIntrinsicComponent,
+    OpenableComponent,
     PerceptionComponent,
+    PhysicalObjectIdentityComponent,
+    PhysicalRelationKind,
+    PhysicalStateComponent,
     PositionComponent,
+    ScentSourceComponent,
     SensesComponent,
+    SpatialIndex,
     SpatialLocationComponent,
+    SpatialParentRelationComponent,
+    WearableComponent,
 )
 from stage0_sim.domain.environment import WeatherRuntime
 from stage0_sim.domain.events import DomainEvent, JsonValue
@@ -17,25 +29,34 @@ from stage0_sim.domain.perception import (
     Modality,
     PerceivedFact,
     PerceptibleFact,
+    sensory_sweep,
 )
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.systems.interactions import physical_object_is_exposed
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
-from stage0_sim.domain.world import Coordinate, WorldGrid, WorldMap
+from stage0_sim.domain.world import (
+    Coordinate,
+    SenseModality,
+    WorldGrid,
+    WorldMap,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class PerceptionConfiguration:
     vision_range: int = 8
     recognition_range: int = 5
-    hearing_range: int = 10
+    voice_range: int = 10
     whisper_range: int = 2
     blocked_tiles_are_opaque: bool = True
     inbox_limit: int = 100
     fact_max_age_seconds: float = 300.0
 
     def __post_init__(self) -> None:
-        if min(self.vision_range, self.recognition_range, self.hearing_range) < 0:
+        if min(self.vision_range, self.recognition_range, self.voice_range) < 0:
             raise ValueError("perception ranges must not be negative")
+        if self.recognition_range > self.vision_range:
+            raise ValueError("recognition range must not exceed vision range")
         if self.inbox_limit <= 0 or self.fact_max_age_seconds <= 0:
             raise ValueError("perception limits must be greater than zero")
 
@@ -70,6 +91,17 @@ class PerceptionSystem:
                 configuration,
                 observer_id,
             )
+            self._scan_visible_objects(
+                context,
+                observer_world,
+                configuration,
+                observer_id,
+            )
+            self._scan_scents(
+                context,
+                observer_world,
+                observer_id,
+            )
         for event in pending_events:
             if event.event_type == "speech.started":
                 self._route_speech(context, configuration, event, observers)
@@ -77,6 +109,13 @@ class PerceptionSystem:
                 self._route_movement(context, event, observers)
             elif event.event_type in {"activity.changed", "affordance.started"}:
                 self._route_visual_event(context, event, observers)
+            elif event.event_type in {
+                "interaction.started",
+                "interaction.completed",
+                "interaction.failed",
+                "interaction.cancelled",
+            }:
+                self._route_interaction_event(context, event, observers)
             elif event.event_type == "time.updated":
                 self._route_time_update(context, event, observers)
             elif event.event_type == "weather.changed":
@@ -111,7 +150,7 @@ class PerceptionSystem:
         observer_position = context.registry.get_component(
             observer_id, PositionComponent
         ).coordinate
-        senses = context.registry.get_component(observer_id, SensesComponent)
+        senses = _effective_senses(context.registry, observer_id)
         perception = context.registry.get_component(
             observer_id, PerceptionComponent
         )
@@ -141,12 +180,27 @@ class PerceptionSystem:
             ).coordinate
             if not _same_local_place(context, observer_id, subject_id):
                 continue
-            if not _can_see(
+            if not _can_sense(
                 world.grid,
-                observer_position,
-                subject_position,
-                vision_range,
-                configuration.blocked_tiles_are_opaque,
+                room_id=_room_id(context, observer_id),
+                origin_cells=_entity_cells(
+                    context.registry,
+                    observer_id,
+                    observer_position,
+                ),
+                target_cells=_entity_cells(
+                    context.registry,
+                    subject_id,
+                    subject_position,
+                ),
+                maximum_range=vision_range,
+                modality=SenseModality.VISION,
+                spatial_index=(
+                    context.registry.get_resource(SpatialIndex)
+                    if context.registry.has_resource(SpatialIndex)
+                    else None
+                ),
+                ignored_entity_ids=frozenset({observer_id, subject_id}),
             ):
                 continue
             visible.add(subject_id)
@@ -259,6 +313,328 @@ class PerceptionSystem:
                 ),
             )
         perception.visible_now = visible
+
+    def _scan_visible_objects(
+        self,
+        context: SystemContext,
+        world: WorldMap,
+        configuration: PerceptionConfiguration,
+        observer_id: str,
+    ) -> None:
+        registry = context.registry
+        observer_position = registry.get_component(
+            observer_id,
+            PositionComponent,
+        ).coordinate
+        senses = _effective_senses(registry, observer_id)
+        perception = registry.get_component(
+            observer_id,
+            PerceptionComponent,
+        )
+        room_id = _room_id(context, observer_id)
+        visible: set[str] = set()
+        for target_id in registry.query_entities(
+            PhysicalObjectIdentityComponent,
+            PhysicalStateComponent,
+        ):
+            state = registry.get_component(
+                target_id,
+                PhysicalStateComponent,
+            )
+            if state.pose.room_id != room_id:
+                continue
+            if not physical_object_is_exposed(registry, target_id):
+                continue
+            relation = (
+                registry.get_component(
+                    target_id,
+                    SpatialParentRelationComponent,
+                )
+                if registry.has_component(
+                    target_id,
+                    SpatialParentRelationComponent,
+                )
+                else None
+            )
+            if (
+                relation is not None
+                and relation.kind is PhysicalRelationKind.HELD_BY
+                and relation.parent_id != observer_id
+                and relation.parent_id not in perception.visible_now
+            ):
+                continue
+            target_coordinate = min(
+                state.occupied_cells,
+                key=lambda coordinate: (
+                    abs(coordinate.x - observer_position.x)
+                    + abs(coordinate.y - observer_position.y),
+                    coordinate.y,
+                    coordinate.x,
+                ),
+            )
+            sweep_distance = 0
+            if (
+                relation is None
+                or relation.kind is not PhysicalRelationKind.HELD_BY
+                or relation.parent_id != observer_id
+            ):
+                sweep = sensory_sweep(
+                    world.grid,
+                    room_id=room_id,
+                    origin_cells=_entity_cells(
+                        registry,
+                        observer_id,
+                        observer_position,
+                    ),
+                    target_cells=state.occupied_cells,
+                    maximum_range=senses.vision_range,
+                    modality=SenseModality.VISION,
+                    spatial_index=(
+                        registry.get_resource(SpatialIndex)
+                        if registry.has_resource(SpatialIndex)
+                        else None
+                    ),
+                    ignored_entity_ids=frozenset({observer_id, target_id}),
+                )
+                if not sweep.clear:
+                    continue
+                sweep_distance = sweep.distance or 0
+            visible.add(target_id)
+            recognized = sweep_distance <= senses.recognition_range
+            if recognized:
+                perception.recognized_objects_now.add(target_id)
+            else:
+                perception.recognized_objects_now.discard(target_id)
+            public_state = _physical_public_state(
+                context,
+                observer_id,
+                target_id,
+                recognized=recognized,
+            )
+            signature = json.dumps(
+                public_state,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            if target_id not in perception.visible_objects_now:
+                self._deliver(
+                    context,
+                    observer_id,
+                    self._fact(
+                        context,
+                        "physical_object_seen",
+                        Modality.VISUAL,
+                        DisclosureClass.LOCAL_VISUAL,
+                        subject_id=target_id,
+                        location_id=_zone_id(world, target_coordinate),
+                        properties={
+                            "display_name": registry.get_component(
+                                target_id,
+                                PhysicalObjectIdentityComponent,
+                            ).name,
+                            "public_state": public_state,
+                        },
+                    ),
+                    salience=0.6,
+                )
+            elif perception.last_object_states.get(target_id) != signature:
+                self._deliver(
+                    context,
+                    observer_id,
+                    self._fact(
+                        context,
+                        "physical_object_state_changed",
+                        Modality.VISUAL,
+                        DisclosureClass.LOCAL_VISUAL,
+                        subject_id=target_id,
+                        location_id=_zone_id(world, target_coordinate),
+                        properties={
+                            "display_name": registry.get_component(
+                                target_id,
+                                PhysicalObjectIdentityComponent,
+                            ).name,
+                            "public_state": public_state,
+                        },
+                    ),
+                    salience=0.8,
+                )
+            perception.object_knowledge[target_id] = context.clock.tick
+            perception.last_object_states[target_id] = signature
+        for lost_id in sorted(perception.visible_objects_now - visible):
+            self._deliver(
+                context,
+                observer_id,
+                self._fact(
+                    context,
+                    "physical_object_lost",
+                    Modality.VISUAL,
+                    DisclosureClass.LOCAL_VISUAL,
+                    subject_id=lost_id,
+                    properties={"display_name": _display_name(context, lost_id)},
+                ),
+            )
+        perception.visible_objects_now = visible
+        perception.recognized_objects_now.intersection_update(visible)
+
+    def _scan_scents(
+        self,
+        context: SystemContext,
+        world: WorldMap,
+        observer_id: str,
+    ) -> None:
+        registry = context.registry
+        senses = _effective_senses(registry, observer_id)
+        perception = registry.get_component(observer_id, PerceptionComponent)
+        if senses.smell_range <= 0:
+            for lost_id in sorted(perception.smelled_objects_now):
+                self._deliver_scent_lost(context, observer_id, lost_id)
+            perception.smelled_objects_now.clear()
+            return
+        observer_position = registry.get_component(
+            observer_id,
+            PositionComponent,
+        ).coordinate
+        room_id = _room_id(context, observer_id)
+        smelled: set[str] = set()
+        for source_id in registry.query_entities(
+            ScentSourceComponent,
+            PhysicalStateComponent,
+        ):
+            state = registry.get_component(source_id, PhysicalStateComponent)
+            if state.pose.room_id != room_id:
+                continue
+            if not physical_object_is_exposed(registry, source_id):
+                continue
+            source = registry.get_component(source_id, ScentSourceComponent)
+            result = sensory_sweep(
+                world.grid,
+                room_id=room_id,
+                origin_cells=_entity_cells(
+                    registry,
+                    observer_id,
+                    observer_position,
+                ),
+                target_cells=state.occupied_cells,
+                maximum_range=min(senses.smell_range, source.emission_range),
+                modality=SenseModality.SMELL,
+                spatial_index=(
+                    registry.get_resource(SpatialIndex)
+                    if registry.has_resource(SpatialIndex)
+                    else None
+                ),
+                ignored_entity_ids=frozenset({observer_id, source_id}),
+            )
+            if not result.clear:
+                continue
+            smelled.add(source_id)
+            signature = json.dumps(
+                {
+                    "scent_id": source.scent_id,
+                    "description": source.description,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            fact_type = (
+                "scent_detected"
+                if source_id not in perception.smelled_objects_now
+                else "scent_changed"
+                if perception.last_scent_states.get(source_id) != signature
+                else None
+            )
+            if fact_type is not None:
+                self._deliver(
+                    context,
+                    observer_id,
+                    self._fact(
+                        context,
+                        fact_type,
+                        Modality.OLFACTORY,
+                        DisclosureClass.LOCAL_OLFACTORY,
+                        subject_id=source_id,
+                        properties={
+                            "display_name": _display_name(context, source_id),
+                            "scent_id": source.scent_id,
+                            "description": source.description,
+                        },
+                    ),
+                    salience=0.6,
+                )
+            perception.last_scent_states[source_id] = signature
+        for lost_id in sorted(perception.smelled_objects_now - smelled):
+            self._deliver_scent_lost(context, observer_id, lost_id)
+        perception.smelled_objects_now = smelled
+
+    def _deliver_scent_lost(
+        self,
+        context: SystemContext,
+        observer_id: str,
+        source_id: str,
+    ) -> None:
+        self._deliver(
+            context,
+            observer_id,
+            self._fact(
+                context,
+                "scent_lost",
+                Modality.OLFACTORY,
+                DisclosureClass.LOCAL_OLFACTORY,
+                subject_id=source_id,
+                properties={"display_name": _display_name(context, source_id)},
+            ),
+        )
+
+    def _route_interaction_event(
+        self,
+        context: SystemContext,
+        event: DomainEvent,
+        observers: tuple[str, ...],
+    ) -> None:
+        if event.agent_id is None:
+            return
+        target_id = _string_value(event.payload.get("target_id"))
+        if target_id is None:
+            return
+        for observer_id in observers:
+            perception = context.registry.get_component(
+                observer_id,
+                PerceptionComponent,
+            )
+            if (
+                event.agent_id != observer_id
+                and event.agent_id not in perception.visible_now
+            ):
+                continue
+            if (
+                target_id not in perception.visible_objects_now
+                and event.agent_id != observer_id
+            ):
+                continue
+            self._deliver(
+                context,
+                observer_id,
+                self._fact(
+                    context,
+                    "physical_interaction_observed",
+                    Modality.VISUAL,
+                    DisclosureClass.LOCAL_VISUAL,
+                    subject_id=event.agent_id,
+                    object_id=target_id,
+                    event_id=event.event_id,
+                    properties={
+                        "verb": str(event.payload.get("verb", "")),
+                        "status": event.event_type.removeprefix(
+                            "interaction."
+                        ),
+                        "display_name": _display_name(
+                            context,
+                            event.agent_id,
+                        ),
+                        "target_name": _display_name(context, target_id),
+                    },
+                ),
+                salience=0.8,
+            )
 
     def _route_visual_event(
         self,
@@ -488,7 +864,7 @@ class PerceptionSystem:
         base_range = (
             configuration.whisper_range
             if channel == "whisper"
-            else configuration.hearing_range
+            else configuration.voice_range
         )
         recipients: list[str] = []
         for observer_id in observers:
@@ -501,15 +877,34 @@ class PerceptionSystem:
             )
             if observer_world is None:
                 continue
-            senses = context.registry.get_component(observer_id, SensesComponent)
+            senses = _effective_senses(context.registry, observer_id)
             target = context.registry.get_component(
                 observer_id, PositionComponent
             ).coordinate
-            maximum = int(base_range * senses.hearing_multiplier)
-            distance = _path_distance(
-                observer_world.grid, source, target, maximum
+            maximum = min(base_range, senses.hearing_range)
+            result = sensory_sweep(
+                observer_world.grid,
+                room_id=_room_id(context, observer_id),
+                origin_cells=_entity_cells(
+                    context.registry,
+                    speaker_id,
+                    source,
+                ),
+                target_cells=_entity_cells(
+                    context.registry,
+                    observer_id,
+                    target,
+                ),
+                maximum_range=maximum,
+                modality=SenseModality.HEARING,
+                spatial_index=(
+                    context.registry.get_resource(SpatialIndex)
+                    if context.registry.has_resource(SpatialIndex)
+                    else None
+                ),
+                ignored_entity_ids=frozenset({speaker_id, observer_id}),
             )
-            if distance is None:
+            if not result.clear:
                 continue
             recipients.append(observer_id)
             self._deliver(
@@ -724,6 +1119,14 @@ def _display_name(context: SystemContext, entity_id: str) -> str:
         return context.registry.get_component(
             entity_id, CharacterProfileComponent
         ).display_name
+    if context.registry.has_component(
+        entity_id,
+        PhysicalObjectIdentityComponent,
+    ):
+        return context.registry.get_component(
+            entity_id,
+            PhysicalObjectIdentityComponent,
+        ).name
     return entity_id
 
 
@@ -732,18 +1135,27 @@ def _zone_id(world: WorldMap, coordinate: Coordinate) -> str | None:
     return zone.id if zone is not None else None
 
 
-def _can_see(
+def _can_sense(
     grid: WorldGrid,
-    origin: Coordinate,
-    target: Coordinate,
+    *,
+    room_id: str,
+    origin_cells: frozenset[Coordinate],
+    target_cells: frozenset[Coordinate],
     maximum_range: int,
-    opaque_blocks: bool,
+    modality: SenseModality,
+    spatial_index: SpatialIndex | None = None,
+    ignored_entity_ids: frozenset[str] = frozenset(),
 ) -> bool:
-    if abs(origin.x - target.x) + abs(origin.y - target.y) > maximum_range:
-        return False
-    if not opaque_blocks:
-        return True
-    return all(cell not in grid.blocked for cell in _line_cells(origin, target)[1:-1])
+    return sensory_sweep(
+        grid,
+        room_id=room_id,
+        origin_cells=origin_cells,
+        target_cells=target_cells,
+        maximum_range=maximum_range,
+        modality=modality,
+        spatial_index=spatial_index,
+        ignored_entity_ids=ignored_entity_ids,
+    ).clear
 
 
 def _line_cells(origin: Coordinate, target: Coordinate) -> tuple[Coordinate, ...]:
@@ -811,6 +1223,145 @@ def _same_local_place(
         and second.local_coordinate is not None
         and first.place_id == second.place_id
     )
+
+
+def _room_id(context: SystemContext, entity_id: str) -> str:
+    if context.registry.has_component(entity_id, PhysicalStateComponent):
+        return context.registry.get_component(
+            entity_id,
+            PhysicalStateComponent,
+        ).pose.room_id
+    if context.registry.has_component(entity_id, SpatialLocationComponent):
+        return context.registry.get_component(
+            entity_id,
+            SpatialLocationComponent,
+        ).location.place_id
+    return "implicit-building"
+
+
+def _physical_public_state(
+    context: SystemContext,
+    observer_id: str,
+    target_id: str,
+    *,
+    recognized: bool,
+) -> dict[str, JsonValue]:
+    registry = context.registry
+    state: dict[str, JsonValue] = {}
+    if registry.has_component(target_id, OpenableComponent):
+        openable = registry.get_component(target_id, OpenableComponent)
+        state["is_open"] = openable.is_open
+        state["is_locked"] = openable.is_locked
+    if registry.has_component(target_id, SpatialParentRelationComponent):
+        relation = registry.get_component(
+            target_id,
+            SpatialParentRelationComponent,
+        )
+        state["relation"] = relation.kind.value
+        state["parent_id"] = relation.parent_id
+        state["slot_id"] = relation.slot_id
+        if relation.kind is PhysicalRelationKind.HELD_BY:
+            state["held_by"] = relation.parent_id
+    if registry.has_component(target_id, CustodyComponent):
+        custody = registry.get_component(target_id, CustodyComponent)
+        state["custodian_id"] = custody.custodian_id
+    if recognized and registry.has_component(
+        target_id,
+        ObjectIntrinsicComponent,
+    ):
+        intrinsic = registry.get_component(
+            target_id,
+            ObjectIntrinsicComponent,
+        )
+        state["semantic_size"] = {
+            "dimensions_cm": (
+                {
+                    "length_cm": intrinsic.dimensions.length_cm,
+                    "width_cm": intrinsic.dimensions.width_cm,
+                    "height_cm": intrinsic.dimensions.height_cm,
+                }
+                if intrinsic.dimensions is not None
+                else None
+            ),
+            "size_class": (
+                intrinsic.size_class.value
+                if intrinsic.size_class is not None
+                else None
+            ),
+        }
+        intrinsic_relation = (
+            registry.get_component(
+                target_id,
+                SpatialParentRelationComponent,
+            )
+            if registry.has_component(
+                target_id,
+                SpatialParentRelationComponent,
+            )
+            else None
+        )
+        if (
+            intrinsic.mass_kg is not None
+            and intrinsic_relation is not None
+            and intrinsic_relation.parent_id == observer_id
+            and intrinsic_relation.kind in {
+                PhysicalRelationKind.HELD_BY,
+                PhysicalRelationKind.ATTACHED_TO,
+            }
+        ):
+            state["mass_kg"] = intrinsic.mass_kg
+    if recognized and registry.has_component(target_id, WearableComponent):
+        wearable = registry.get_component(target_id, WearableComponent)
+        state["wearable_slots"] = [
+            slot.value
+            for slot in sorted(
+                wearable.compatible_slots,
+                key=lambda value: value.value,
+            )
+        ]
+    if recognized and registry.has_component(target_id, ScentSourceComponent):
+        scent = registry.get_component(target_id, ScentSourceComponent)
+        state["scent"] = {
+            "scent_id": scent.scent_id,
+            "description": scent.description,
+        }
+    return state
+
+
+def _effective_senses(
+    registry: object,
+    observer_id: str,
+) -> EffectiveSensesComponent:
+    from stage0_sim.domain.ecs import Registry
+
+    if not isinstance(registry, Registry):
+        raise TypeError("perception requires an ECS registry")
+    if registry.has_component(observer_id, EffectiveSensesComponent):
+        return registry.get_component(observer_id, EffectiveSensesComponent)
+    base = registry.get_component(observer_id, SensesComponent)
+    return EffectiveSensesComponent(
+        vision_range=base.vision_range,
+        recognition_range=base.recognition_range,
+        hearing_range=base.hearing_range,
+        smell_range=base.smell_range,
+    )
+
+
+def _entity_cells(
+    registry: object,
+    entity_id: str,
+    fallback: Coordinate,
+) -> frozenset[Coordinate]:
+    from stage0_sim.domain.ecs import Registry
+
+    if not isinstance(registry, Registry):
+        raise TypeError("perception requires an ECS registry")
+    if registry.has_component(entity_id, PhysicalStateComponent):
+        return registry.get_component(
+            entity_id,
+            PhysicalStateComponent,
+        ).occupied_cells
+    return frozenset({fallback})
 
 
 def _coordinate_value(value: JsonValue) -> Coordinate | None:

@@ -249,7 +249,7 @@ def test_city_registry_contains_all_entrances_and_destinations() -> None:
     )
     assert spatial.locator == Locator(
         "building-home.interior",
-        {"kind": "coordinate", "x": 2, "y": 1},
+        {"kind": "coordinate", "x": 22, "y": 13},
     )
 
 
@@ -263,7 +263,7 @@ def test_legacy_scenario_builds_implicit_grid_registry() -> None:
     assert registry.destination_locators("sofa-1") == (
         Locator(
             "implicit-building",
-            {"kind": "coordinate", "x": 10, "y": 6},
+            {"kind": "coordinate", "x": 94, "y": 58},
         ),
     )
 

@@ -10,6 +10,27 @@ type EventHandler = Callable[["DomainEvent"], None]
 type WallClock = Callable[[], datetime]
 
 
+def event_payload_is_private(payload: Mapping[str, JsonValue]) -> bool:
+    visibility = payload.get("visibility")
+    if isinstance(visibility, str) and visibility.casefold() in {
+        "private",
+        "private_research",
+    }:
+        return True
+    if isinstance(visibility, dict):
+        level = visibility.get("level")
+        if isinstance(level, str) and level.casefold() in {
+            "private",
+            "private_research",
+        }:
+            return True
+    content_visibility = payload.get("content_visibility")
+    return (
+        isinstance(content_visibility, str)
+        and content_visibility.casefold() in {"private", "private_research"}
+    ) or payload.get("private_visibility") is True
+
+
 @dataclass(frozen=True, slots=True)
 class DomainEvent:
     run_id: str

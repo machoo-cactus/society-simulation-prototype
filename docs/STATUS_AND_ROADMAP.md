@@ -1,6 +1,6 @@
 # Status and Roadmap
 
-**Status date:** 2026-09-01  
+**Status date:** 2026-09-02  
 **Current release:** 0.2.0
 
 Stage 0 is an implemented deterministic simulation prototype with a Python
@@ -19,8 +19,12 @@ and versioned SQLite/JSONL research datasets.
 - Plans, structured goals, affordances, possessions, atomic transactions,
   run-scoped service NPCs, speech, observer-specific perception, episodic
   memory, information retrieval, and learned route knowledge.
-- Scenario source version 4, character version 2, element version 1, dataset
-  v3, and fresh-only SQLite schema 8.
+- Fixed 9-microcell local spatial metric, 5×5 character bodies, cardinal
+  object footprints, live obstruction/index revisions, slots/relations,
+  hands/posture/custody, door-linked traversal, and deterministic physical
+  interaction lifecycles.
+- Scenario source version 6, character version 2, element version 3, dataset
+  v4, fresh-only SQLite schema 10, and telemetry v3.
 - Hash-protected character, scenario, and element libraries.
 - Accessible Python-rendered HTML/SVG operator workflows with Playwright
   coverage and no-JavaScript fallbacks.
@@ -37,6 +41,10 @@ and versioned SQLite/JSONL research datasets.
   cognition barrier.
 - The sparse city is an execution model, not a geographically complete city or
   traffic simulator.
+- Physical execution is discrete footprint/capability simulation with semantic
+  mass/dimensions, equipment effects, and structural sensory sweeps; it is not
+  continuous rigid-body dynamics, torque, arbitrary rotation, optical
+  reflection, acoustic attenuation, or scent diffusion.
 - Dataset projection rebuild does not reconstruct every normalized lifecycle
   table.
 - Authentication, deployment authorization, retention policy, encryption,

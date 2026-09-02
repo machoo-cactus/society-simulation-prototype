@@ -119,6 +119,22 @@
           <input name="related_entity_id" value="{{ filter_values.related_entity_id }}">
         </label>
         <label>
+          <span>Physical object ID</span>
+          <input name="object_id" value="{{ filter_values.object_id }}">
+        </label>
+        <label>
+          <span>Room ID</span>
+          <input name="room_id" value="{{ filter_values.room_id }}">
+        </label>
+        <label>
+          <span>Physical parent ID</span>
+          <input name="parent_id" value="{{ filter_values.parent_id }}">
+        </label>
+        <label>
+          <span>Relation kind</span>
+          <input name="relation_kind" value="{{ filter_values.relation_kind }}">
+        </label>
+        <label>
           <span>Minimum tick</span>
           <input name="minimum_tick" type="number" min="0" value="{{ filter_values.minimum_tick }}">
         </label>
@@ -146,6 +162,39 @@
         <label>
           <span>Outcome</span>
           <input name="outcome" value="{{ filter_values.outcome }}">
+        </label>
+        <label>
+          <span>Physical interaction verb</span>
+          <input name="interaction_verb" value="{{ filter_values.interaction_verb }}">
+        </label>
+        <label>
+          <span>Interaction type</span>
+          <input name="interaction_type" value="{{ filter_values.interaction_type }}">
+        </label>
+        <label>
+          <span>Runner phase</span>
+          <select name="phase" aria-label="Runner phase">
+            <option value="">All phases</option>
+            {% for phase in runner_phases %}
+              <option value="{{ phase }}" {% if filter_values.phase == phase %}selected{% endif %}>{{ phase }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Open state</span>
+          <select name="is_open" aria-label="Open state">
+            <option value="">Any or not openable</option>
+            <option value="true" {% if filter_values.is_open == "true" %}selected{% endif %}>Open</option>
+            <option value="false" {% if filter_values.is_open == "false" %}selected{% endif %}>Closed</option>
+          </select>
+        </label>
+        <label>
+          <span>Locked state</span>
+          <select name="is_locked" aria-label="Locked state">
+            <option value="">Any or not lockable</option>
+            <option value="true" {% if filter_values.is_locked == "true" %}selected{% endif %}>Locked</option>
+            <option value="false" {% if filter_values.is_locked == "false" %}selected{% endif %}>Unlocked</option>
+          </select>
         </label>
         <label>
           <span>Visibility</span>
@@ -196,7 +245,9 @@
           <p id="private-data-warning" class="private-data-warning">
             Warning: enabling this control can display prompts, model requests
             and responses, memories, retrieved information, and character
-            profile or situation context. Keep this material restricted.
+            profile or situation context, hidden container contents, private
+            ownership, custody, and held-object state. Keep this material
+            restricted.
           </p>
         </div>
         <div class="dataset-filter-actions">
@@ -216,7 +267,7 @@
         <div>
           <a class="button-link" href="{{ filtered_records_url }}" download>Download filtered NDJSON</a>
           <a class="button-link" href="{{ analysis_bundle_url }}" download>Download filtered analysis bundle</a>
-          <a class="button-link" href="/simulation/runs/{{ run_id }}/exports/complete">Download complete run dataset</a>
+          <a class="button-link" href="/simulation/runs/{{ run_id }}/exports/complete">Download complete run dataset (private-inclusive)</a>
         </div>
       </section>
 
@@ -228,7 +279,8 @@
               ("Record types", summary.record_counts),
               ("Entity records", summary.entity_counts),
               ("Terminal outcomes", summary.terminal_outcome_counts),
-              ("Derived features", summary.derived_feature_counts)
+              ("Derived features", summary.derived_feature_counts),
+              ("Physical observations", summary.physical)
             ) %}
               <details>
                 <summary>{{ title }}</summary>

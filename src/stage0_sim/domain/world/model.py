@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import StrEnum
 
 from stage0_sim.domain.economy import TransactionPoint
 from stage0_sim.domain.events import JsonValue
@@ -11,6 +12,11 @@ class Coordinate:
 
     def to_payload(self) -> dict[str, JsonValue]:
         return {"x": self.x, "y": self.y}
+
+
+class LocalCoordinateSystem(StrEnum):
+    LEGACY_CELL = "legacy_cell"
+    MICROCELL = "microcell"
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +37,9 @@ class WorldGrid:
 
     def is_walkable(self, coordinate: Coordinate) -> bool:
         return self.contains(coordinate) and coordinate not in self.blocked
+
+    def are_walkable(self, coordinates: frozenset[Coordinate]) -> bool:
+        return all(self.is_walkable(coordinate) for coordinate in coordinates)
 
     def neighbors(self, coordinate: Coordinate) -> tuple[Coordinate, ...]:
         candidates = (
@@ -142,8 +151,15 @@ class WorldMap:
     zones: tuple[Zone, ...] = ()
     stations: tuple[AffordanceStation, ...] = ()
     transaction_points: tuple[TransactionPoint, ...] = ()
+    coordinate_system: LocalCoordinateSystem = LocalCoordinateSystem.LEGACY_CELL
+    microcells_per_legacy_cell: int = 1
 
     def __post_init__(self) -> None:
+        if self.coordinate_system is LocalCoordinateSystem.MICROCELL:
+            if self.microcells_per_legacy_cell != 9:
+                raise ValueError("microcell worlds require a 9x spatial metric")
+        elif self.microcells_per_legacy_cell != 1:
+            raise ValueError("legacy-cell worlds require a unit spatial metric")
         self._validate_unique_ids("zone", [zone.id for zone in self.zones])
         self._validate_unique_ids("station", [station.id for station in self.stations])
         self._validate_unique_ids(
@@ -173,6 +189,31 @@ class WorldMap:
 
     def zone_at(self, coordinate: Coordinate) -> Zone | None:
         return next((zone for zone in self.zones if coordinate in zone.tiles), None)
+
+    def local_distance_per_legacy_cell(self) -> int:
+        return self.microcells_per_legacy_cell
+
+    def legacy_dimensions(self) -> tuple[int, int]:
+        scale = self.microcells_per_legacy_cell
+        return self.grid.width // scale, self.grid.height // scale
+
+    def to_legacy_coordinate(self, coordinate: Coordinate) -> Coordinate:
+        scale = self.microcells_per_legacy_cell
+        return Coordinate(coordinate.x // scale, coordinate.y // scale)
+
+    def legacy_coordinates(
+        self,
+        coordinates: frozenset[Coordinate],
+    ) -> tuple[Coordinate, ...]:
+        return tuple(
+            sorted(
+                {
+                    self.to_legacy_coordinate(coordinate)
+                    for coordinate in coordinates
+                },
+                key=lambda item: (item.y, item.x),
+            )
+        )
 
     def station(self, station_id: str) -> AffordanceStation:
         try:

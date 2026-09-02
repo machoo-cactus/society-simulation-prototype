@@ -85,12 +85,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "5f15169e3d6c4e7bd3972d6b41f9749ed052665c793f9ae1d6f8f7907ced09c6",
+        "content_hash": "967d2951db8f1a3e5c8ce0419f89cdd214bc08a6016292fad10983fa06fe92e5",
         "id": "greyford-office-evening.station-greyford-rowan-home-sofa",
         "kind": "object"
       },
       "id": "station-greyford-rowan-home-sofa",
       "key": "station-greyford-rowan-home-sofa",
+      "placement": {
+        "anchor": {
+          "x": 112,
+          "y": 67
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 12,
         "y": 7
@@ -99,12 +111,24 @@
     },
     {
       "element": {
-        "content_hash": "78d2dcd9c1317162439f9d837caf84161147e563bc68054a8a5bd969842c3698",
+        "content_hash": "38a8b76a487bd7c9f082185acc503edc7d775995d8d8c3c10125c3270dd91c2f",
         "id": "greyford-office-evening.station-greyford-rowan-home-bed",
         "kind": "object"
       },
       "id": "station-greyford-rowan-home-bed",
       "key": "station-greyford-rowan-home-bed",
+      "placement": {
+        "anchor": {
+          "x": 112,
+          "y": 22
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 12,
         "y": 2
@@ -113,12 +137,24 @@
     },
     {
       "element": {
-        "content_hash": "04d5dc6f4585f59fffb6d79e6202de89b3098ee27ff8cfdd18305053c9a8df32",
+        "content_hash": "9e7ccdcf9582d8b3f7c1eaaba5ebbdbcf6957e429ecae880dcbeaf32e1ef44c0",
         "id": "greyford-office-evening.station-greyford-rowan-home-dining-table",
         "kind": "object"
       },
       "id": "station-greyford-rowan-home-dining-table",
       "key": "station-greyford-rowan-home-dining-table",
+      "placement": {
+        "anchor": {
+          "x": 76,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 8,
         "y": 3
@@ -127,12 +163,24 @@
     },
     {
       "element": {
-        "content_hash": "61491e28a04041c7ef91f8b30174f67e70eae321612e7af747279d41fd349d50",
+        "content_hash": "eb0c61bf24ba5ac913894419302ba4ccedfbc56fd26a17fc7b56d81abce5fb93",
         "id": "greyford-office-evening.station-greyford-rowan-home-study-desk",
         "kind": "object"
       },
       "id": "station-greyford-rowan-home-study-desk",
       "key": "station-greyford-rowan-home-study-desk",
+      "placement": {
+        "anchor": {
+          "x": 67,
+          "y": 76
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 7,
         "y": 8
@@ -141,7 +189,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 16,
   "zones": [
     {

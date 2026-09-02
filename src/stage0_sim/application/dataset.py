@@ -12,6 +12,8 @@ from stage0_sim.application.data_capture import (
     RecordSource,
     RecordVisibility,
     RunnerPhase,
+    character_physical_state,
+    compact_coordinate_path,
 )
 from stage0_sim.domain.components import (
     ActionInstance,
@@ -194,6 +196,9 @@ class AgentStateProjector:
             state["possessions"] = dict(
                 sorted(possessions.holdings.items())
             )
+        physical = character_physical_state(registry, agent_id)
+        if physical is not None:
+            state["physical"] = physical
         if registry.has_component(agent_id, ActivityComponent):
             state["activity"] = registry.get_component(
                 agent_id, ActivityComponent
@@ -206,7 +211,10 @@ class AgentStateProjector:
                     if movement.destination is not None
                     else None
                 ),
-                "path": [coordinate.to_payload() for coordinate in movement.path],
+                "remaining_path": compact_coordinate_path(movement.path),
+                "retry_after_tick": movement.retry_after_tick,
+                "path_correlation_id": movement.path_correlation_id,
+                "planned_spatial_revision": movement.planned_spatial_revision,
                 **action_lineage_payload(movement.action_instance),
             }
         if registry.has_component(agent_id, DriveComponent):

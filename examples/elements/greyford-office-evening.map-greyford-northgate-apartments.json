@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "004ff47d596b966b703244ab30948a9b6c6b026cc23d11ab62ce6b70737dee63",
+        "content_hash": "c8b23df61faf9693676d56a8bf00289948d57237a60a6fd9c7b60d4db7b2ce16",
         "id": "greyford-office-evening.station-greyford-northgate-apartments-primary",
         "kind": "object"
       },
       "id": "station-greyford-northgate-apartments-primary",
       "key": "station-greyford-northgate-apartments-primary",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 6,
         "y": 3
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 8,
   "zones": [
     {

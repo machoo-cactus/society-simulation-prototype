@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "id": "legacy-role",
+  "name": "Legacy Role",
+  "kind": "npc_role",
+  "briefing": "Preserve this role exactly."
+}

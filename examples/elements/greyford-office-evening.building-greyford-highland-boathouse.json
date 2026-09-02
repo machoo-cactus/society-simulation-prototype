@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-highland-boathouse-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "35410de9b1841d7d2856c40be3c01e003927a46d071d391afa1e6c4a9bb1254b",
+        "content_hash": "283acb8600fe90da3da1922fb56d346ba52ea113fdb2fbd63388cb5ebf45ca28",
         "id": "greyford-office-evening.map-greyford-highland-boathouse",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

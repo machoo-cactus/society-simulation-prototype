@@ -46,13 +46,26 @@ from stage0_sim.application.telemetry import build_runtime_snapshot
 from stage0_sim.config import Settings, create_model_client
 from stage0_sim.domain.components import (
     ControllerComponent,
+    OpenableComponent,
     PendingSpeechComponent,
     PerceptionComponent,
+    PhysicalObjectIdentityComponent,
+    PhysicalPose,
+    PhysicalRelationKind,
+    PhysicalStateComponent,
     PlanComponent,
     PositionComponent,
+    SpatialIndex,
+    SpatialIndexEntry,
+    SpatialParentRelationComponent,
 )
 from stage0_sim.domain.events import JsonValue
-from stage0_sim.domain.world import Coordinate
+from stage0_sim.domain.world import (
+    Coordinate,
+    Footprint,
+    MovementObstruction,
+    VisionObstruction,
+)
 
 
 def _turn(name: str, arguments: dict[str, JsonValue]) -> ModelTurn:
@@ -174,12 +187,69 @@ def test_scripted_controller_moves_only_through_tool_commit() -> None:
     runner.run_for(2)
 
     position = runner.registry.get_component("alex", PositionComponent)
-    assert position.coordinate == Coordinate(1, 0)
+    assert position.coordinate == Coordinate(13, 4)
     event_types = [event.event_type for event in runner.events.events]
     assert "tool.proposed" in event_types
     assert "tool.accepted" in event_types
     assert "tool.committed" in event_types
     assert event_types.index("tool.committed") < event_types.index("agent.moved")
+
+
+def test_scripted_controller_uses_advertised_interaction_tool() -> None:
+    payload = _tool_scenario().model_dump(mode="json")
+    payload["cognition"]["tool_allowlist"] = ["interact_with"]
+    payload["entities"][0]["components"]["controller"]["tool_allowlist"] = [
+        "interact_with"
+    ]
+    runner = create_runner(
+        ScenarioDefinition.model_validate(payload),
+        model_client=ScriptedModelClient(
+            (
+                _turn(
+                    "interact_with",
+                    {"verb": "OPEN", "target_id": "door"},
+                ),
+            )
+        ),
+    )
+    registry = runner.registry
+    registry.create_entity("door")
+    state = PhysicalStateComponent(
+        PhysicalPose("implicit-building", Coordinate(7, 4)),
+        Footprint(frozenset({Coordinate(0, 0)})),
+        MovementObstruction.HARD,
+        VisionObstruction.OPAQUE,
+    )
+    registry.add_component(
+        "door",
+        PhysicalObjectIdentityComponent("door", "Door"),
+    )
+    registry.add_component("door", state)
+    registry.add_component("door", OpenableComponent())
+    registry.add_component(
+        "door",
+        SpatialParentRelationComponent(
+            "implicit-building",
+            PhysicalRelationKind.ON_FLOOR,
+        ),
+    )
+    registry.get_resource(SpatialIndex).add(
+        SpatialIndexEntry("door", state)
+    )
+
+    runner.run_for(3)
+
+    assert registry.get_component("door", OpenableComponent).is_open
+    assert any(
+        event.event_type == "tool.committed"
+        and event.payload["tool_name"] == "interact_with"
+        for event in runner.events.events
+    )
+    assert any(
+        event.event_type == "action.completed"
+        and event.payload["action"] == "INTERACT"
+        for event in runner.events.events
+    )
 
 
 def test_controller_can_read_environment_before_one_action() -> None:
@@ -404,7 +474,7 @@ def test_speech_is_heard_by_nearby_observers_only() -> None:
     scenario = ScenarioDefinition.model_validate(
         {
             "name": "hearing",
-            "perception": {"hearing_range": 2},
+            "perception": {"voice_range": 2},
             "world": {"width": 6, "height": 1},
             "entities": [
                 {

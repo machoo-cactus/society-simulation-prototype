@@ -1,6 +1,6 @@
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, time
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -68,6 +68,7 @@ from stage0_sim.application.memory_recording import (
     MemoryWorkCoordinator,
     observation_metadata,
 )
+from stage0_sim.application.migrations.constants import SCENARIO_SCHEMA_VERSION
 from stage0_sim.application.navigation import (
     InformationKnownTopologyProjection,
     NavigationKnowledgeRecordingSystem,
@@ -89,13 +90,24 @@ from stage0_sim.domain.components import (
     ActivityComponent,
     ActivityRates,
     ActivityType,
+    CarriedLoadComponent,
+    CharacterEmbodimentComponent,
+    CharacterHandStateComponent,
+    CharacterPostureComponent,
     CharacterProfileComponent,
     CharacterSituationComponent,
+    ConsumableComponent,
+    ContainerComponent,
     ControllerComponent,
     ConversationComponent,
+    CustodyComponent,
     DriveComponent,
     DriveThreshold,
     DriveType,
+    EffectiveSensesComponent,
+    EffectOperation,
+    EquipmentSlot,
+    EquipmentStateComponent,
     EventMatchCriterion,
     GoalComparator,
     GoalCompletionPolicy,
@@ -109,26 +121,52 @@ from stage0_sim.domain.components import (
     HomeostasisConfiguration,
     InformationNamespaceComponent,
     InteractionCountCriterion,
+    InteractionSpecification,
     InteractionType,
+    InteractionVerb,
     LineageIdGenerator,
     LocationMatchCriterion,
     MemoryComponent,
     MovementComponent,
     NavigationComponent,
+    ObjectDimensions,
+    ObjectEffect,
+    ObjectIntrinsicComponent,
+    ObjectSizeClass,
+    OccupancySlot,
+    OccupancySlotsComponent,
+    OpenableComponent,
+    OwnershipComponent,
     PerceptionComponent,
+    PhysicalInteractionRegistry,
+    PhysicalInteractionTarget,
+    PhysicalObjectIdentityComponent,
+    PhysicalPose,
+    PhysicalRelationKind,
+    PhysicalStateComponent,
     PlanAction,
     PlanComponent,
+    PortableComponent,
     PositionComponent,
     PossessionsComponent,
     PossessionThresholdCriterion,
+    ReadableComponent,
+    ScentSourceComponent,
+    SenseEffectTarget,
     SensesComponent,
+    SenseTransmission,
     SimulationTimeCriterion,
     SpatialLocationComponent,
+    SpatialParentRelationComponent,
     StateComparisonCriterion,
+    SupportComponent,
     System1Configuration,
     TravelComponent,
+    UsableComponent,
+    WearableComponent,
     default_activity_rates,
     default_drive_thresholds,
+    validate_spatial_relation_acyclicity,
 )
 from stage0_sim.domain.components import (
     GoalDefinition as DomainGoalDefinition,
@@ -181,6 +219,10 @@ from stage0_sim.domain.npcs import (
 from stage0_sim.domain.systems import SystemExecutor
 from stage0_sim.domain.systems.affordances import AffordanceExecutionSystem
 from stage0_sim.domain.systems.calendar import CalendarUpdateSystem
+from stage0_sim.domain.systems.effects import (
+    CharacterEffectResolutionSystem,
+    resolve_character_effects,
+)
 from stage0_sim.domain.systems.environment import (
     EnvironmentAvailabilitySystem,
     SurfaceConditionSystem,
@@ -190,32 +232,42 @@ from stage0_sim.domain.systems.homeostasis import (
     HomeostasisSystem,
     MovementActivitySystem,
 )
+from stage0_sim.domain.systems.interactions import InteractionExecutionSystem
 from stage0_sim.domain.systems.navigation import MovementSystem, PathfindingSystem
 from stage0_sim.domain.systems.plans import PlanExecutionSystem, TimedPlanActionSystem
+from stage0_sim.domain.systems.spatial_context import local_world_for_agent
 from stage0_sim.domain.systems.speech import SpeechSystem
 from stage0_sim.domain.systems.system1 import System1ArbitrationSystem
 from stage0_sim.domain.systems.transactions import TransactionExecutionSystem
 from stage0_sim.domain.systems.travel import TravelSystem
 from stage0_sim.domain.world import (
+    STANDING_CHARACTER_FOOTPRINT,
     AffordanceAction,
     AffordanceStation,
     Building,
     BuildingEntrance,
     BuildingPortal,
+    CardinalOrientation,
     CityBounds,
     CityWorld,
     CityZone,
     ContainerTopology,
     Coordinate,
     District,
+    Footprint,
     GridTopology,
     HomeostasisEffect,
+    LocalCoordinateSystem,
     MapPoint,
+    MovementObstruction,
     OutdoorPlace,
     Room,
     Space,
     SpaceRegistry,
     SparseGraphTopology,
+    SpatialIndex,
+    SpatialIndexEntry,
+    SpatialMetric,
     SpatialScale,
     Transition,
     TransportEdge,
@@ -225,6 +277,7 @@ from stage0_sim.domain.world import (
     Vehicle,
     VehicleRegistry,
     VehicleState,
+    VisionObstruction,
     WorldGrid,
     WorldLocation,
     WorldMap,
@@ -276,6 +329,343 @@ class CoordinateDefinition(BaseModel):
         return Coordinate(self.x, self.y)
 
 
+class SpatialMetricDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    microcells_per_legacy_cell: Literal[9] = 9
+
+    def to_domain(self) -> SpatialMetric:
+        return SpatialMetric(self.microcells_per_legacy_cell)
+
+
+class FootprintDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cells: list[CoordinateDefinition] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def cells_are_unique(self) -> "FootprintDefinition":
+        points = [(cell.x, cell.y) for cell in self.cells]
+        if len(points) != len(set(points)):
+            raise ValueError("footprint cells must be unique")
+        return self
+
+    def to_domain(self) -> Footprint:
+        return Footprint(frozenset(cell.to_domain() for cell in self.cells))
+
+
+class PhysicalObstructionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    movement: MovementObstruction = MovementObstruction.NONE
+    vision: VisionObstruction = VisionObstruction.TRANSPARENT
+    hearing: SenseTransmission = SenseTransmission.PASS
+    smell: SenseTransmission = SenseTransmission.PASS
+
+
+class ObjectDimensionsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    length_cm: float = Field(gt=0)
+    width_cm: float = Field(gt=0)
+    height_cm: float = Field(gt=0)
+
+    def to_domain(self) -> ObjectDimensions:
+        return ObjectDimensions(
+            length_cm=self.length_cm,
+            width_cm=self.width_cm,
+            height_cm=self.height_cm,
+        )
+
+
+class ObjectIntrinsicsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mass_kg: float | None = Field(default=None, gt=0)
+    dimensions_cm: ObjectDimensionsDefinition | None = None
+    size_class: ObjectSizeClass | None = None
+
+    def to_domain(self) -> ObjectIntrinsicComponent:
+        return ObjectIntrinsicComponent(
+            mass_kg=self.mass_kg,
+            dimensions=(
+                self.dimensions_cm.to_domain()
+                if self.dimensions_cm is not None
+                else None
+            ),
+            size_class=self.size_class,
+        )
+
+
+class OccupancySlotDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    accepted_relations: list[PhysicalRelationKind] = Field(min_length=1)
+    capacity: int = Field(default=1, gt=0)
+
+    @model_validator(mode="after")
+    def relations_are_unique(self) -> "OccupancySlotDefinition":
+        if len(self.accepted_relations) != len(set(self.accepted_relations)):
+            raise ValueError("occupancy slot relation kinds must be unique")
+        OccupancySlot(
+            id=self.id,
+            accepted_relations=frozenset(self.accepted_relations),
+            capacity=self.capacity,
+        )
+        return self
+
+    def to_domain(self) -> OccupancySlot:
+        return OccupancySlot(
+            id=self.id,
+            accepted_relations=frozenset(self.accepted_relations),
+            capacity=self.capacity,
+        )
+
+
+class PortableCapabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    two_handed: bool = False
+
+
+class ReadableCapabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: str = Field(min_length=1)
+
+
+class ConsumableCapabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: str = Field(min_length=1)
+    servings: int = Field(default=1, gt=0)
+
+
+class UsableCapabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    use_kind: str = Field(min_length=1)
+
+
+class OpenableCapabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    initially_locked: bool = False
+
+
+class ObjectEffectDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    target: SenseEffectTarget
+    operation: EffectOperation
+    value: float
+
+    def to_domain(self) -> ObjectEffect:
+        return ObjectEffect(
+            id=self.id,
+            target=self.target,
+            operation=self.operation,
+            value=self.value,
+        )
+
+
+class WearableCapabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    compatible_slots: list[EquipmentSlot] = Field(min_length=1)
+    effects: list[ObjectEffectDefinition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def values_are_unique(self) -> "WearableCapabilityDefinition":
+        if len(self.compatible_slots) != len(set(self.compatible_slots)):
+            raise ValueError("wearable compatible slots must be unique")
+        effect_ids = [effect.id for effect in self.effects]
+        if len(effect_ids) != len(set(effect_ids)):
+            raise ValueError("wearable effect IDs must be unique")
+        return self
+
+    def to_domain(
+        self,
+        metric: SpatialMetric | None = None,
+    ) -> WearableComponent:
+        scale = (metric or SpatialMetric()).microcells_per_legacy_cell
+        return WearableComponent(
+            compatible_slots=frozenset(self.compatible_slots),
+            effects=tuple(
+                replace(
+                    effect.to_domain(),
+                    value=(
+                        effect.value * scale
+                        if effect.operation is EffectOperation.ADD
+                        else effect.value
+                    ),
+                )
+                for effect in self.effects
+            ),
+        )
+
+
+class ScentSourceCapabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scent_id: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    emission_range: int = Field(gt=0)
+
+    def to_domain(
+        self,
+        metric: SpatialMetric | None = None,
+    ) -> ScentSourceComponent:
+        return ScentSourceComponent(
+            scent_id=self.scent_id,
+            description=self.description,
+            emission_range=(metric or SpatialMetric()).scale_legacy_range(
+                self.emission_range
+            ),
+        )
+
+
+class SupportCapabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slot_ids: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def slots_are_unique(self) -> "SupportCapabilityDefinition":
+        _validate_capability_slot_ids(self.slot_ids, "support")
+        return self
+
+
+class ContainerCapabilityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slot_ids: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def slots_are_unique(self) -> "ContainerCapabilityDefinition":
+        _validate_capability_slot_ids(self.slot_ids, "container")
+        return self
+
+
+def _validate_capability_slot_ids(slot_ids: list[str], label: str) -> None:
+    if any(not slot_id for slot_id in slot_ids):
+        raise ValueError(f"{label} slot IDs must not be empty")
+    if len(slot_ids) != len(set(slot_ids)):
+        raise ValueError(f"{label} slot IDs must be unique")
+
+
+class PhysicalCapabilitiesDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slots: list[OccupancySlotDefinition] = Field(default_factory=list)
+    support: SupportCapabilityDefinition | None = None
+    container: ContainerCapabilityDefinition | None = None
+    portable: PortableCapabilityDefinition | None = None
+    readable: ReadableCapabilityDefinition | None = None
+    consumable: ConsumableCapabilityDefinition | None = None
+    usable: UsableCapabilityDefinition | None = None
+    openable: OpenableCapabilityDefinition | None = None
+    wearable: WearableCapabilityDefinition | None = None
+    scent_source: ScentSourceCapabilityDefinition | None = None
+
+    @model_validator(mode="after")
+    def slot_references_are_valid(self) -> "PhysicalCapabilitiesDefinition":
+        slot_ids = [slot.id for slot in self.slots]
+        if len(slot_ids) != len(set(slot_ids)):
+            raise ValueError("physical capability slot IDs must be unique")
+        slots_by_id = {slot.id: slot for slot in self.slots}
+        for label, capability, required_relation in (
+            (
+                "support",
+                self.support,
+                PhysicalRelationKind.ON_SUPPORT,
+            ),
+            (
+                "container",
+                self.container,
+                PhysicalRelationKind.IN_CONTAINER,
+            ),
+        ):
+            if capability is None:
+                continue
+            unknown = set(capability.slot_ids) - slots_by_id.keys()
+            if unknown:
+                raise ValueError(
+                    f"{label} references unknown slot IDs: {sorted(unknown)}"
+                )
+            incompatible = [
+                slot_id
+                for slot_id in capability.slot_ids
+                if required_relation
+                not in slots_by_id[slot_id].accepted_relations
+            ]
+            if incompatible:
+                raise ValueError(
+                    f"{label} slots do not accept {required_relation.value}: "
+                    f"{sorted(incompatible)}"
+                )
+        if self.wearable is not None and self.portable is None:
+            raise ValueError("wearable objects require the portable capability")
+        return self
+
+
+class PhysicalObjectDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    footprint: FootprintDefinition
+    intrinsics: ObjectIntrinsicsDefinition = Field(
+        default_factory=ObjectIntrinsicsDefinition
+    )
+    obstruction: PhysicalObstructionDefinition = Field(
+        default_factory=PhysicalObstructionDefinition
+    )
+    capabilities: PhysicalCapabilitiesDefinition = Field(
+        default_factory=PhysicalCapabilitiesDefinition
+    )
+    initial_open: bool | None = None
+    owner_id: str | None = Field(default=None, min_length=1)
+    custodian_id: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def open_state_is_valid(self) -> "PhysicalObjectDefinition":
+        openable = self.capabilities.openable
+        if self.initial_open is not None and openable is None:
+            raise ValueError("initial_open requires the openable capability")
+        if self.initial_open and openable is not None and openable.initially_locked:
+            raise ValueError("an initially open object cannot be initially locked")
+        return self
+
+
+class PhysicalParentRelationDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: PhysicalRelationKind = PhysicalRelationKind.ON_FLOOR
+    parent_id: str | None = Field(default=None, min_length=1)
+    slot_id: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def relation_shape_is_valid(self) -> "PhysicalParentRelationDefinition":
+        parent_id = self.parent_id or "__unresolved_room__"
+        SpatialParentRelationComponent(
+            parent_id=parent_id,
+            kind=self.kind,
+            slot_id=self.slot_id,
+        )
+        return self
+
+
+class PhysicalPlacementDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    anchor: CoordinateDefinition
+    orientation: CardinalOrientation = CardinalOrientation.NORTH
+    parent_relation: PhysicalParentRelationDefinition = Field(
+        default_factory=PhysicalParentRelationDefinition
+    )
+
+
 class ItemCatalogEntryDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -313,7 +703,8 @@ class NpcRoleDefinition(BaseModel):
     )
     vision_range: int = Field(default=6, ge=0)
     recognition_range: int = Field(default=4, ge=0)
-    hearing_multiplier: float = Field(default=1.0, gt=0)
+    hearing_range: int = Field(default=10, ge=0)
+    smell_range: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def tools_are_restricted(self) -> "NpcRoleDefinition":
@@ -323,6 +714,8 @@ class NpcRoleDefinition(BaseModel):
             raise ValueError(f"unknown NPC role tools: {sorted(unknown)}")
         if len(self.tool_allowlist) != len(set(self.tool_allowlist)):
             raise ValueError("NPC role tools must be unique")
+        if self.recognition_range > self.vision_range:
+            raise ValueError("NPC role recognition range must not exceed vision range")
         return self
 
     def to_domain(self) -> NpcRole:
@@ -333,7 +726,8 @@ class NpcRoleDefinition(BaseModel):
             tool_allowlist=tuple(self.tool_allowlist),
             vision_range=self.vision_range,
             recognition_range=self.recognition_range,
-            hearing_multiplier=self.hearing_multiplier,
+            hearing_range=self.hearing_range,
+            smell_range=self.smell_range,
         )
 
 
@@ -613,6 +1007,9 @@ class WorldDefinition(BaseModel):
 
     width: int = Field(gt=0)
     height: int = Field(gt=0)
+    spatial_metric: SpatialMetricDefinition = Field(
+        default_factory=SpatialMetricDefinition
+    )
     blocked: list[CoordinateDefinition] = Field(default_factory=list)
     zones: list[ZoneDefinition] = Field(default_factory=list)
     stations: list[StationDefinition] = Field(default_factory=list)
@@ -669,6 +1066,7 @@ class BuildingEntranceDefinition(BaseModel):
     room_id: str = Field(min_length=1)
     local_coordinate: CoordinateDefinition
     neighborhood_node_id: str = Field(min_length=1)
+    door_object_id: str | None = Field(default=None, min_length=1)
 
 
 class RoomDefinition(BaseModel):
@@ -696,6 +1094,7 @@ class BuildingPortalRuntimeDefinition(BaseModel):
     to_coordinate: CoordinateDefinition
     bidirectional: bool = True
     available: bool = True
+    door_object_id: str | None = Field(default=None, min_length=1)
 
 
 class WorldObjectDefinition(BaseModel):
@@ -703,10 +1102,23 @@ class WorldObjectDefinition(BaseModel):
 
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
-    object_kind: Literal["affordance", "transaction"]
+    definition_id: str = Field(min_length=1)
+    object_kind: Literal["physical", "affordance", "transaction"]
     building_id: str = Field(min_length=1)
     room_id: str = Field(min_length=1)
     position: CoordinateDefinition
+    physical: PhysicalObjectDefinition | None = None
+    placement: PhysicalPlacementDefinition | None = None
+
+    @model_validator(mode="after")
+    def physical_shape_is_valid(self) -> "WorldObjectDefinition":
+        if (self.physical is None) != (self.placement is None):
+            raise ValueError(
+                "world objects must define physical and placement together"
+            )
+        if self.object_kind == "physical" and self.physical is None:
+            raise ValueError("physical world objects require physical data")
+        return self
 
 
 class BuildingDefinition(BaseModel):
@@ -950,6 +1362,26 @@ class CityWorldDefinition(BaseModel):
                 )
             portal_endpoints.add(endpoint)
         object_by_id = {item.id: item for item in self.objects}
+        for building in self.buildings:
+            for entrance in building.entrances:
+                if entrance.door_object_id is None:
+                    continue
+                door = object_by_id.get(entrance.door_object_id)
+                if door is None or door.room_id != entrance.room_id:
+                    raise ValueError(
+                        f"entrance {entrance.id} references invalid door object"
+                    )
+        for portal in self.portals:
+            if portal.door_object_id is None:
+                continue
+            door = object_by_id.get(portal.door_object_id)
+            if door is None or door.room_id not in {
+                portal.from_room_id,
+                portal.to_room_id,
+            }:
+                raise ValueError(
+                    f"portal {portal.id} references invalid door object"
+                )
         for room in self.rooms:
             for station in room.world.stations:
                 object_definition = object_by_id.get(station.id)
@@ -983,6 +1415,24 @@ class CityWorldDefinition(BaseModel):
                 raise ValueError(
                 f"object {item.id} references invalid hierarchy"
                 )
+            if item.physical is not None and item.placement is not None:
+                metric = object_room.world.spatial_metric.to_domain()
+                cells = item.physical.footprint.to_domain().translated_cells(
+                    item.placement.anchor.to_domain(),
+                    item.placement.orientation,
+                )
+                width = metric.scale_legacy_extent(object_room.world.width)
+                height = metric.scale_legacy_extent(object_room.world.height)
+                if any(
+                    cell.x < 0
+                    or cell.y < 0
+                    or cell.x >= width
+                    or cell.y >= height
+                    for cell in cells
+                ):
+                    raise ValueError(
+                        f"physical object {item.id} footprint is outside its room"
+                    )
         for place in self.outdoor_places:
             if place.district_id not in district_ids:
                 raise ValueError(
@@ -1121,12 +1571,22 @@ class PerceptionSettingsDefinition(BaseModel):
 
     vision_range: int = Field(default=8, ge=0)
     recognition_range: int = Field(default=5, ge=0)
-    hearing_range: int = Field(default=10, ge=0)
+    voice_range: int = Field(default=10, ge=0)
     whisper_range: int = Field(default=2, ge=0)
     blocked_tiles_are_opaque: bool = True
     inbox_limit: int = Field(default=100, gt=0)
     fact_max_age_seconds: float = Field(default=300.0, gt=0)
     renderer: str = "deterministic"
+
+    @model_validator(mode="after")
+    def recognition_is_within_vision(self) -> "PerceptionSettingsDefinition":
+        if self.recognition_range > self.vision_range:
+            raise ValueError("recognition range must not exceed vision range")
+        if not self.blocked_tiles_are_opaque:
+            raise ValueError(
+                "blocked room cells must block structural perception"
+            )
+        return self
 
     def to_domain(self) -> PerceptionConfiguration:
         if self.renderer != "deterministic":
@@ -1134,7 +1594,7 @@ class PerceptionSettingsDefinition(BaseModel):
         return PerceptionConfiguration(
             vision_range=self.vision_range,
             recognition_range=self.recognition_range,
-            hearing_range=self.hearing_range,
+            voice_range=self.voice_range,
             whisper_range=self.whisper_range,
             blocked_tiles_are_opaque=self.blocked_tiles_are_opaque,
             inbox_limit=self.inbox_limit,
@@ -1176,6 +1636,7 @@ class CognitionSettingsDefinition(BaseModel):
             "wait",
             "skip",
             "transact",
+            "interact_with",
             "check_environment",
         }
         if unknown:
@@ -1392,7 +1853,7 @@ class CharacterSituationSynthesisSettingsDefinition(BaseModel):
 class ScenarioDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[4] = 4
+    schema_version: Literal[6] = SCENARIO_SCHEMA_VERSION
     name: str = Field(min_length=1)
     seed: int = 0
     dt: float = Field(default=1.0, gt=0)
@@ -1656,6 +2117,14 @@ def load_scenario(path: Path) -> ScenarioDefinition:
     except json.JSONDecodeError as error:
         raise ScenarioLoadError(f"scenario is not valid JSON: {error}") from error
 
+    if (
+        not isinstance(raw_scenario, dict)
+        or raw_scenario.get("schema_version") != SCENARIO_SCHEMA_VERSION
+    ):
+        raise ScenarioLoadError(
+            "scenario schema version 6 is required; run "
+            "'stage0-sim migrate content'"
+        )
     try:
         return ScenarioDefinition.model_validate(raw_scenario)
     except ValidationError as error:
@@ -1707,16 +2176,46 @@ def create_runner(
     registry.set_resource(
         ItemCatalog(tuple(item.to_domain() for item in scenario.items))
     )
+    metric = SpatialMetric()
     registry.set_resource(
         NpcRoleRegistry(
-            {role.id: role.to_domain() for role in scenario.npc_roles}
+            {
+                role.id: replace(
+                    role.to_domain(),
+                    vision_range=metric.scale_legacy_range(role.vision_range),
+                    recognition_range=metric.scale_legacy_range(
+                        role.recognition_range
+                    ),
+                    hearing_range=metric.scale_legacy_range(role.hearing_range),
+                    smell_range=metric.scale_legacy_range(role.smell_range),
+                )
+                for role in scenario.npc_roles
+            }
         )
     )
     registry.set_resource(scenario.homeostasis.to_domain())
     registry.set_resource(scenario.system1.to_domain())
-    registry.set_resource(scenario.perception.to_domain())
+    perception_configuration = scenario.perception.to_domain()
+    registry.set_resource(
+        replace(
+            perception_configuration,
+            vision_range=metric.scale_legacy_range(
+                perception_configuration.vision_range
+            ),
+            recognition_range=metric.scale_legacy_range(
+                perception_configuration.recognition_range
+            ),
+            voice_range=metric.scale_legacy_range(
+                perception_configuration.voice_range
+            ),
+            whisper_range=metric.scale_legacy_range(
+                perception_configuration.whisper_range
+            ),
+        )
+    )
     registry.set_resource(SurfaceConditionRegistry())
     registry.set_resource(EnvironmentAvailabilityRegistry())
+    registry.set_resource(SpatialIndex())
     availability_rules = EnvironmentAvailabilityRules(
         _environment_rules(scenario.world)
     )
@@ -1798,6 +2297,15 @@ def create_runner(
                 }
             )
         )
+        if isinstance(scenario.world, CityWorldDefinition):
+            _materialize_physical_objects(registry, scenario.world)
+            registry.set_resource(
+                _build_physical_interaction_registry(
+                    registry,
+                    city_world,
+                    scenario.world,
+                )
+            )
         if isinstance(scenario.world, WorldDefinition):
             point_locations = [
                 ("implicit-building", point)
@@ -1819,7 +2327,10 @@ def create_runner(
                     point_id=point.id,
                     role_id=point.staffing.role_id,
                     place_id=place_id,
-                    staff_position=point.staffing.staff_position.to_domain(),
+                    staff_position=_transaction_staff_position(
+                        registry,
+                        point,
+                    ),
                     request_timeout=point.staffing.request_timeout,
                 )
             )
@@ -1838,7 +2349,16 @@ def create_runner(
                 effective_mode=effective_npc_mode,
             )
         )
-        space_registry = _build_space_registry(world, city_world)
+        space_registry = _build_space_registry(
+            world,
+            city_world,
+            (
+                registry.get_resource(PhysicalInteractionRegistry)
+                if registry.has_resource(PhysicalInteractionRegistry)
+                else None
+            ),
+            registry.get_resource(SpatialIndex),
+        )
         registry.set_resource(space_registry)
         known_topology = InformationKnownTopologyProjection(
             information_store,
@@ -1855,6 +2375,8 @@ def create_runner(
         systems.add(PathfindingSystem())
         systems.add(NavigationPlanningSystem())
         systems.add(PlanExecutionSystem())
+        systems.add(InteractionExecutionSystem())
+        systems.add(CharacterEffectResolutionSystem())
         systems.add(AffordanceExecutionSystem())
         systems.add(TransactionExecutionSystem())
         if staffing_states:
@@ -1939,6 +2461,7 @@ def create_runner(
         entity_id = registry.create_entity(entity_definition.id)
         raw_components = dict(entity_definition.components)
         entity_world = world
+        position_is_runtime = False
         spatial_values = raw_components.pop("spatial_location", None)
         if spatial_values is not None:
             if city_world is None:
@@ -1948,7 +2471,10 @@ def create_runner(
             spatial_definition = _validate_component(
                 SpatialLocationDefinition, spatial_values, entity_id
             )
-            spatial_location = spatial_definition.to_domain()
+            spatial_location = _runtime_world_location(
+                spatial_definition.to_domain(),
+                metric,
+            )
             _validate_spatial_location(city_world, spatial_location)
             registry.add_component(
                 entity_id,
@@ -1969,6 +2495,7 @@ def create_runner(
                         "y": spatial_location.local_coordinate.y,
                     },
                 )
+                position_is_runtime = True
         if "position" in raw_components:
             if entity_world is None:
                 raise ValueError("entity positions require a world definition")
@@ -1976,6 +2503,26 @@ def create_runner(
                 PositionDefinition, raw_components.pop("position"), entity_id
             )
             coordinate = position_definition.to_domain()
+            if not position_is_runtime:
+                coordinate = _legacy_anchor(coordinate, metric)
+            coordinate = _initial_interaction_approach(
+                registry,
+                entity_world,
+                coordinate,
+            )
+            if registry.has_component(
+                entity_id,
+                SpatialLocationComponent,
+            ):
+                spatial = registry.get_component(
+                    entity_id,
+                    SpatialLocationComponent,
+                )
+                if spatial.location.local_coordinate is not None:
+                    spatial.location = replace(
+                        spatial.location,
+                        local_coordinate=coordinate,
+                    )
             if not entity_world.grid.is_walkable(coordinate):
                 raise ValueError(
                     f"entity {entity_id} position must be on a walkable grid tile"
@@ -2000,7 +2547,10 @@ def create_runner(
                 MovementDefinition, raw_components.pop("movement"), entity_id
             )
             destination = (
-                movement_definition.destination.to_domain()
+                _legacy_anchor(
+                    movement_definition.destination.to_domain(),
+                    metric,
+                )
                 if movement_definition.destination is not None
                 else None
             )
@@ -2353,13 +2903,48 @@ def create_runner(
                 recognition_range=scenario.perception.recognition_range,
             )
         )
+        embodiment_values = raw_components.pop("embodiment", None)
+        embodiment_definition = (
+            _validate_component(
+                CharacterEmbodimentDefinition,
+                embodiment_values,
+                entity_id,
+            )
+            if embodiment_values is not None
+            else CharacterEmbodimentDefinition()
+        )
+        registry.add_component(
+            entity_id,
+            embodiment_definition.to_domain(),
+        )
+        registry.add_component(entity_id, EquipmentStateComponent())
+        registry.add_component(entity_id, CarriedLoadComponent())
         if registry.has_component(entity_id, PositionComponent):
+            base_senses = SensesComponent(
+                vision_range=metric.scale_legacy_range(
+                    senses_definition.vision_range
+                ),
+                recognition_range=metric.scale_legacy_range(
+                    senses_definition.recognition_range
+                ),
+                hearing_range=metric.scale_legacy_range(
+                    senses_definition.hearing_range
+                ),
+                smell_range=metric.scale_legacy_range(
+                    senses_definition.smell_range
+                ),
+            )
             registry.add_component(
                 entity_id,
-                SensesComponent(
-                    vision_range=senses_definition.vision_range,
-                    recognition_range=senses_definition.recognition_range,
-                    hearing_multiplier=senses_definition.hearing_multiplier,
+                base_senses,
+            )
+            registry.add_component(
+                entity_id,
+                EffectiveSensesComponent(
+                    vision_range=base_senses.vision_range,
+                    recognition_range=base_senses.recognition_range,
+                    hearing_range=base_senses.hearing_range,
+                    smell_range=base_senses.smell_range,
                 ),
             )
             registry.add_component(entity_id, PerceptionComponent())
@@ -2456,6 +3041,11 @@ def create_runner(
                         preferred_mode=first_action.mode,
                     )
             registry.add_component(entity_id, navigation)
+    _materialize_character_physics(registry)
+    _validate_initial_equipment(registry)
+    for entity_id in registry.query_entities(SensesComponent):
+        resolve_character_effects(registry, entity_id)
+    _validate_initial_carried_load(registry)
     runner = SimulationRunner(
         RunConfiguration(
             seed=scenario.seed,
@@ -2591,6 +3181,7 @@ class ControllerDefinition(BaseModel):
             "wait",
             "skip",
             "transact",
+            "interact_with",
             "check_environment",
         }
         if unknown:
@@ -2603,7 +3194,53 @@ class SensesDefinition(BaseModel):
 
     vision_range: int = Field(default=8, ge=0)
     recognition_range: int = Field(default=5, ge=0)
-    hearing_multiplier: float = Field(default=1.0, gt=0)
+    hearing_range: int = Field(default=10, ge=0)
+    smell_range: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def recognition_is_within_vision(self) -> "SensesDefinition":
+        if self.recognition_range > self.vision_range:
+            raise ValueError("recognition range must not exceed vision range")
+        return self
+
+
+class EquipmentSlotCapacityDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slot: EquipmentSlot
+    capacity: int = Field(default=1, gt=0)
+
+
+class CharacterEmbodimentDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_single_object_mass_kg: float = Field(default=25.0, gt=0)
+    max_carried_mass_kg: float = Field(default=35.0, gt=0)
+    equipment_slots: list[EquipmentSlotCapacityDefinition] = Field(
+        default_factory=lambda: [
+            EquipmentSlotCapacityDefinition(slot=slot) for slot in EquipmentSlot
+        ]
+    )
+
+    @model_validator(mode="after")
+    def shape_is_valid(self) -> "CharacterEmbodimentDefinition":
+        if self.max_single_object_mass_kg > self.max_carried_mass_kg:
+            raise ValueError(
+                "maximum single-object mass must not exceed total carried mass"
+            )
+        slots = [item.slot for item in self.equipment_slots]
+        if len(slots) != len(set(slots)):
+            raise ValueError("character equipment slots must be unique")
+        return self
+
+    def to_domain(self) -> CharacterEmbodimentComponent:
+        return CharacterEmbodimentComponent(
+            max_single_object_mass_kg=self.max_single_object_mass_kg,
+            max_carried_mass_kg=self.max_carried_mass_kg,
+            equipment_slot_capacities={
+                item.slot: item.capacity for item in self.equipment_slots
+            },
+        )
 
 
 class ActivityDefinition(BaseModel):
@@ -2631,6 +3268,33 @@ class PossessionsComponentDefinition(BaseModel):
         return self
 
 
+class InteractionSpecificationDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verb: InteractionVerb
+    target_id: str = Field(min_length=1)
+    destination_id: str | None = Field(default=None, min_length=1)
+    slot_id: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def shape_is_valid(self) -> "InteractionSpecificationDefinition":
+        InteractionSpecification(
+            self.verb,
+            self.target_id,
+            self.destination_id,
+            self.slot_id,
+        )
+        return self
+
+    def to_domain(self) -> InteractionSpecification:
+        return InteractionSpecification(
+            self.verb,
+            self.target_id,
+            self.destination_id,
+            self.slot_id,
+        )
+
+
 class PlanActionDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2639,10 +3303,18 @@ class PlanActionDefinition(BaseModel):
     duration: float | None = Field(default=None, gt=0)
     mode: TravelMode | None = None
     offer_id: str | None = Field(default=None, min_length=1)
+    interaction: InteractionSpecificationDefinition | None = None
 
     @model_validator(mode="after")
     def travel_fields_are_consistent(self) -> "PlanActionDefinition":
-        if self.action is ActionType.NAVIGATE:
+        if self.action is ActionType.INTERACT:
+            if self.interaction is None:
+                raise ValueError("INTERACT requires interaction")
+            if self.target is not None and self.target != self.interaction.target_id:
+                raise ValueError("INTERACT target must match interaction target")
+        elif self.interaction is not None:
+            raise ValueError("interaction is only valid for INTERACT")
+        elif self.action is ActionType.NAVIGATE:
             if self.target is None:
                 raise ValueError("NAVIGATE requires target")
         elif self.action is ActionType.TRANSACT:
@@ -2672,9 +3344,12 @@ class PlanActionDefinition(BaseModel):
             duration=self.duration,
             mode=self.mode,
             offer_id=self.offer_id,
+            interaction=(
+                self.interaction.to_domain()
+                if self.interaction is not None
+                else None
+            ),
         )
-
-
 class PlanComponentDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -3045,20 +3720,819 @@ def _profile_ui_payload(
     return visible
 
 
+def _materialize_physical_objects(
+    registry: Registry,
+    world: CityWorldDefinition,
+) -> None:
+    spatial_index = registry.get_resource(SpatialIndex)
+    physical_objects = [
+        item
+        for item in world.objects
+        if item.physical is not None and item.placement is not None
+    ]
+    for item in sorted(physical_objects, key=lambda value: value.id):
+        physical = item.physical
+        placement = item.placement
+        if physical is None or placement is None:
+            raise AssertionError("physical object filtering lost model narrowing")
+        relation = placement.parent_relation
+        if relation.parent_id is None:
+            raise ValueError(
+                f"physical object {item.id} has an unresolved parent relation"
+            )
+        initial_open = (
+            physical.initial_open or False
+            if physical.capabilities.openable is not None
+            else False
+        )
+        state = PhysicalStateComponent(
+            pose=PhysicalPose(
+                room_id=item.room_id,
+                anchor=placement.anchor.to_domain(),
+                orientation=placement.orientation,
+            ),
+            footprint=physical.footprint.to_domain(),
+            movement_obstruction=(
+                MovementObstruction.NONE
+                if initial_open
+                else physical.obstruction.movement
+            ),
+            vision_obstruction=(
+                VisionObstruction.TRANSPARENT
+                if initial_open
+                else physical.obstruction.vision
+            ),
+            hearing_transmission=(
+                SenseTransmission.PASS
+                if initial_open
+                else physical.obstruction.hearing
+            ),
+            smell_transmission=(
+                SenseTransmission.PASS
+                if initial_open
+                else physical.obstruction.smell
+            ),
+        )
+        if relation.kind not in {
+            PhysicalRelationKind.IN_CONTAINER,
+            PhysicalRelationKind.HELD_BY,
+            PhysicalRelationKind.ATTACHED_TO,
+        }:
+            spatial_index.add(
+                SpatialIndexEntry(item.id, state),
+                authorized_overlaps=(
+                    frozenset({relation.parent_id})
+                    if relation.kind
+                    in {
+                        PhysicalRelationKind.ON_SUPPORT,
+                        PhysicalRelationKind.OCCUPIES_SLOT,
+                    }
+                    and spatial_index.contains(relation.parent_id)
+                    else frozenset()
+                ),
+            )
+        registry.create_entity(item.id)
+        registry.add_component(
+            item.id,
+            PhysicalObjectIdentityComponent(item.definition_id, item.name),
+        )
+        registry.add_component(item.id, physical.intrinsics.to_domain())
+        registry.add_component(item.id, state)
+        registry.add_component(
+            item.id,
+            SpatialParentRelationComponent(
+                parent_id=relation.parent_id,
+                kind=relation.kind,
+                slot_id=relation.slot_id,
+            ),
+        )
+        capabilities = physical.capabilities
+        if capabilities.slots:
+            registry.add_component(
+                item.id,
+                OccupancySlotsComponent(
+                    tuple(slot.to_domain() for slot in capabilities.slots)
+                ),
+            )
+        if capabilities.support is not None:
+            registry.add_component(
+                item.id,
+                SupportComponent(tuple(capabilities.support.slot_ids)),
+            )
+        if capabilities.container is not None:
+            registry.add_component(
+                item.id,
+                ContainerComponent(tuple(capabilities.container.slot_ids)),
+            )
+        if capabilities.portable is not None:
+            registry.add_component(
+                item.id,
+                PortableComponent(capabilities.portable.two_handed),
+            )
+        if capabilities.readable is not None:
+            registry.add_component(
+                item.id,
+                ReadableComponent(capabilities.readable.document_id),
+            )
+        if capabilities.consumable is not None:
+            registry.add_component(
+                item.id,
+                ConsumableComponent(
+                    capabilities.consumable.item_id,
+                    capabilities.consumable.servings,
+                ),
+            )
+        if capabilities.usable is not None:
+            registry.add_component(
+                item.id,
+                UsableComponent(capabilities.usable.use_kind),
+            )
+        if capabilities.wearable is not None:
+            registry.add_component(
+                item.id,
+                capabilities.wearable.to_domain(SpatialMetric()),
+            )
+        if capabilities.scent_source is not None:
+            registry.add_component(
+                item.id,
+                capabilities.scent_source.to_domain(SpatialMetric()),
+            )
+        if capabilities.openable is not None:
+            registry.add_component(
+                item.id,
+                OpenableComponent(
+                    is_open=initial_open,
+                    is_locked=capabilities.openable.initially_locked,
+                    closed_movement_obstruction=(
+                        physical.obstruction.movement
+                    ),
+                    closed_vision_obstruction=physical.obstruction.vision,
+                    closed_hearing_transmission=physical.obstruction.hearing,
+                    closed_smell_transmission=physical.obstruction.smell,
+                ),
+            )
+        if physical.owner_id is not None:
+            registry.add_component(
+                item.id,
+                OwnershipComponent(physical.owner_id),
+            )
+        if physical.custodian_id is not None:
+            registry.add_component(
+                item.id,
+                CustodyComponent(physical.custodian_id),
+            )
+    _validate_materialized_physical_relations(registry, physical_objects)
+
+
+def _validate_materialized_physical_relations(
+    registry: Registry,
+    physical_objects: list[WorldObjectDefinition],
+) -> None:
+    occupancy: dict[tuple[str, str], int] = {}
+    relations = {
+        item.id: registry.get_component(
+            item.id,
+            SpatialParentRelationComponent,
+        )
+        for item in physical_objects
+    }
+    validate_spatial_relation_acyclicity(relations)
+    for item in sorted(physical_objects, key=lambda value: value.id):
+        relation = relations[item.id]
+        if relation.kind is PhysicalRelationKind.ON_FLOOR:
+            if relation.parent_id != item.room_id:
+                raise ValueError(
+                    f"physical object {item.id} floor parent must be its room"
+                )
+            continue
+        if relation.kind in {
+            PhysicalRelationKind.ATTACHED_TO,
+            PhysicalRelationKind.HELD_BY,
+        }:
+            continue
+        if not registry.has_component(
+            relation.parent_id,
+            OccupancySlotsComponent,
+        ):
+            raise ValueError(
+                f"physical object {item.id} parent has no occupancy slots"
+            )
+        if relation.slot_id is None:
+            raise AssertionError("slotted relation validation lost slot_id")
+        slot = registry.get_component(
+            relation.parent_id,
+            OccupancySlotsComponent,
+        ).slot(relation.slot_id)
+        if relation.kind not in slot.accepted_relations:
+            raise ValueError(
+                f"slot {relation.slot_id} does not accept {relation.kind.value}"
+            )
+        capability_type: type[SupportComponent] | type[ContainerComponent] | None
+        if relation.kind is PhysicalRelationKind.ON_SUPPORT:
+            capability_type = SupportComponent
+        elif relation.kind is PhysicalRelationKind.IN_CONTAINER:
+            capability_type = ContainerComponent
+        else:
+            capability_type = None
+        if capability_type is not None:
+            if not registry.has_component(relation.parent_id, capability_type):
+                raise ValueError(
+                    f"physical object {item.id} parent lacks "
+                    f"{capability_type.__name__}"
+                )
+            capability = registry.get_component(
+                relation.parent_id,
+                capability_type,
+            )
+            if relation.slot_id not in capability.slot_ids:
+                raise ValueError(
+                    f"physical object {item.id} uses a slot outside its "
+                    f"{capability_type.__name__}"
+                )
+        key = (relation.parent_id, relation.slot_id)
+        occupancy[key] = occupancy.get(key, 0) + 1
+    for (parent_id, slot_id), count in sorted(occupancy.items()):
+        slot = registry.get_component(
+            parent_id,
+            OccupancySlotsComponent,
+        ).slot(slot_id)
+        if count > slot.capacity:
+            raise ValueError(
+                f"physical slot {parent_id}.{slot_id} exceeds capacity"
+            )
+
+
+def _legacy_anchor(
+    coordinate: Coordinate,
+    metric: SpatialMetric | None = None,
+) -> Coordinate:
+    return (metric or SpatialMetric()).center_legacy_coordinate(
+        coordinate
+    ).to_coordinate()
+
+
+def _runtime_world_location(
+    location: WorldLocation,
+    metric: SpatialMetric,
+) -> WorldLocation:
+    if location.local_coordinate is None:
+        return location
+    return replace(
+        location,
+        local_coordinate=_legacy_anchor(location.local_coordinate, metric),
+    )
+
+
+def _runtime_transaction_point(
+    definition: TransactionPointDefinition,
+    metric: SpatialMetric,
+) -> TransactionPoint:
+    point = definition.to_domain()
+    return replace(
+        point,
+        position=_legacy_anchor(point.position, metric),
+        coordinate_scale=metric.microcells_per_legacy_cell,
+        staffing=(
+            replace(
+                point.staffing,
+                staff_position=_legacy_anchor(
+                    point.staffing.staff_position,
+                    metric,
+                ),
+            )
+            if point.staffing is not None
+            else None
+        ),
+    )
+
+
+def _initial_interaction_approach(
+    registry: Registry,
+    world: WorldMap,
+    coordinate: Coordinate,
+) -> Coordinate:
+    if not registry.has_resource(PhysicalInteractionRegistry):
+        return coordinate
+    target_ids = [
+        station.id
+        for station in world.stations
+        if station.position == coordinate
+    ]
+    target_ids.extend(
+        point.id
+        for point in world.transaction_points
+        if point.position == coordinate
+    )
+    interactions = registry.get_resource(PhysicalInteractionRegistry)
+    candidates = [
+        (target_id, approach)
+        for target_id in sorted(target_ids)
+        for approach in interactions.approach_anchors(target_id)
+    ]
+    if not candidates:
+        return coordinate
+    return min(
+        candidates,
+        key=lambda item: (
+            abs(item[1].x - coordinate.x)
+            + abs(item[1].y - coordinate.y),
+            item[0],
+            item[1].y,
+            item[1].x,
+        ),
+    )[1]
+
+
+def _materialize_character_physics(registry: Registry) -> None:
+    spatial_index = registry.get_resource(SpatialIndex)
+    for entity_id in registry.query_entities(
+        PositionComponent,
+        SpatialLocationComponent,
+    ):
+        if registry.has_component(entity_id, PhysicalObjectIdentityComponent):
+            continue
+        location = registry.get_component(
+            entity_id,
+            SpatialLocationComponent,
+        ).location
+        if location.local_coordinate is None:
+            continue
+        world = local_world_for_agent(registry, entity_id)
+        if world is None:
+            raise ValueError(
+                f"entity {entity_id} has no local world for physical placement"
+            )
+        position = registry.get_component(entity_id, PositionComponent)
+        state = PhysicalStateComponent(
+            pose=PhysicalPose(location.place_id, position.coordinate),
+            footprint=STANDING_CHARACTER_FOOTPRINT,
+            movement_obstruction=MovementObstruction.HARD,
+            vision_obstruction=VisionObstruction.TRANSPARENT,
+        )
+        if not world.grid.are_walkable(state.occupied_cells):
+            raise ValueError(
+                f"entity {entity_id} standing footprint is not fully walkable"
+            )
+        spatial_index.add(SpatialIndexEntry(entity_id, state, dynamic=True))
+        registry.add_component(entity_id, state)
+        registry.add_component(entity_id, CharacterHandStateComponent())
+        registry.add_component(entity_id, CharacterPostureComponent())
+    for object_id, relation in registry.query(
+        SpatialParentRelationComponent
+    ):
+        if (
+            relation.kind is not PhysicalRelationKind.HELD_BY
+            or not registry.has_component(
+                relation.parent_id,
+                CharacterHandStateComponent,
+            )
+        ):
+            continue
+        hands = registry.get_component(
+            relation.parent_id,
+            CharacterHandStateComponent,
+        )
+        if relation.slot_id in {"left", "both"}:
+            if hands.left_hand_object_id is not None:
+                raise ValueError(
+                    f"character {relation.parent_id} left hand is over capacity"
+                )
+            hands.left_hand_object_id = object_id
+        if relation.slot_id in {"right", "both"}:
+            if hands.right_hand_object_id is not None:
+                raise ValueError(
+                    f"character {relation.parent_id} right hand is over capacity"
+                )
+            hands.right_hand_object_id = object_id
+
+
+def _validate_initial_equipment(registry: Registry) -> None:
+    occupancy: dict[tuple[str, EquipmentSlot], int] = {}
+    for object_id, relation in registry.query(SpatialParentRelationComponent):
+        if relation.kind is not PhysicalRelationKind.ATTACHED_TO:
+            continue
+        if relation.slot_id is None:
+            if registry.has_component(object_id, WearableComponent):
+                raise ValueError(
+                    f"wearable object {object_id} attachment requires an equipment slot"
+                )
+            continue
+        if not registry.has_component(object_id, WearableComponent):
+            raise ValueError(
+                f"slotted attachment {object_id} requires a wearable capability"
+            )
+        try:
+            slot = EquipmentSlot(relation.slot_id)
+        except ValueError as error:
+            raise ValueError(
+                f"physical object {object_id} uses unknown equipment slot "
+                f"{relation.slot_id}"
+            ) from error
+        if not registry.has_component(
+            relation.parent_id,
+            CharacterEmbodimentComponent,
+        ):
+            raise ValueError(
+                f"equipped object {object_id} parent is not an embodied character"
+            )
+        wearable = registry.get_component(object_id, WearableComponent)
+        if slot not in wearable.compatible_slots:
+            raise ValueError(
+                f"equipped object {object_id} is incompatible with {slot.value}"
+            )
+        embodiment = registry.get_component(
+            relation.parent_id,
+            CharacterEmbodimentComponent,
+        )
+        capacity = embodiment.equipment_slot_capacities.get(slot)
+        if capacity is None:
+            raise ValueError(
+                f"character {relation.parent_id} does not support {slot.value}"
+            )
+        key = (relation.parent_id, slot)
+        occupancy[key] = occupancy.get(key, 0) + 1
+        if occupancy[key] > capacity:
+            raise ValueError(
+                f"character {relation.parent_id} equipment slot "
+                f"{slot.value} exceeds capacity"
+            )
+        if registry.has_component(object_id, PhysicalStateComponent):
+            actor_state = registry.get_component(
+                relation.parent_id,
+                PhysicalStateComponent,
+            )
+            object_state = registry.get_component(
+                object_id,
+                PhysicalStateComponent,
+            )
+            registry.set_component(
+                object_id,
+                replace(
+                    object_state,
+                    pose=replace(
+                        object_state.pose,
+                        room_id=actor_state.pose.room_id,
+                        anchor=actor_state.pose.anchor,
+                    ),
+                ),
+            )
+
+
+def _validate_initial_carried_load(registry: Registry) -> None:
+    for character_id in registry.query_entities(
+        CharacterEmbodimentComponent,
+        CarriedLoadComponent,
+    ):
+        embodiment = registry.get_component(
+            character_id,
+            CharacterEmbodimentComponent,
+        )
+        load = registry.get_component(character_id, CarriedLoadComponent)
+        if load.known_mass_kg > embodiment.max_carried_mass_kg:
+            raise ValueError(
+                f"character {character_id} initial carried mass exceeds capacity"
+            )
+        for object_id, relation in registry.query(
+            SpatialParentRelationComponent
+        ):
+            if relation.parent_id != character_id or relation.kind not in {
+                PhysicalRelationKind.HELD_BY,
+                PhysicalRelationKind.ATTACHED_TO,
+            }:
+                continue
+            if not registry.has_component(
+                object_id,
+                ObjectIntrinsicComponent,
+            ):
+                continue
+            mass = registry.get_component(
+                object_id,
+                ObjectIntrinsicComponent,
+            ).mass_kg
+            if (
+                mass is not None
+                and mass > embodiment.max_single_object_mass_kg
+            ):
+                raise ValueError(
+                    f"character {character_id} initially carries over-limit "
+                    f"object {object_id}"
+                )
+
+
+def _build_physical_interaction_registry(
+    registry: Registry,
+    city: CityWorld | None,
+    source: CityWorldDefinition,
+) -> PhysicalInteractionRegistry:
+    if city is None:
+        return PhysicalInteractionRegistry({}, {})
+    spatial_index = registry.get_resource(SpatialIndex)
+    targets: dict[str, PhysicalInteractionTarget] = {}
+    for entity_id in registry.query_entities(
+        PhysicalObjectIdentityComponent,
+        PhysicalStateComponent,
+    ):
+        state = registry.get_component(entity_id, PhysicalStateComponent)
+        world = city.room_world(state.pose.room_id)
+        approaches = _interaction_approach_anchors(
+            world,
+            spatial_index,
+            state,
+        )
+        occupancy: dict[str, tuple[Coordinate, ...]] = {}
+        if registry.has_component(entity_id, OccupancySlotsComponent):
+            for slot in registry.get_component(
+                entity_id,
+                OccupancySlotsComponent,
+            ).slots:
+                if PhysicalRelationKind.OCCUPIES_SLOT in slot.accepted_relations:
+                    occupancy[slot.id] = _interaction_occupancy_anchors(
+                        world,
+                        spatial_index,
+                        entity_id,
+                        state,
+                    )
+        targets[entity_id] = PhysicalInteractionTarget(
+            target_id=entity_id,
+            room_id=state.pose.room_id,
+            approach_anchors=approaches,
+            occupancy_anchors=occupancy,
+        )
+    transaction_staff_anchors: dict[str, tuple[Coordinate, ...]] = {}
+    for room in source.rooms:
+        runtime_world = city.room_world(room.id)
+        metric = room.world.spatial_metric.to_domain()
+        for point in room.world.transaction_points:
+            if point.staffing is None or point.id not in targets:
+                continue
+            target = targets[point.id]
+            customer_fallback = runtime_world.transaction_point(
+                point.id
+            ).position
+            staff_fallback = _legacy_anchor(
+                point.staffing.staff_position.to_domain(),
+                metric,
+            )
+            pairs = [
+                (customer, staff)
+                for customer in target.approach_anchors
+                for staff in target.approach_anchors
+                if customer != staff
+                and STANDING_CHARACTER_FOOTPRINT.translated_cells(
+                    customer
+                ).isdisjoint(
+                    STANDING_CHARACTER_FOOTPRINT.translated_cells(staff)
+                )
+            ]
+            if not pairs:
+                continue
+            customer, staff = min(
+                pairs,
+                key=lambda pair: (
+                    abs(pair[0].x - customer_fallback.x)
+                    + abs(pair[0].y - customer_fallback.y)
+                    + abs(pair[1].x - staff_fallback.x)
+                    + abs(pair[1].y - staff_fallback.y),
+                    pair[0].y,
+                    pair[0].x,
+                    pair[1].y,
+                    pair[1].x,
+                ),
+            )
+            compatible_customers = tuple(
+                candidate
+                for candidate in target.approach_anchors
+                if STANDING_CHARACTER_FOOTPRINT.translated_cells(
+                    candidate
+                ).isdisjoint(
+                    STANDING_CHARACTER_FOOTPRINT.translated_cells(staff)
+                )
+            )
+            targets[point.id] = replace(
+                target,
+                approach_anchors=tuple(
+                    sorted(
+                        compatible_customers,
+                        key=lambda item: (
+                            0 if item == customer else 1,
+                            abs(item.x - customer_fallback.x)
+                            + abs(item.y - customer_fallback.y),
+                            item.y,
+                            item.x,
+                        ),
+                    )[: point.capacity]
+                ),
+            )
+            transaction_staff_anchors[point.id] = (staff,)
+    transition_doors = {
+        entrance.id: entrance.door_object_id
+        for building in source.buildings
+        for entrance in building.entrances
+        if entrance.door_object_id is not None
+    }
+    transition_doors.update(
+        {
+            portal.id: portal.door_object_id
+            for portal in source.portals
+            if portal.door_object_id is not None
+        }
+    )
+    return PhysicalInteractionRegistry(
+        targets,
+        transition_doors,
+        transaction_staff_anchors,
+    )
+
+
+def _interaction_approach_anchors(
+    world: WorldMap,
+    spatial_index: SpatialIndex,
+    target: PhysicalStateComponent,
+) -> tuple[Coordinate, ...]:
+    target_cells = target.occupied_cells
+    envelope = target.footprint.contact_envelope(
+        target.pose.anchor,
+        target.pose.orientation,
+    )
+    candidates = {
+        Coordinate(contact.x - offset.x, contact.y - offset.y)
+        for contact in envelope
+        for offset in STANDING_CHARACTER_FOOTPRINT.cells
+    }
+    valid = []
+    for anchor in candidates:
+        state = PhysicalStateComponent(
+            pose=PhysicalPose(target.pose.room_id, anchor),
+            footprint=STANDING_CHARACTER_FOOTPRINT,
+            movement_obstruction=MovementObstruction.HARD,
+        )
+        if state.occupied_cells & target_cells:
+            continue
+        if not state.occupied_cells & envelope:
+            continue
+        if not world.grid.are_walkable(state.occupied_cells):
+            continue
+        if not spatial_index.can_place(state):
+            continue
+        valid.append(anchor)
+    return tuple(
+        sorted(
+            valid,
+            key=lambda item: (
+                abs(item.x - target.pose.anchor.x)
+                + abs(item.y - target.pose.anchor.y),
+                item.y,
+                item.x,
+            ),
+        )
+    )
+
+
+def _interaction_occupancy_anchors(
+    world: WorldMap,
+    spatial_index: SpatialIndex,
+    target_id: str,
+    target: PhysicalStateComponent,
+) -> tuple[Coordinate, ...]:
+    candidates = {
+        target.pose.anchor,
+        *target.occupied_cells,
+    }
+    valid = []
+    for anchor in candidates:
+        state = PhysicalStateComponent(
+            pose=PhysicalPose(target.pose.room_id, anchor),
+            footprint=STANDING_CHARACTER_FOOTPRINT,
+            movement_obstruction=MovementObstruction.HARD,
+        )
+        if not world.grid.are_walkable(state.occupied_cells):
+            continue
+        if not spatial_index.can_place(
+            state,
+            authorized_overlaps=frozenset({target_id}),
+        ):
+            continue
+        valid.append(anchor)
+    return tuple(
+        sorted(
+            valid,
+            key=lambda item: (
+                abs(item.x - target.pose.anchor.x)
+                + abs(item.y - target.pose.anchor.y),
+                item.y,
+                item.x,
+            ),
+        )
+    )
+
+
+def _transaction_staff_position(
+    registry: Registry,
+    definition: TransactionPointDefinition,
+) -> Coordinate:
+    if definition.staffing is None:
+        raise ValueError("transaction staff position requires staffing")
+    fallback = _legacy_anchor(definition.staffing.staff_position.to_domain())
+    if not registry.has_resource(PhysicalInteractionRegistry):
+        return fallback
+    interactions = registry.get_resource(PhysicalInteractionRegistry)
+    configured = interactions.transaction_staff_positions(definition.id)
+    if configured:
+        return configured[0]
+    approaches = interactions.approach_anchors(definition.id)
+    if not approaches:
+        return fallback
+    customer_fallback = _legacy_anchor(definition.position.to_domain())
+    customer = min(
+        approaches,
+        key=lambda item: (
+            abs(item.x - customer_fallback.x)
+            + abs(item.y - customer_fallback.y),
+            item.y,
+            item.x,
+        ),
+    )
+    staff_candidates = tuple(
+        coordinate
+        for coordinate in approaches
+        if coordinate != customer
+        and STANDING_CHARACTER_FOOTPRINT.translated_cells(
+            coordinate
+        ).isdisjoint(
+            STANDING_CHARACTER_FOOTPRINT.translated_cells(customer)
+        )
+    )
+    return min(
+        staff_candidates or approaches,
+        key=lambda item: (
+            abs(item.x - fallback.x) + abs(item.y - fallback.y),
+            item.y,
+            item.x,
+        ),
+    )
+
+
+def _connection_approach(
+    interactions: PhysicalInteractionRegistry | None,
+    door_id: str | None,
+    room_id: str,
+    fallback: Coordinate,
+) -> Coordinate:
+    if interactions is None or door_id is None:
+        return fallback
+    target = interactions.targets.get(door_id)
+    if target is None or target.room_id != room_id or not target.approach_anchors:
+        return fallback
+    return min(
+        target.approach_anchors,
+        key=lambda item: (
+            abs(item.x - fallback.x) + abs(item.y - fallback.y),
+            item.y,
+            item.x,
+        ),
+    )
+
+
+def _is_runtime_legacy_center(
+    world: WorldMap,
+    coordinate: Coordinate,
+) -> bool:
+    if world.coordinate_system is LocalCoordinateSystem.LEGACY_CELL:
+        return True
+    scale = world.microcells_per_legacy_cell
+    center = scale // 2
+    return coordinate.x % scale == center and coordinate.y % scale == center
+
+
 def _build_world(definition: WorldDefinition) -> WorldMap:
+    metric = definition.spatial_metric.to_domain()
     grid = WorldGrid(
-        width=definition.width,
-        height=definition.height,
-        blocked=frozenset(coordinate.to_domain() for coordinate in definition.blocked),
+        width=metric.scale_legacy_extent(definition.width),
+        height=metric.scale_legacy_extent(definition.height),
+        blocked=frozenset(
+            microcell
+            for coordinate in definition.blocked
+            for microcell in metric.legacy_cell_microcells(
+                coordinate.to_domain()
+            )
+        ),
     )
     zones = tuple(
         Zone(
             id=zone.id,
             name=zone.name,
             zone_type=zone.type,
-            tiles=zone.bounds.tiles()
-            if zone.bounds is not None
-            else frozenset(tile.to_domain() for tile in zone.tiles or []),
+            tiles=frozenset(
+                microcell
+                for legacy_tile in (
+                    zone.bounds.tiles()
+                    if zone.bounds is not None
+                    else frozenset(
+                        tile.to_domain() for tile in zone.tiles or []
+                    )
+                )
+                for microcell in metric.legacy_cell_microcells(legacy_tile)
+            ),
         )
         for zone in definition.zones
     )
@@ -3066,7 +4540,7 @@ def _build_world(definition: WorldDefinition) -> WorldMap:
         AffordanceStation(
             id=station.id,
             name=station.name,
-            position=station.position.to_domain(),
+            position=_legacy_anchor(station.position.to_domain(), metric),
             actions=(
                 tuple(action.to_domain() for action in station.actions)
                 if station.actions is not None
@@ -3081,13 +4555,16 @@ def _build_world(definition: WorldDefinition) -> WorldMap:
         for station in definition.stations
     )
     transaction_points = tuple(
-        point.to_domain() for point in definition.transaction_points
+        _runtime_transaction_point(point, metric)
+        for point in definition.transaction_points
     )
     return WorldMap(
         grid=grid,
         zones=zones,
         stations=stations,
         transaction_points=transaction_points,
+        coordinate_system=LocalCoordinateSystem.MICROCELL,
+        microcells_per_legacy_cell=metric.microcells_per_legacy_cell,
     )
 
 
@@ -3104,7 +4581,9 @@ def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
             name=room.name,
             room_type=room.type,
             building_id=room.building_id,
-            offset=room.offset.to_domain(),
+            offset=room.world.spatial_metric.to_domain().scale_legacy_coordinate(
+                room.offset.to_domain()
+            ),
             world=room_worlds[room.id],
         )
         for room in definition.rooms
@@ -3116,7 +4595,14 @@ def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
             object_kind=item.object_kind,
             building_id=item.building_id,
             room_id=item.room_id,
-            position=item.position.to_domain(),
+            position=_legacy_anchor(
+                item.position.to_domain(),
+                next(
+                    room.world.spatial_metric.to_domain()
+                    for room in definition.rooms
+                    if room.id == item.room_id
+                ),
+            ),
             station=(
                 room_worlds[item.room_id].station(item.id)
                 if item.object_kind == "affordance"
@@ -3158,7 +4644,14 @@ def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
                     BuildingEntrance(
                         id=entrance.id,
                         room_id=entrance.room_id,
-                        local_coordinate=entrance.local_coordinate.to_domain(),
+                        local_coordinate=_legacy_anchor(
+                            entrance.local_coordinate.to_domain(),
+                            next(
+                                room.world.spatial_metric.to_domain()
+                                for room in definition.rooms
+                                if room.id == entrance.room_id
+                            ),
+                        ),
                         network_node_id=entrance.neighborhood_node_id,
                     )
                     for entrance in item.entrances
@@ -3182,9 +4675,23 @@ def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
                 id=item.id,
                 building_id=item.building_id,
                 from_room_id=item.from_room_id,
-                from_coordinate=item.from_coordinate.to_domain(),
+                from_coordinate=_legacy_anchor(
+                    item.from_coordinate.to_domain(),
+                    next(
+                        room.world.spatial_metric.to_domain()
+                        for room in definition.rooms
+                        if room.id == item.from_room_id
+                    ),
+                ),
                 to_room_id=item.to_room_id,
-                to_coordinate=item.to_coordinate.to_domain(),
+                to_coordinate=_legacy_anchor(
+                    item.to_coordinate.to_domain(),
+                    next(
+                        room.world.spatial_metric.to_domain()
+                        for room in definition.rooms
+                        if room.id == item.to_room_id
+                    ),
+                ),
                 bidirectional=item.bidirectional,
                 available=item.available,
             )
@@ -3233,10 +4740,12 @@ def _build_city_world(definition: CityWorldDefinition) -> CityWorld:
 def _build_space_registry(
     world: WorldMap,
     city: CityWorld | None,
+    physical_interactions: PhysicalInteractionRegistry | None = None,
+    spatial_index: SpatialIndex | None = None,
 ) -> SpaceRegistry:
     registry = SpaceRegistry()
     if city is None:
-        topology = GridTopology("implicit-building", world)
+        topology = GridTopology("implicit-building", world, spatial_index)
         registry.register_space(
             Space(
                 id="implicit-building",
@@ -3244,7 +4753,12 @@ def _build_space_registry(
                 kind="building",
             )
         )
-        _register_map_destinations(registry, topology, world)
+        _register_map_destinations(
+            registry,
+            topology,
+            world,
+            physical_interactions=physical_interactions,
+        )
         return registry
 
     city_topology = SparseGraphTopology(city.id, city)
@@ -3278,7 +4792,7 @@ def _build_space_registry(
     room_topologies: dict[str, GridTopology] = {}
     for room in sorted(city.rooms, key=lambda item: item.id):
         building = city.building(room.building_id)
-        topology = GridTopology(room.id, room.world)
+        topology = GridTopology(room.id, room.world, spatial_index)
         room_topologies[room.id] = topology
         registry.register_space(
             Space(
@@ -3298,18 +4812,38 @@ def _build_space_registry(
             topology,
             room.world,
             space_destination_id=room.id,
+            physical_interactions=physical_interactions,
         )
 
     for portal in sorted(city.portals, key=lambda item: item.id):
+        door_id = (
+            physical_interactions.door_for_transition(portal.id)
+            if physical_interactions is not None
+            else None
+        )
         registry.register_transition(
             Transition(
                 id=portal.id,
                 from_locator=room_topologies[
                     portal.from_room_id
-                ].locator(portal.from_coordinate),
+                ].locator(
+                    _connection_approach(
+                        physical_interactions,
+                        door_id,
+                        portal.from_room_id,
+                        portal.from_coordinate,
+                    )
+                ),
                 to_locator=room_topologies[
                     portal.to_room_id
-                ].locator(portal.to_coordinate),
+                ].locator(
+                    _connection_approach(
+                        physical_interactions,
+                        door_id,
+                        portal.to_room_id,
+                        portal.to_coordinate,
+                    )
+                ),
                 traversal_kind="room_portal",
                 executor_id="portal",
                 cost_model_id="portal",
@@ -3317,14 +4851,25 @@ def _build_space_registry(
                 metadata={
                     "building_id": portal.building_id,
                     "available": portal.available,
+                    "door_object_id": door_id,
                 },
             )
         )
 
     for building in sorted(city.buildings, key=lambda item: item.id):
         for entrance in sorted(building.entrances, key=lambda item: item.id):
+            door_id = (
+                physical_interactions.door_for_transition(entrance.id)
+                if physical_interactions is not None
+                else None
+            )
             room_locator = room_topologies[entrance.room_id].locator(
-                entrance.local_coordinate
+                _connection_approach(
+                    physical_interactions,
+                    door_id,
+                    entrance.room_id,
+                    entrance.local_coordinate,
+                )
             )
             city_locator = city_topology.node_locator(entrance.network_node_id)
             registry.register_transition(
@@ -3340,6 +4885,7 @@ def _build_space_registry(
                         "building_id": building.id,
                         "room_id": entrance.room_id,
                         "network_node_id": entrance.network_node_id,
+                        "door_object_id": door_id,
                     },
                 )
             )
@@ -3350,6 +4896,17 @@ def _build_space_registry(
             place.id,
             city_topology.node_locator(place.network_node_id),
         )
+    if physical_interactions is not None:
+        for target_id in sorted(physical_interactions.targets):
+            target = physical_interactions.targets[target_id]
+            target_topology = room_topologies.get(target.room_id)
+            if target_topology is None:
+                continue
+            for coordinate in target.approach_anchors:
+                registry.register_destination(
+                    target_id,
+                    target_topology.locator(coordinate),
+                )
     return registry
 
 
@@ -3359,32 +4916,50 @@ def _register_map_destinations(
     world: WorldMap,
     *,
     space_destination_id: str | None = None,
+    physical_interactions: PhysicalInteractionRegistry | None = None,
 ) -> None:
     if space_destination_id is not None:
         for y in range(world.grid.height):
             for x in range(world.grid.width):
                 coordinate = Coordinate(x, y)
-                if world.grid.is_walkable(coordinate):
+                if (
+                    world.grid.is_walkable(coordinate)
+                    and _is_runtime_legacy_center(world, coordinate)
+                ):
                     registry.register_destination(
                         space_destination_id,
                         topology.locator(coordinate),
                     )
     for zone in sorted(world.zones, key=lambda item: item.id):
         for coordinate in sorted(zone.tiles, key=lambda item: (item.y, item.x)):
+            if not _is_runtime_legacy_center(world, coordinate):
+                continue
             registry.register_destination(
                 zone.id,
                 topology.locator(coordinate),
             )
     for station in sorted(world.stations, key=lambda item: item.id):
-        registry.register_destination(
-            station.id,
-            topology.locator(station.position),
+        approaches = (
+            physical_interactions.approach_anchors(station.id)
+            if physical_interactions is not None
+            else ()
         )
+        for coordinate in approaches or (station.position,):
+            registry.register_destination(
+                station.id,
+                topology.locator(coordinate),
+            )
     for point in sorted(world.transaction_points, key=lambda item: item.id):
-        registry.register_destination(
-            point.id,
-            topology.locator(point.position),
+        approaches = (
+            physical_interactions.approach_anchors(point.id)
+            if physical_interactions is not None
+            else ()
         )
+        for coordinate in approaches or (point.position,):
+            registry.register_destination(
+                point.id,
+                topology.locator(coordinate),
+            )
 
 
 def _synthesize_navigation_knowledge(
@@ -3428,6 +5003,7 @@ def _synthesize_navigation_knowledge(
                     not in {
                         ActionType.NAVIGATE,
                         ActionType.TRANSACT,
+                        ActionType.INTERACT,
                     }
                     or action.target is None
                     or action.target in known_ids

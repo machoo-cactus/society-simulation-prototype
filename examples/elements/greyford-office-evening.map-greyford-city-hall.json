@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "112eeb77bb4d8fc6550ebc06532de4cd45a29de8adbba9638772b4c669ccb221",
+        "content_hash": "6b298fa50d48c8a349268f5b9b82635e954b20d02bfd97159a5373954a77c871",
         "id": "greyford-office-evening.station-greyford-city-hall-primary",
         "kind": "object"
       },
       "id": "station-greyford-city-hall-primary",
       "key": "station-greyford-city-hall-primary",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 6,
         "y": 3
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 8,
   "zones": [
     {

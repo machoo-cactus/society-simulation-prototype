@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-general-hospital-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "98ecc948ec4414eccf5136758f1e0ae8874d356a8d54dfee776b5599fe22e1ea",
+        "content_hash": "88857552c91e1b46ef5416d6dc65c84e9bb6f547ef14415ed586186e53d8d02a",
         "id": "greyford-office-evening.map-greyford-general-hospital",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

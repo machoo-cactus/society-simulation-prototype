@@ -6,8 +6,13 @@ from stage0_sim.domain.world.city import (
     TravelMode,
     find_transport_route,
 )
-from stage0_sim.domain.world.model import Coordinate, WorldMap
+from stage0_sim.domain.world.model import (
+    Coordinate,
+    LocalCoordinateSystem,
+    WorldMap,
+)
 from stage0_sim.domain.world.pathfinding import find_path
+from stage0_sim.domain.world.physical import SpatialIndex
 from stage0_sim.domain.world.topology import (
     LocalRoute,
     Locator,
@@ -63,6 +68,7 @@ class ContainerTopology:
 class GridTopology:
     space_id: str
     world: WorldMap
+    spatial_index: SpatialIndex | None = None
 
     def locator(self, coordinate: Coordinate) -> Locator:
         if not self.world.grid.contains(coordinate):
@@ -96,9 +102,38 @@ class GridTopology:
             for locator in traversal_context.occupied_locators
             if locator.space_id == self.space_id
         )
-        path = find_path(self.world.grid, start, goal, occupied)
+        path = find_path(
+            self.world.grid,
+            start,
+            goal,
+            occupied,
+            footprint=traversal_context.actor_footprint,
+            spatial_index=self.spatial_index,
+            room_id=self.space_id,
+            entity_id=traversal_context.character_id,
+            authorized_overlaps=traversal_context.authorized_overlap_ids,
+        )
         if path is None:
             return None
+        if (
+            self.world.coordinate_system is LocalCoordinateSystem.MICROCELL
+            and path
+        ):
+            return LocalRoute(
+                origin=origin,
+                destination=destination,
+                legs=(
+                    RouteLeg(
+                        origin=origin,
+                        destination=destination,
+                        traversal_kind="grid_path",
+                        executor_id="movement",
+                        cost=float(len(path)),
+                        metadata={"path_length": len(path)},
+                    ),
+                ),
+                total_cost=float(len(path)),
+            )
         legs: list[RouteLeg] = []
         current = origin
         for coordinate in path:

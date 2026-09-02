@@ -14,7 +14,7 @@
   "kind": "object",
   "name": "Meridian Clinic Check-in Desk",
   "npc_role": {
-    "content_hash": "8095740f938a9f827e4e43971f8bfcc0a9987aec7e63edd8ca1b95212d6277cf",
+    "content_hash": "16944d6631c5f745eca53734aa922b44e71232957aca55ce797bbb27685c0d27",
     "id": "meridian-receptionist",
     "kind": "npc_role"
   },
@@ -39,7 +39,43 @@
     }
   ],
   "operation": "STAFFED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "openable": null,
+      "portable": null,
+      "readable": null,
+      "scent_source": null,
+      "slots": [],
+      "support": null,
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": 0,
+          "y": 0
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "NONE",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
   "request_timeout": 120.0,
-  "schema_version": 1,
+  "schema_version": 3,
   "supported_actions": null
 }

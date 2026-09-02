@@ -38,6 +38,92 @@
           "default_character_id": "character-greyford-mara-ellison",
           "label": "Senior municipal analyst"
         },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "criteria": [],
+              "description": "leave the office after submitting the briefing",
+              "id": "character-greyford-mara-ellison-leave-the-office-after-submitting-the-briefing",
+              "priority": 100
+            },
+            {
+              "criteria": [],
+              "description": "eat a quick warm dinner nearby",
+              "id": "character-greyford-mara-ellison-eat-a-quick-warm-dinner-nearby",
+              "priority": 100
+            },
+            {
+              "criteria": [],
+              "description": "take the metro home",
+              "id": "character-greyford-mara-ellison-take-the-metro-home",
+              "priority": 100
+            },
+            {
+              "criteria": [],
+              "description": "finish the river corridor capital briefing",
+              "id": "character-greyford-mara-ellison-finish-the-river-corridor-capital-briefing",
+              "priority": 50
+            },
+            {
+              "criteria": [],
+              "description": "maintain a sustainable work routine",
+              "id": "character-greyford-mara-ellison-maintain-a-sustainable-work-routine",
+              "priority": 50
+            },
+            {
+              "criteria": [],
+              "description": "help Greyford coordinate housing and transport investment",
+              "id": "character-greyford-mara-ellison-help-greyford-coordinate-housing-and-transport-i",
+              "priority": 50
+            }
+          ]
+        },
         "homeostasis": {
           "energy": 74,
           "satiety": 62,
@@ -636,8 +722,9 @@
           }
         },
         "senses": {
-          "hearing_multiplier": 1.0,
+          "hearing_range": 12,
           "recognition_range": 6,
+          "smell_range": 0,
           "vision_range": 10
         },
         "spatial_location": {
@@ -647,46 +734,6 @@
           },
           "place_id": "building-greyford-civic-analytics-office.interior",
           "scale": "BUILDING"
-        },
-        "goals": {
-          "goals": [
-            {
-              "id": "character-greyford-mara-ellison-leave-the-office-after-submitting-the-briefing",
-              "description": "leave the office after submitting the briefing",
-              "priority": 100,
-              "criteria": []
-            },
-            {
-              "id": "character-greyford-mara-ellison-eat-a-quick-warm-dinner-nearby",
-              "description": "eat a quick warm dinner nearby",
-              "priority": 100,
-              "criteria": []
-            },
-            {
-              "id": "character-greyford-mara-ellison-take-the-metro-home",
-              "description": "take the metro home",
-              "priority": 100,
-              "criteria": []
-            },
-            {
-              "id": "character-greyford-mara-ellison-finish-the-river-corridor-capital-briefing",
-              "description": "finish the river corridor capital briefing",
-              "priority": 50,
-              "criteria": []
-            },
-            {
-              "id": "character-greyford-mara-ellison-maintain-a-sustainable-work-routine",
-              "description": "maintain a sustainable work routine",
-              "priority": 50,
-              "criteria": []
-            },
-            {
-              "id": "character-greyford-mara-ellison-help-greyford-coordinate-housing-and-transport-i",
-              "description": "help Greyford coordinate housing and transport investment",
-              "priority": 50,
-              "criteria": []
-            }
-          ]
         }
       },
       "id": "character-greyford-mara-ellison"
@@ -783,15 +830,15 @@
   "perception": {
     "blocked_tiles_are_opaque": true,
     "fact_max_age_seconds": 600.0,
-    "hearing_range": 12,
     "inbox_limit": 150,
     "recognition_range": 6,
     "renderer": "deterministic",
     "vision_range": 10,
+    "voice_range": 12,
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 4,
+  "schema_version": 6,
   "seed": 20260830,
   "speed": 120.0,
   "system1": {
@@ -876,7 +923,7 @@
               "y": 13950.0
             },
             "element": {
-              "content_hash": "8b1dcd2d2c2a3f6e81a75ea465f42d28a3a9b1a6c01e27c1626ada0d75262f00",
+              "content_hash": "ed22fb14e7aeeda0417a2da0a09a8d858750f24ecf454bc6756ddecc19882a93",
               "id": "greyford-office-evening.building-greyford-provincial-assembly",
               "kind": "building"
             },
@@ -898,7 +945,7 @@
               "y": 13850.0
             },
             "element": {
-              "content_hash": "aba1235538e7684630ddc3b5887b9cb7607a78468ccaa1cbdfc4e8c5a4c0c818",
+              "content_hash": "841861caa5bda2d965f88179a99defa9e8b171dadd82434286c82117ba8b5d9d",
               "id": "greyford-office-evening.building-greyford-city-hall",
               "kind": "building"
             },
@@ -920,7 +967,7 @@
               "y": 14650.0
             },
             "element": {
-              "content_hash": "2fe4d793ea2116b65d755ac951382e13fb9893341818942cf687c585ed01d82b",
+              "content_hash": "dc65d49b6db9d0e230f64a6d86f43536c7117c03091ac2f1dd0d0321f326c8e1",
               "id": "greyford-office-evening.building-greyford-central-interchange",
               "kind": "building"
             },
@@ -968,7 +1015,7 @@
               "y": 14650.0
             },
             "element": {
-              "content_hash": "7140e97619973ed75e96a60c3195a336884c937883cbca450230594a624ddb5e",
+              "content_hash": "c33ec12853ea6c9471c371995d27c98fb2fd6cb091753e6f76f6ac5951435bbd",
               "id": "greyford-office-evening.building-greyford-civic-analytics-office",
               "kind": "building"
             },
@@ -990,7 +1037,7 @@
               "y": 14360.0
             },
             "element": {
-              "content_hash": "7849d5d84d6648f0826ba240f1de5838fadc6db9b4e93de2cb0f2e96eea479d0",
+              "content_hash": "2a079a5c9967434bed04a1bee56cce976fa65226acf6bf5815a70c1c1dd77fe2",
               "id": "greyford-office-evening.building-greyford-juniper-kitchen",
               "kind": "building"
             },
@@ -1012,7 +1059,7 @@
               "y": 14350.0
             },
             "element": {
-              "content_hash": "899abb99f6e3c64477e5fb753e9fcb600bfabc0967f4f752a71cb4b512c93612",
+              "content_hash": "7318d50ffcd0b57fb88fe41310cc34f2dc380a4f2d1e187b0c60d7b072001a0a",
               "id": "greyford-office-evening.building-greyford-quayline-cafe",
               "kind": "building"
             },
@@ -1034,7 +1081,7 @@
               "y": 14070.0
             },
             "element": {
-              "content_hash": "8284ea9b2d739bc456b8fa9c80780d89b3806b17620dc05398a0a2a3727a778f",
+              "content_hash": "56a2f2e79bb05e8a6fdcd0d1ddd54d96cef0e3586184ec1178ff3f41f6fa7b4d",
               "id": "greyford-office-evening.building-greyford-rivermarket-grocer",
               "kind": "building"
             },
@@ -1056,7 +1103,7 @@
               "y": 14070.0
             },
             "element": {
-              "content_hash": "f04daf969fea8b4e43b751a53471d8e9c8c7c8e59bd6da77cd92fcd3e84ebb58",
+              "content_hash": "e7c434227766c94dc54e96601c2f8790ede59eb9fbffb7a225942c148c9c264d",
               "id": "greyford-office-evening.building-greyford-northbank-pharmacy",
               "kind": "building"
             },
@@ -1078,7 +1125,7 @@
               "y": 14070.0
             },
             "element": {
-              "content_hash": "690ffe1f77f6b3744809f3c62d65508bb6ab9af47a5cfa1e6ff29aba8f6b6353",
+              "content_hash": "095794635779f326e0da94e39ab9de334d57c8111df84896fe77c1cd31d9164d",
               "id": "greyford-office-evening.building-greyford-meridian-clinic",
               "kind": "building"
             },
@@ -1100,7 +1147,7 @@
               "y": 14630.0
             },
             "element": {
-              "content_hash": "dc3350262bdfdbdb6d85c8f468d738c8077fa4ff75defc62d4565f85e6e0342a",
+              "content_hash": "ca2bb80f862ff595688ea1d490d215b80014aab2c4f2dd174da0b731df084e36",
               "id": "greyford-office-evening.building-greyford-foundry-fitness",
               "kind": "building"
             },
@@ -1122,7 +1169,7 @@
               "y": 14630.0
             },
             "element": {
-              "content_hash": "bcb88e76a23da8647f9fca087468635ada82dc8a612c572032ca13536567176b",
+              "content_hash": "75d293ef0eeaaea9d08f8c0abc7da68faa68c9b25b971cf6342ac299cc7a7ea9",
               "id": "greyford-office-evening.building-greyford-alder-hotel",
               "kind": "building"
             },
@@ -1144,7 +1191,7 @@
               "y": 14930.0
             },
             "element": {
-              "content_hash": "9e22a8df621cdfa7e8d4d75e4bc2e8dd338b4393c1c4b7e59db46a766c6c3237",
+              "content_hash": "6cd20b70688ba0a2874fd2476753ecf51d68a22b8fe4677b7628f2ce74cc7200",
               "id": "greyford-office-evening.building-greyford-harcourt-residences",
               "kind": "building"
             },
@@ -1166,7 +1213,7 @@
               "y": 14070.0
             },
             "element": {
-              "content_hash": "e6dd4752eea8d49b8d712e8c4d879197975e30ab29023e9132c8974d69c3b9e8",
+              "content_hash": "448232683e61f1976e4ba8f429db574f4772391bdd6a7c6684928efe8fab7a18",
               "id": "greyford-office-evening.building-greyford-mobility-centre",
               "kind": "building"
             },
@@ -1188,7 +1235,7 @@
               "y": 15080.0
             },
             "element": {
-              "content_hash": "69b46ef22a55c56ed3f9e841fb1c41156f19435ab39dd83292fbc236bc143151",
+              "content_hash": "c1a2d2a270d09d2fcd52649015be0b285a7ede8b82854f4d0ae93c61664341d7",
               "id": "greyford-office-evening.building-greyford-quayside-metro-station",
               "kind": "building"
             },
@@ -1210,7 +1257,7 @@
               "y": 14930.0
             },
             "element": {
-              "content_hash": "04aec19bfd7249e94d116c8fa22ef78c59090ce3598cae947c35bd3f89235438",
+              "content_hash": "d55a143fafb5e92af31654895c28ed5d0e94b11f2fa02a871e8c85966a401df4",
               "id": "greyford-office-evening.building-greyford-river-library",
               "kind": "building"
             },
@@ -1232,7 +1279,7 @@
               "y": 14930.0
             },
             "element": {
-              "content_hash": "dec3a8fe22c222cf9140fc8cdf798fc5836c50b8b126ab34558d613a38340f9d",
+              "content_hash": "807a0d0cf8c287ca7863c83a7372c486274ad9bdccc95075b0cffbb3a9a2a748",
               "id": "greyford-office-evening.building-greyford-spruce-childcare",
               "kind": "building"
             },
@@ -1254,7 +1301,7 @@
               "y": 14930.0
             },
             "element": {
-              "content_hash": "6d7a5c4edd45d959003004baf826bd6b07cba9cb02fde4547f6024defe625bca",
+              "content_hash": "ab82c84d12279d108cfa5a84515183fba612939d3b79dc548675cf1b4e2d7148",
               "id": "greyford-office-evening.building-greyford-lantern-coworking",
               "kind": "building"
             },
@@ -1358,7 +1405,7 @@
               "y": 20350.0
             },
             "element": {
-              "content_hash": "fb8e3a41cc95d8b707627c35acfe27d99a7fa7d4a0c3cdf037dbf15ffc4dd481",
+              "content_hash": "2c7d9a85ba7cf4dec0e1451cfb629a379870917e9ba30e7473f67eb35ce66ca1",
               "id": "greyford-office-evening.building-greyford-general-hospital",
               "kind": "building"
             },
@@ -1380,7 +1427,7 @@
               "y": 20450.0
             },
             "element": {
-              "content_hash": "9a028b8cbbfd1c6437fd6b1c940799f929d12f44af6b4462c55c19ddf4121890",
+              "content_hash": "a4f194e13844e16dc2dbba30e759194765a2b99371c1d2ef2e7a0f79dae7788b",
               "id": "greyford-office-evening.building-greyford-state-university",
               "kind": "building"
             },
@@ -1402,7 +1449,7 @@
               "y": 21150.0
             },
             "element": {
-              "content_hash": "97e34061b84a0991331508a07caa57a95cb5c89670cd98b838d0e64259f91539",
+              "content_hash": "d82a3f034a1a2d93b4349edb6be61524685e59f10c314a19a50b4bd84225f35b",
               "id": "greyford-office-evening.building-greyford-medical-research",
               "kind": "building"
             },
@@ -1450,7 +1497,7 @@
               "y": 15950.0
             },
             "element": {
-              "content_hash": "1537768d3db30a4db3e9fdde8b81a5c5e2611ee03ffccb27daf9cead8e1dce4e",
+              "content_hash": "8dff3053fe8a3a41ac0e853dbf0778827e2322a51f84943ec591b70de0f28374",
               "id": "greyford-office-evening.building-greyford-rowan-home",
               "kind": "building"
             },
@@ -1472,7 +1519,7 @@
               "y": 15400.0
             },
             "element": {
-              "content_hash": "c8d0287281be0e92573b7a55e2dbfde3c8c52a1888011a73a3a80e1218981606",
+              "content_hash": "bd81675a752c838efd764ba059d31e20b102203f7f66baafc98a4d467c27bb3e",
               "id": "greyford-office-evening.building-greyford-westmarket-apartments",
               "kind": "building"
             },
@@ -1494,7 +1541,7 @@
               "y": 15750.0
             },
             "element": {
-              "content_hash": "08ee3ebfe8b7816e598fd56c6487caac291762ed6563ab6e7ac0eac910300290",
+              "content_hash": "d0e80585aac88b21d54f5d820f440d17731cec0fc328da6d1b2d438ffe3441ab",
               "id": "greyford-office-evening.building-greyford-maple-court",
               "kind": "building"
             },
@@ -1542,7 +1589,7 @@
               "y": 23150.0
             },
             "element": {
-              "content_hash": "f85bdba7ab495dce4be4d89298b4dc5f1dfb5ae0c5e810f79f62f4041d5f7a29",
+              "content_hash": "32454c182f9b4776948358b3e1c22ce4a778e18570e1a3fee269189e6a2f9b27",
               "id": "greyford-office-evening.building-greyford-northgate-apartments",
               "kind": "building"
             },
@@ -1564,7 +1611,7 @@
               "y": 23650.0
             },
             "element": {
-              "content_hash": "2b9df12c358b9ac5b42ade1e13abbf22054e39e41b348bc5c6561f0f678a75a3",
+              "content_hash": "ac0de51400a6a8d2a46a4f0592b408aca1a9e602e31433e9b178c4908a040856",
               "id": "greyford-office-evening.building-greyford-lakeside-townhouses",
               "kind": "building"
             },
@@ -1612,7 +1659,7 @@
               "y": 5750.0
             },
             "element": {
-              "content_hash": "542c6744baa9a94f0f5fdd06ffaa3d69e22cf3da76f813b0d9f04bdde46cba56",
+              "content_hash": "832c2d710102e214a36032035d5417058adb465a5a7f3ca2429e1f24a66a71db",
               "id": "greyford-office-evening.building-greyford-intermodal-logistics",
               "kind": "building"
             },
@@ -1634,7 +1681,7 @@
               "y": 4850.0
             },
             "element": {
-              "content_hash": "3aec212f74b2be1f1bf13edda6610a70377ddaa75533e0f8c39b137aebbb9677",
+              "content_hash": "1fff335c892db261d446d002b2783d7b23487f6cfa7bc60ca3c8d4a83a918ac1",
               "id": "greyford-office-evening.building-greyford-water-treatment",
               "kind": "building"
             },
@@ -1656,7 +1703,7 @@
               "y": 7050.0
             },
             "element": {
-              "content_hash": "e32b711d655da0dd9d7d811c78b8d15c1c3486010915793f25b7cc1bf3eb8941",
+              "content_hash": "3cb8c14c86b39245dfd4c814895d27cc292bff6fd8f7d6f0e52a5144c727a7ce",
               "id": "greyford-office-evening.building-greyford-grid-operations",
               "kind": "building"
             },
@@ -1704,7 +1751,7 @@
               "y": 9250.0
             },
             "element": {
-              "content_hash": "ea963f765eaf7fa41ef64a1a2d324ec5dc56a3f3c123d6a39088eaff67de1bf3",
+              "content_hash": "847a3bed8b250f10f657b204e422f2fad5b46255a501dccb47f81b5b11c1921a",
               "id": "greyford-office-evening.building-greyford-airport-terminal",
               "kind": "building"
             },
@@ -1726,7 +1773,7 @@
               "y": 7650.0
             },
             "element": {
-              "content_hash": "da771c8e196224570fde4134cb716691c5a5934c66dce6494e29d8904236db4d",
+              "content_hash": "82306b1c5b117b21c20827d46c7a620d6b46dc6f55b5e8bed3575f3446f85317",
               "id": "greyford-office-evening.building-greyford-air-cargo",
               "kind": "building"
             },
@@ -1774,7 +1821,7 @@
               "y": 14750.0
             },
             "element": {
-              "content_hash": "e18d4f4b17c82309c3e2f13b61accf4a81b24769db56e5479b0436f65427feb4",
+              "content_hash": "84f0b5207212d72825040e74eb6733374f236eced35de1d7e87019f57a7c8f9b",
               "id": "greyford-office-evening.building-greyford-riverlands-museum",
               "kind": "building"
             },
@@ -1796,7 +1843,7 @@
               "y": 14950.0
             },
             "element": {
-              "content_hash": "513fc94697a2d23fe634da2fcc1795ec7209b592fdd479f39e00b7b3c6102fc8",
+              "content_hash": "bb0a0e56df1358d94a0c541fe9dea823ab051fbdb658987d5858d404d3c0167d",
               "id": "greyford-office-evening.building-greyford-capital-stadium",
               "kind": "building"
             },
@@ -1818,7 +1865,7 @@
               "y": 15750.0
             },
             "element": {
-              "content_hash": "87c7628cb06da8ee1488ac853b20590d57cb9190d7b48f51ba44c1b37a5ef0b6",
+              "content_hash": "aa6e4a2608f2e0c05b8489eb9dd6fd3da546ddbbe2e425f416e594582ca40b45",
               "id": "greyford-office-evening.building-greyford-performing-arts",
               "kind": "building"
             },
@@ -1866,7 +1913,7 @@
               "y": 22050.0
             },
             "element": {
-              "content_hash": "4daa085b3b49f92ba1281a3b89eb799c166bb8a2adfa5083d81e4b43be1cff45",
+              "content_hash": "8408e9dd01a7a44c7b516057d0af80d457ba2285af35e66ab0d760760eb00434",
               "id": "greyford-office-evening.building-greyford-highland-conservatory",
               "kind": "building"
             },
@@ -1888,7 +1935,7 @@
               "y": 22950.0
             },
             "element": {
-              "content_hash": "7d260a35380e02d6478b5baf07db39b763477a83fca090f158f0b29800c62864",
+              "content_hash": "8e57b6f18a1fe53007e1626674bc8b10db147046edc4c2f8575008add13bc29e",
               "id": "greyford-office-evening.building-greyford-highland-boathouse",
               "kind": "building"
             },

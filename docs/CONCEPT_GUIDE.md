@@ -40,7 +40,15 @@ The project is designed to test:
 | **knowledge** | Timestamped character belief from self-state, perception, communication, initialization, or memory |
 | **telemetry** | Omniscient operator projection; never character context |
 | **dataset record** | Immutable versioned research observation; never live authority |
-| **scenario** | Strict schema-version-4 portable initial configuration |
+| **microcell** | Fixed local physical unit; 9 microcells equal one compatibility legacy cell |
+| **physical pose** | Room, microcell anchor, and cardinal orientation applied to local footprint offsets |
+| **occupied cells** | The live microcells produced by rotating and translating a footprint |
+| **SpatialIndex** | Authoritative room-scoped index of movement plus vision, hearing, and smell blocker occupancy |
+| **semantic size** | SI dimensions and optional qualitative size used for reasoning; independent from the rendered footprint |
+| **equipment** | A wearable object's live slotted `ATTACHED_TO` relation to a character |
+| **effective senses** | Base vision, recognition, hearing, and smell ranges after deterministic equipped effects |
+| **custody** | Current physical control of an object; independent of descriptive ownership and abstract possessions |
+| **scenario** | Strict schema-version-6 portable initial configuration |
 | **prepared scenario** | Scenario plus frozen resolved characters, elements, assignments, and optional situations |
 | **run** | One process-local clock, ECS registry, event stream, and dataset |
 
@@ -68,6 +76,23 @@ Descriptive dossier facts—skills, age, preferences, legal status, allergies,
 finances—are information. They do not silently become physical permissions,
 inventory, funds, or live physiology. Physical mechanics may use explicitly
 modeled state and world preconditions.
+
+At local room scale, physical anchors, movement, sensory obstruction, and
+occupied cells use the fixed microcell metric. A standing character has a
+5×5-microcell body. Object footprints use local offsets and cardinal
+orientation; slots and live parent relations model support, containment,
+holding, attachment, and posture occupancy. Open/locked state changes
+effective obstruction. Vision, hearing, and smell use deterministic
+footprint-to-footprint supercover sweeps through live modality-specific
+blockers. ECS components and `SpatialIndex` are live truth;
+`CityWorld`, element hierarchy, API, telemetry, datasets, and SVG are metadata
+or projections.
+
+Object mass and dimensions are explicit semantic properties. Mass can constrain
+pickup and total carried load, but this remains deterministic discrete spatial
+execution: there is no continuous collision dynamics, torque, arbitrary
+rotation, weight-driven movement physiology, optical reflection, acoustic
+attenuation, or scent diffusion.
 
 ## Time
 

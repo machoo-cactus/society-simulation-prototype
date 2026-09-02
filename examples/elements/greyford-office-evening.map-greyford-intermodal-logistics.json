@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "0bc9f2ad7639a8584b00daade69bf8721eef2a2cb980617a1772fd3ad849d71d",
+        "content_hash": "432f651d2707bc6d7d391bef03932f726c814dfb2ce379dc43d71a40c2f5dbbe",
         "id": "greyford-office-evening.station-greyford-intermodal-logistics-primary",
         "kind": "object"
       },
       "id": "station-greyford-intermodal-logistics-primary",
       "key": "station-greyford-intermodal-logistics-primary",
+      "placement": {
+        "anchor": {
+          "x": 76,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 8,
         "y": 3
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 10,
   "zones": [
     {

@@ -7,7 +7,10 @@
   "name": "East Research Office interior",
   "objects": [],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 3,
   "zones": [
     {

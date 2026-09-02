@@ -1,12 +1,13 @@
 {
   "briefing": "Serve valid assigned pharmacy counter purchases without changing configured terms.",
   "description": "",
-  "hearing_multiplier": 1.0,
+  "hearing_range": 10,
   "id": "northbank-pharmacy-clerk",
   "kind": "npc_role",
   "name": "Northbank Pharmacy Clerk",
   "recognition_range": 4,
-  "schema_version": 1,
+  "schema_version": 3,
+  "smell_range": 0,
   "tool_allowlist": [
     "serve_transaction",
     "say",

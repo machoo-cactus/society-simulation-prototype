@@ -227,6 +227,13 @@ def action_specification_payload(action: ActionInstance) -> dict[str, JsonValue]
         payload["mode"] = action.mode.value
     if action.offer_id is not None:
         payload["offer_id"] = action.offer_id
+    if action.interaction is not None:
+        payload["interaction"] = {
+            "verb": action.interaction.verb.value,
+            "target_id": action.interaction.target_id,
+            "destination_id": action.interaction.destination_id,
+            "slot_id": action.interaction.slot_id,
+        }
     return payload
 
 

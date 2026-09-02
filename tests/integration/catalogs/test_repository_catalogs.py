@@ -13,6 +13,10 @@ from stage0_sim.application.elements import (
     ScenarioSourceDefinition,
     element_content_hash,
 )
+from stage0_sim.application.migrations.catalog import (
+    CatalogMigrationOptions,
+    migrate_catalog,
+)
 from stage0_sim.application.scenario import create_runner
 from stage0_sim.application.scenario_resolution import resolve_scenario
 from stage0_sim.config import Settings
@@ -81,14 +85,14 @@ def test_catalog_ids_filenames_and_current_schemas_are_coherent() -> None:
         path.stem for path in EXAMPLE_ELEMENTS.glob("*.json")
     }
     assert {item.schema_version for item in characters} == {2}
-    assert {item.schema_version for item in elements} == {1}
+    assert {item.schema_version for item in elements} == {3}
 
     character_ids = {item.id for item in characters}
     for path in EXAMPLE_SCENARIOS.glob("*.json"):
         source = ScenarioSourceDefinition.model_validate_json(
             path.read_text(encoding="utf-8")
         )
-        assert source.schema_version == 4
+        assert source.schema_version == 6
         assert source.name == path.stem
         for entity in source.entities:
             slot = entity.components.get("character_slot")
@@ -102,13 +106,13 @@ def test_catalog_ids_filenames_and_current_schemas_are_coherent() -> None:
             encoding="utf-8"
         )
     )
-    assert fixture.schema_version == 4
+    assert fixture.schema_version == 6
     assert fixture.name == "scripted-tool-cognition"
 
     demo = ScenarioSourceDefinition.model_validate_json(
         PACKAGED_DEMO.read_text(encoding="utf-8")
     )
-    assert demo.schema_version == 4
+    assert demo.schema_version == 6
     demo_character = CharacterDefinition.model_validate_json(
         PACKAGED_DEMO.with_name("demo-character.json").read_text(
             encoding="utf-8"
@@ -228,3 +232,27 @@ def test_character_samples_validate_as_current_profiles() -> None:
         )
         assert character.schema_version == 2
         assert character.id == path.stem
+
+
+def test_repository_content_requires_no_migration() -> None:
+    examples = migrate_catalog(
+        CatalogMigrationOptions(
+            characters_dir=EXAMPLE_CHARACTERS,
+            elements_dir=EXAMPLE_ELEMENTS,
+            scenarios_dir=EXAMPLE_SCENARIOS,
+        )
+    )
+    packaged = migrate_catalog(
+        CatalogMigrationOptions(
+            scenarios_dir=PACKAGED_DEMO.parent,
+        )
+    )
+    current_fixture = migrate_catalog(
+        CatalogMigrationOptions(
+            scenarios_dir=SCENARIO_FIXTURES,
+        )
+    )
+
+    for report in (examples, packaged, current_fixture):
+        assert report.succeeded, report.errors
+        assert report.changed_count == 0

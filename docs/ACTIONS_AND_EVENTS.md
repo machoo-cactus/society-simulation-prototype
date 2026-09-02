@@ -3,12 +3,17 @@
 **Owner:** Closed controller-tool, action, goal-criterion, and domain-event
 vocabulary.
 
+For complete per-tool requirements, outcomes, failure stages, observation
+contents, retrieval behavior, and the controller-to-domain execution flow, see
+[Character agent actions and decision flow](CHARACTER_AGENT_ACTIONS.md).
+
 ## Character-controller tools
 
 | Tool | Arguments | Meaning |
 | --- | --- | --- |
-| `navigate_to` | `target_id`, optional `preferred_mode`, optional private `reason` | Attempt navigation to a known zone, station, building, or outdoor place |
-| `perform` | `action`, optional `target_id`, `duration_seconds`, `reason` | Attempt `WORK`, `READ`, `EAT`, `SLEEP`, or `RELAX` |
+| `navigate_to` | `target_id`, optional `preferred_mode`, optional private `reason` | Attempt navigation to a known place or physical-object approach pose |
+| `perform` | `action`, optional `target_id`, `duration_seconds`, `reason` | Attempt `WORK`, `READ`, `DRINK`, `EAT`, `SLEEP`, or `RELAX` |
+| `interact_with` | closed `verb`, `target_id`, optional `destination_id` and `slot_id`, optional private `reason` | Propose one observable physical interaction |
 | `say` | `target_id`, `text`, optional `reason` | Speak literal in-world words |
 | `wait` | `duration_seconds`, optional `reason` | Create an embodied `IDLE` action |
 | `skip` | `reconsider_after_seconds`, optional `reason` | Create no action; defer cognition eligibility |
@@ -28,12 +33,26 @@ tools above except `serve_transaction`; NPC roles may include only
 
 The complete `ActionType` vocabulary is:
 
-`WORK`, `SOCIALIZE`, `READ`, `EAT`, `SLEEP`, `RELAX`, `IDLE`, `NAVIGATE`,
-`TRANSACT`, and `SERVE_TRANSACTION`.
+`WORK`, `SOCIALIZE`, `READ`, `DRINK`, `EAT`, `SLEEP`, `RELAX`, `IDLE`,
+`NAVIGATE`, `INTERACT`, `TRANSACT`, and `SERVE_TRANSACTION`.
 
 `NAVIGATE` is the only navigation action. `TRANSACT` requires a target point
 and offer ID. `SERVE_TRANSACTION` requires a transaction-request target.
 Runtime queues contain `ActionInstance`, not raw compatibility actions.
+
+Physical interaction verbs are `PICK_UP`, `PUT_DOWN`, `PLACE_ON`, `PLACE_IN`,
+`OPEN`, `CLOSE`, `SIT`, `STAND`, `LIE_DOWN`, `GET_UP`, `USE`, `EQUIP`, and
+`UNEQUIP`.
+
+| Verb | Deterministic effect attempted |
+| --- | --- |
+| `PICK_UP`, `PUT_DOWN` | Move a portable object between a free hand/custody relation and a collision-free floor pose |
+| `PLACE_ON`, `PLACE_IN` | Move a held object to a compatible support/container slot; a closed container rejects placement |
+| `OPEN`, `CLOSE` | Change an openable object's effective obstruction; locked objects do not open and blocked objects do not close |
+| `SIT`, `LIE_DOWN` | Occupy a compatible slot and adopt the requested posture |
+| `STAND`, `GET_UP` | Leave the current sitting or lying support for a valid exit pose |
+| `USE` | Invoke an explicitly configured usable capability |
+| `EQUIP`, `UNEQUIP` | Move a wearable between held state and a compatible character equipment slot; effective typed sense modifiers are derived after commit |
 
 Action origins are `scenario`, `controller`, `system1`, and `operator`.
 Goal links are `declared` or `contextual`.
@@ -49,6 +68,22 @@ plan.created | plan.revised
 
 `plan.cleared` closes incompatible plan state. The `action.*` family is the
 canonical action lifecycle.
+
+Physical interaction evidence has its own exact lifecycle:
+
+```text
+interaction.requested
+  -> interaction.failed
+  |  interaction.started
+       -> interaction.completed | interaction.cancelled
+```
+
+The request specification and action/decision/tool lineage are immutable.
+Execution revalidates live ECS and `SpatialIndex` state before its atomic
+deterministic commit. A queued, accepted, or committed tool is not proof that
+an interaction started or completed. Door objects linked to entrances or
+portals use these same events and rules; closed unlocked doors can be opened
+before traversal, while locked doors block it.
 
 ## Structured goal criteria
 
@@ -71,7 +106,8 @@ other typed lineage IDs.
 | Cognition | `cognition.eligible`, `cognition.requested`, `cognition.barrier_started`, `cognition.barrier_settled`, `cognition.completed`, `cognition.failed`, `cognition.cancelled`, `cognition.skipped`, `cognition.budget_exhausted` |
 | Tools/information | `tool.proposed`, `tool.accepted`, `tool.rejected`, `tool.committed`, `tool.read_requested`, `tool.read_completed`, `information.retrieved`, `information.retrieval_failed` |
 | Plans/actions | `plan.created`, `plan.revised`, `plan.cleared`, `action.queued`, `action.started`, `action.completed`, `action.failed`, `action.cancelled` |
-| Physiology/System 1 | `activity.changed`, `homeostasis.changed`, `homeostasis.mutated`, `threshold.breached`, `system1.activated`, `system1.drive_changed`, `system1.target_selected`, `system1.state_changed`, `system1.resolved`, `system1.blocked` |
+| Physical interactions | `interaction.requested`, `interaction.started`, `interaction.completed`, `interaction.failed`, `interaction.cancelled`, `drink.completed` |
+| Physiology/System 1 | `activity.changed`, `homeostasis.changed`, `homeostasis.mutated`, `character.effects_changed`, `threshold.breached`, `system1.activated`, `system1.drive_changed`, `system1.target_selected`, `system1.state_changed`, `system1.resolved`, `system1.blocked` |
 | Local movement | `path.requested`, `path.planned`, `path.completed`, `path.failed`, `path.invalidated`, `agent.moved`, `portal.traversed` |
 | Navigation/travel | `navigation.requested`, `navigation.planned`, `navigation.leg_started`, `navigation.arrived`, `navigation.failed`, `navigation.interrupted`, `travel.requested`, `travel.route_planned`, `travel.route_failed`, `travel.started`, `travel.leg_started`, `travel.leg_completed`, `travel.progressed`, `travel.mode_changed`, `travel.blocked`, `travel.interrupted`, `travel.arrived` |
 | Places/vehicles | `building.entered`, `building.exited`, `building.entry_blocked`, `vehicle.boarded`, `vehicle.moved`, `vehicle.exited`, `metro.boarded`, `metro.alighted` |

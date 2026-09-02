@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-rivermarket-flat",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "8c8181ed128fafcf1deaa8ab34ac4c865f85266f17f496adcba1fe9cf5600ac4",
+        "content_hash": "133f48fa8762bec015ab418909746d51675d9d4d9a783cb8b00623a2c5bcff15",
         "id": "greyford-rivermarket-exchange.map-greyford-rivermarket-flat",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

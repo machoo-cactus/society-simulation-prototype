@@ -195,7 +195,7 @@ def test_scripted_car_trip_arrives_without_teleporting() -> None:
     assert learned.content["destination_id"] == "building-office"
     assert learned.content["locator"] == {
         "space_id": "building-office.interior",
-        "local_reference": {"kind": "coordinate", "x": 0, "y": 1},
+        "local_reference": {"kind": "coordinate", "x": 4, "y": 13},
     }
     assert learned.content["transition_ids"] == [
         leg.transition_id

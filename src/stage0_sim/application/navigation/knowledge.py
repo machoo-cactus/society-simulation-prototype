@@ -3,7 +3,11 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from stage0_sim.application.information import InformationStore
-from stage0_sim.domain.components import SpatialLocationComponent
+from stage0_sim.domain.components import (
+    PerceptionComponent,
+    PhysicalObjectIdentityComponent,
+    SpatialLocationComponent,
+)
 from stage0_sim.domain.economy import TransactionOffer
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
@@ -14,7 +18,13 @@ from stage0_sim.domain.information import (
     character_information_namespace_id,
 )
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
-from stage0_sim.domain.world import CityWorld, Locator, SpaceRegistry
+from stage0_sim.domain.world import (
+    CityWorld,
+    GridTopology,
+    LocalCoordinateSystem,
+    Locator,
+    SpaceRegistry,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +121,22 @@ class InformationKnownTopologyProjection:
             if self.registry.has_resource(EnvironmentAvailabilityRegistry)
             else None
         )
+        for destination_id, destination in tuple(projected.items()):
+            if (
+                destination_id in self.registry.entities()
+                and self.registry.has_component(
+                destination_id,
+                PhysicalObjectIdentityComponent,
+                )
+            ):
+                authoritative = self.topology.destination_locators(
+                    destination_id
+                )
+                if authoritative:
+                    projected[destination_id] = replace(
+                        destination,
+                        locators=authoritative,
+                    )
         return tuple(
             (
                 replace(
@@ -266,6 +292,41 @@ class InformationKnownTopologyProjection:
                     ),
                 )
             )
+        existing_ids = {destination.id for destination in destinations}
+        if self.registry.has_component(character_id, PerceptionComponent):
+            perception = self.registry.get_component(
+                character_id,
+                PerceptionComponent,
+            )
+            for object_id in sorted(perception.object_knowledge):
+                if (
+                    object_id in existing_ids
+                    or not self.registry.has_component(
+                        object_id,
+                        PhysicalObjectIdentityComponent,
+                    )
+                ):
+                    continue
+                identity = self.registry.get_component(
+                    object_id,
+                    PhysicalObjectIdentityComponent,
+                )
+                locators = tuple(
+                    locator
+                    for locator in self.topology.destination_locators(
+                        object_id
+                    )
+                    if locator.space_id == current.space_id
+                )
+                if locators:
+                    destinations.append(
+                        KnownDestination(
+                            object_id,
+                            "physical_object",
+                            identity.name,
+                            locators,
+                        )
+                    )
         return tuple(destinations)
 
     def _current_locator(self, character_id: str) -> Locator | None:
@@ -300,8 +361,10 @@ class InformationKnownTopologyProjection:
         )
         return tuple(dict.fromkeys(sorted(ids)))
 
-    @staticmethod
-    def _locators(content: dict[str, JsonValue]) -> tuple[Locator, ...]:
+    def _locators(
+        self,
+        content: dict[str, JsonValue],
+    ) -> tuple[Locator, ...]:
         payloads: list[JsonValue] = []
         singular = content.get("locator")
         if singular is not None:
@@ -317,8 +380,58 @@ class InformationKnownTopologyProjection:
             space_id = payload.get("space_id")
             local_reference = payload.get("local_reference")
             if isinstance(space_id, str) and local_reference is not None:
-                locators.append(Locator(space_id, local_reference))
+                locators.append(
+                    Locator(
+                        space_id,
+                        self._runtime_local_reference(
+                            space_id,
+                            local_reference,
+                            already_runtime=(
+                                content.get("compatibility_synthesized") is True
+                                or content.get("coordinate_system")
+                                == LocalCoordinateSystem.MICROCELL.value
+                            ),
+                        ),
+                    )
+                )
         return InformationKnownTopologyProjection._unique_locators(locators)
+
+    def _runtime_local_reference(
+        self,
+        space_id: str,
+        reference: JsonValue,
+        *,
+        already_runtime: bool,
+    ) -> JsonValue:
+        if already_runtime or not isinstance(reference, dict):
+            return reference
+        try:
+            topology = self.topology.space(space_id).topology
+        except KeyError:
+            return reference
+        if (
+            not isinstance(topology, GridTopology)
+            or topology.world.coordinate_system
+            is not LocalCoordinateSystem.MICROCELL
+            or reference.get("kind") != "coordinate"
+        ):
+            return reference
+        x = reference.get("x")
+        y = reference.get("y")
+        if (
+            not isinstance(x, int)
+            or isinstance(x, bool)
+            or not isinstance(y, int)
+            or isinstance(y, bool)
+        ):
+            return reference
+        scale = topology.world.microcells_per_legacy_cell
+        center = scale // 2
+        return {
+            "kind": "coordinate",
+            "x": x * scale + center,
+            "y": y * scale + center,
+        }
 
     @staticmethod
     def _referenced_transition_ids(

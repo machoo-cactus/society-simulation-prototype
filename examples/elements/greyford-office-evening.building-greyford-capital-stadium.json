@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-capital-stadium-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "5c7f6e9db62345f7ac5a962ab37786f9152e6cbe882ee0b71042f3b30435c180",
+        "content_hash": "4d5245c376be76d5331fa06f9c115e4b57327b1e0ec7d039bec0642d23d31b50",
         "id": "greyford-office-evening.map-greyford-capital-stadium",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

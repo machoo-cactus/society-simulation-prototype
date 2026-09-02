@@ -23,8 +23,29 @@ class DeterministicPerceptionRenderer:
             return f"{subject} left {fact.location_id}."
         if fact.fact_type == "visible_activity_started":
             return f"{subject} started {fact.properties.get('activity', 'an activity')}."
+        if fact.fact_type == "physical_object_seen":
+            return f"{subject} is visible."
+        if fact.fact_type == "physical_object_lost":
+            return f"{subject} is no longer visible."
+        if fact.fact_type == "physical_object_state_changed":
+            return f"{subject}'s visible state changed."
+        if fact.fact_type == "physical_interaction_observed":
+            return (
+                f"{subject} {fact.properties.get('status', 'performed')} "
+                f"{fact.properties.get('verb', 'an interaction')} with "
+                f"{fact.properties.get('target_name', fact.object_id or 'an object')}."
+            )
         if fact.fact_type == "heard_speech":
             return f'{subject} said: "{fact.properties.get("text", "")}"'
+        if fact.fact_type in {"scent_detected", "scent_changed"}:
+            return (
+                "You smell "
+                f"{fact.properties.get('description', 'an unidentified scent')}."
+            )
+        if fact.fact_type == "scent_lost":
+            return (
+                f"The scent from {subject} is no longer detectable."
+            )
         if fact.fact_type == "time_updated":
             return (
                 f"It is {fact.properties.get('time', 'an unknown time')} on "

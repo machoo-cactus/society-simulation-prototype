@@ -139,6 +139,7 @@ def test_object_capabilities_are_closed_and_staffed_objects_require_roles() -> N
                 "id": "checkout",
                 "name": "Checkout",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "transaction",
                 "operation": "STAFFED",
                 "offers": [
@@ -159,6 +160,7 @@ def test_object_capabilities_are_closed_and_staffed_objects_require_roles() -> N
                 "id": "sofa",
                 "name": "Sofa",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "affordance",
                 "actions": [
                     {
@@ -175,7 +177,7 @@ def test_object_capabilities_are_closed_and_staffed_objects_require_roles() -> N
 def test_scenario_source_is_an_explicit_break_from_schema_v2() -> None:
     source = ScenarioSourceDefinition.model_validate(
         {
-            "schema_version": 4,
+            "schema_version": 6,
             "name": "Reference scenario",
             "world": {
                 "type": "city",
@@ -201,8 +203,8 @@ def test_scenario_source_is_an_explicit_break_from_schema_v2() -> None:
         }
     )
 
-    assert source.schema_version == 4
-    with pytest.raises(ValidationError, match="4"):
+    assert source.schema_version == 6
+    with pytest.raises(ValidationError, match="6"):
         ScenarioSourceDefinition.model_validate(
             {"schema_version": 2, "name": "Legacy"}
         )

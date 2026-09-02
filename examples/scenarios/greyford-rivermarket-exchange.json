@@ -34,6 +34,52 @@
           "default_character_id": "alex-chen",
           "label": "Rivermarket resident"
         },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
         "homeostasis": {
           "energy": 80,
           "satiety": 80,
@@ -116,15 +162,15 @@
   "perception": {
     "blocked_tiles_are_opaque": true,
     "fact_max_age_seconds": 300.0,
-    "hearing_range": 10,
     "inbox_limit": 100,
     "recognition_range": 5,
     "renderer": "deterministic",
     "vision_range": 8,
+    "voice_range": 10,
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 4,
+  "schema_version": 6,
   "seed": 20260901,
   "speed": 30.0,
   "system1": {
@@ -160,7 +206,7 @@
               "y": 14200.0
             },
             "element": {
-              "content_hash": "1dd1fd870bf0f015990eacd92ab9aa17ffc217df851dd41ad6359c0b61de4f33",
+              "content_hash": "e7f91f6700d8129afb6cbf7efc6769e23b5cb2e12941ce2a74f74d0b761eca22",
               "id": "greyford-rivermarket-exchange.building-greyford-rivermarket-flat",
               "kind": "building"
             },
@@ -182,7 +228,7 @@
               "y": 14070.0
             },
             "element": {
-              "content_hash": "f5e1df3223aef99fe5f0d5a14cbbcaef16527f51642cf35d29c7215ccd8c599d",
+              "content_hash": "f8abc4f6d370d0dc3cc4fa2dc479e87dbebb32fd4d66ba616396288d9e03c64d",
               "id": "greyford-rivermarket-exchange.building-greyford-rivermarket-grocer-demo",
               "kind": "building"
             },

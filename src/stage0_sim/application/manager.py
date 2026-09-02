@@ -128,7 +128,7 @@ class SimulationManager:
         self,
         selection: RunSelection,
         *,
-        include_private_derived: bool = True,
+        include_private_derived: bool = False,
     ) -> AggregateDatasetSummary:
         return self.data_management.aggregate(
             selection,

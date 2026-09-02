@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "955670133b91f735c15502053350b24a1985e2f013265c939306bfce5c1586e0",
+        "content_hash": "75186b0ef82e71a7c2697824c2bb83a2243411fbdcde78adbff741457e02932a",
         "id": "greyford-office-evening.station-greyford-lakeside-townhouses-primary",
         "kind": "object"
       },
       "id": "station-greyford-lakeside-townhouses-primary",
       "key": "station-greyford-lakeside-townhouses-primary",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 6,
         "y": 3
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 8,
   "zones": [
     {

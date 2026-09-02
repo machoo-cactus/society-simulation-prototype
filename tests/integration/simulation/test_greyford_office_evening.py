@@ -10,6 +10,7 @@ from stage0_sim.application.scenario_resolution import load_and_resolve_scenario
 from stage0_sim.domain.components import (
     HomeostasisComponent,
     NpcComponent,
+    PhysicalInteractionRegistry,
     PositionComponent,
     SpatialLocationComponent,
 )
@@ -361,7 +362,9 @@ def test_greyford_evening_finishes_dinner_before_arriving_home() -> None:
         CHARACTER_ID, HomeostasisComponent
     )
     assert location.place_id == "building-greyford-rowan-home.interior"
-    assert (position.x, position.y) == (12, 7)
+    assert position in runner.registry.get_resource(
+        PhysicalInteractionRegistry
+    ).approach_anchors(HOME_STATION_ID)
     assert homeostasis.satiety > 90
     assert homeostasis.energy > 70
     assert homeostasis.stress < 30

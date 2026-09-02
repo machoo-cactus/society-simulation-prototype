@@ -16,6 +16,10 @@ from pydantic import (
     model_validator,
 )
 
+from stage0_sim.application.migrations.constants import (
+    ELEMENT_SCHEMA_VERSION,
+    SCENARIO_SCHEMA_VERSION,
+)
 from stage0_sim.application.scenario import (
     CalendarSettingsDefinition,
     CharacterSituationSynthesisSettingsDefinition,
@@ -29,6 +33,9 @@ from stage0_sim.application.scenario import (
     MapPointDefinition,
     MemorySettingsDefinition,
     PerceptionSettingsDefinition,
+    PhysicalObjectDefinition,
+    PhysicalPlacementDefinition,
+    SpatialMetricDefinition,
     StationActionDefinition,
     System1SettingsDefinition,
     TransactionOfferDefinition,
@@ -40,7 +47,6 @@ from stage0_sim.application.scenario import (
 from stage0_sim.domain.components import ActionType
 from stage0_sim.domain.economy import TransactionOperation
 
-ELEMENT_SCHEMA_VERSION = 1
 ELEMENT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 LOCAL_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -73,7 +79,7 @@ class ElementReference(BaseModel):
 class ElementDefinitionBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[3] = ELEMENT_SCHEMA_VERSION
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     description: str = ""
@@ -102,7 +108,8 @@ class NpcRoleElementDefinition(ElementDefinitionBase):
     )
     vision_range: int = Field(default=6, ge=0)
     recognition_range: int = Field(default=4, ge=0)
-    hearing_multiplier: float = Field(default=1.0, gt=0)
+    hearing_range: int = Field(default=10, ge=0)
+    smell_range: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def tools_are_restricted(self) -> NpcRoleElementDefinition:
@@ -112,12 +119,15 @@ class NpcRoleElementDefinition(ElementDefinitionBase):
             raise ValueError(f"unknown NPC role tools: {sorted(unknown)}")
         if len(self.tool_allowlist) != len(set(self.tool_allowlist)):
             raise ValueError("NPC role tools must be unique")
+        if self.recognition_range > self.vision_range:
+            raise ValueError("NPC role recognition range must not exceed vision range")
         return self
 
 
 class ObjectElementDefinition(ElementDefinitionBase):
     kind: Literal[ElementKind.OBJECT] = ElementKind.OBJECT
-    object_type: Literal["affordance", "transaction"]
+    object_type: Literal["affordance", "transaction"] | None = None
+    physical: PhysicalObjectDefinition | None = None
     supported_actions: list[ActionType] | None = None
     actions: list[StationActionDefinition] | None = None
     offers: list[TransactionOfferDefinition] = Field(default_factory=list)
@@ -133,6 +143,8 @@ class ObjectElementDefinition(ElementDefinitionBase):
 
     @model_validator(mode="after")
     def capability_shape_is_valid(self) -> ObjectElementDefinition:
+        if self.physical is None:
+            raise ValueError("element schema version 3 objects require physical data")
         if self.npc_role is not None and self.npc_role.kind is not ElementKind.NPC_ROLE:
             raise ValueError("object npc_role must reference an npc_role element")
         if self.object_type == "affordance":
@@ -148,7 +160,7 @@ class ObjectElementDefinition(ElementDefinitionBase):
                 )
             if self.operation is not TransactionOperation.AUTOMATED:
                 raise ValueError("affordance objects must use AUTOMATED operation")
-        else:
+        elif self.object_type == "transaction":
             if not self.offers:
                 raise ValueError("transaction objects require at least one offer")
             if self.supported_actions is not None or self.actions is not None:
@@ -167,6 +179,18 @@ class ObjectElementDefinition(ElementDefinitionBase):
                 raise ValueError(
                     "automated transaction objects cannot define an npc_role"
                 )
+        elif (
+            self.supported_actions is not None
+            or self.actions is not None
+            or self.offers
+            or self.holdings
+            or self.npc_role is not None
+            or self.operation is not TransactionOperation.AUTOMATED
+        ):
+            raise ValueError(
+                "objects without an affordance or transaction type cannot "
+                "define legacy capability fields"
+            )
         if any(not item_id or quantity < 0 for item_id, quantity in self.holdings.items()):
             raise ValueError(
                 "object holdings require non-empty item IDs and non-negative quantities"
@@ -180,7 +204,8 @@ class ObjectPlacementDefinition(BaseModel):
     key: str = Field(min_length=1)
     id: str | None = Field(default=None, min_length=1)
     element: ElementReference
-    position: CoordinateDefinition
+    position: CoordinateDefinition | None = None
+    placement: PhysicalPlacementDefinition | None = None
     staff_position: CoordinateDefinition | None = None
 
     @field_validator("key")
@@ -192,6 +217,10 @@ class ObjectPlacementDefinition(BaseModel):
     def reference_kind_is_valid(self) -> ObjectPlacementDefinition:
         if self.element.kind is not ElementKind.OBJECT:
             raise ValueError("object placement must reference an object element")
+        if self.position is None and self.placement is None:
+            raise ValueError(
+                "object placement requires a legacy position or physical placement"
+            )
         return self
 
 
@@ -200,6 +229,9 @@ class RoomElementDefinition(ElementDefinitionBase):
     room_type: str = Field(min_length=1)
     width: int = Field(gt=0)
     height: int = Field(gt=0)
+    spatial_metric: SpatialMetricDefinition = Field(
+        default_factory=SpatialMetricDefinition
+    )
     blocked: list[CoordinateDefinition] = Field(default_factory=list)
     zones: list[ZoneDefinition] | None = None
     objects: list[ObjectPlacementDefinition] = Field(default_factory=list)
@@ -216,16 +248,17 @@ class RoomElementDefinition(ElementDefinitionBase):
                 raise ValueError(f"duplicate blocked coordinate: {point}")
             occupied.add(point)
         for placement in self.objects:
-            point = (placement.position.x, placement.position.y)
-            if not self.contains(placement.position):
-                raise ValueError(
-                    f"object {placement.key} position {point} is outside the room"
-                )
-            if point in occupied:
-                raise ValueError(
-                    f"object {placement.key} position {point} is blocked or occupied"
-                )
-            occupied.add(point)
+            if placement.position is not None:
+                point = (placement.position.x, placement.position.y)
+                if not self.contains(placement.position):
+                    raise ValueError(
+                        f"object {placement.key} position {point} is outside the room"
+                    )
+                if point in occupied:
+                    raise ValueError(
+                        f"object {placement.key} position {point} is blocked or occupied"
+                    )
+                occupied.add(point)
             if placement.staff_position is not None:
                 staff_point = (
                     placement.staff_position.x,
@@ -305,6 +338,7 @@ class BuildingPortalDefinition(BaseModel):
     to_coordinate: CoordinateDefinition
     bidirectional: bool = True
     available: bool = True
+    door_object_id: str | None = Field(default=None, min_length=1)
 
     @field_validator("key", "from_room_key", "to_room_key")
     @classmethod
@@ -319,6 +353,7 @@ class BuildingEntranceElementDefinition(BaseModel):
     id: str | None = Field(default=None, min_length=1)
     room_key: str = Field(min_length=1)
     local_coordinate: CoordinateDefinition
+    door_object_id: str | None = Field(default=None, min_length=1)
 
     @field_validator("key", "room_key")
     @classmethod
@@ -558,7 +593,7 @@ class CityWorldSourceDefinition(BaseModel):
 class ScenarioSourceDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[4] = 4
+    schema_version: Literal[6] = SCENARIO_SCHEMA_VERSION
     name: str = Field(min_length=1)
     seed: int = 0
     dt: float = Field(default=1.0, gt=0)
@@ -590,8 +625,9 @@ class ScenarioSourceDefinition(BaseModel):
 
 
 def element_content_hash(element: ScenarioElementDefinition) -> str:
+    payload = element.model_dump(mode="json")
     canonical = json.dumps(
-        element.model_dump(mode="json"),
+        payload,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),

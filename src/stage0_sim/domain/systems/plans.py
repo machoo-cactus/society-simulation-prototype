@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from stage0_sim.domain.components import (
     ActionInstance,
@@ -8,17 +8,25 @@ from stage0_sim.domain.components import (
     ActivityType,
     AffordanceExecutionComponent,
     AffordanceRequestComponent,
+    CharacterPosture,
+    CharacterPostureComponent,
     ConversationComponent,
     DriveComponent,
+    InteractionExecutionComponent,
+    InteractionRequestComponent,
     MovementComponent,
     NavigationComponent,
     NavigationPrimitive,
     NavigationPrimitiveKind,
     NavigationStatus,
     NpcComponent,
+    OpenableComponent,
+    PhysicalStateComponent,
     PlanComponent,
     PositionComponent,
     PossessionsComponent,
+    SpatialIndex,
+    SpatialIndexEntry,
     SpatialLocationComponent,
     System1State,
     TransactionExecutionComponent,
@@ -36,8 +44,16 @@ from stage0_sim.domain.lineage import (
 )
 from stage0_sim.domain.npcs import NpcPoolRegistry
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.systems.interactions import (
+    complete_drink,
+    execute_navigation_interaction,
+    is_at_interaction_approach,
+    physical_activity_failure,
+    sync_held_object_poses,
+)
 from stage0_sim.domain.systems.spatial_context import (
     local_world_for_agent,
+    local_world_for_space,
     shares_local_map,
 )
 from stage0_sim.domain.systems.travel import TravelSystem
@@ -104,6 +120,7 @@ def reset_current_plan_action(plan: PlanComponent) -> None:
     plan.previous_activity = None
     plan.waiting_for_affordance = False
     plan.waiting_for_transaction = False
+    plan.waiting_for_interaction = False
     plan.current_started = False
 
 
@@ -235,6 +252,8 @@ class PlanExecutionSystem:
                     self._check_affordance(context, agent_id, plan)
                 elif plan.waiting_for_transaction:
                     self._check_transaction(context, agent_id, plan)
+                elif plan.waiting_for_interaction:
+                    self._check_interaction(context, agent_id, plan)
                 return_if_active = plan.current is not None
                 if return_if_active:
                     continue
@@ -270,6 +289,24 @@ class PlanExecutionSystem:
         self._emit_action(context, "action.started", agent_id, action)
 
         if action.action is ActionType.NAVIGATE:
+            if (
+                context.registry.has_component(
+                    agent_id,
+                    CharacterPostureComponent,
+                )
+                and context.registry.get_component(
+                    agent_id,
+                    CharacterPostureComponent,
+                ).posture
+                is not CharacterPosture.STANDING
+            ):
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "posture_invalid",
+                )
+                return
             if not context.registry.has_component(
                 agent_id,
                 NavigationComponent,
@@ -281,6 +318,7 @@ class PlanExecutionSystem:
                     "navigation_component_missing",
                 )
                 return
+
             navigation = context.registry.get_component(
                 agent_id,
                 NavigationComponent,
@@ -333,6 +371,32 @@ class PlanExecutionSystem:
             self._advance_navigation(context, agent_id, plan)
             return
 
+        if action.action is ActionType.INTERACT:
+            if (
+                action.interaction is None
+                or context.registry.has_component(
+                    agent_id,
+                    InteractionRequestComponent,
+                )
+            ):
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "interaction_precondition_failed",
+                )
+                return
+            context.registry.add_component(
+                agent_id,
+                InteractionRequestComponent(
+                    specification=action.interaction,
+                    source="plan",
+                    action_instance=action,
+                ),
+            )
+            plan.waiting_for_interaction = True
+            return
+
         if action.action is ActionType.TRANSACT:
             if (
                 action.target is None
@@ -361,10 +425,12 @@ class PlanExecutionSystem:
                 )
                 return
             if (
-                context.registry.get_component(
-                    agent_id, PositionComponent
-                ).coordinate
-                != point.position
+                not is_at_interaction_approach(
+                    context.registry,
+                    agent_id,
+                    point.id,
+                    fallback=point.position,
+                )
             ):
                 self._fail(
                     context,
@@ -473,10 +539,12 @@ class PlanExecutionSystem:
                 )
                 return
             if (
-                context.registry.get_component(
-                    customer_id, PositionComponent
-                ).coordinate
-                != point.position
+                not is_at_interaction_approach(
+                    context.registry,
+                    customer_id,
+                    point.id,
+                    fallback=point.position,
+                )
             ):
                 self._fail(
                     context,
@@ -508,10 +576,23 @@ class PlanExecutionSystem:
             ActionType.WORK,
             ActionType.SOCIALIZE,
             ActionType.READ,
+            ActionType.DRINK,
             ActionType.IDLE,
         }:
             if (
-                action.action in {ActionType.WORK, ActionType.READ}
+                action.action in {ActionType.READ, ActionType.DRINK}
+                and action.target is None
+            ):
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "activity_target_required",
+                )
+                return
+            if (
+                action.action
+                in {ActionType.WORK, ActionType.READ, ActionType.DRINK}
                 and action.target is not None
                 and (
                     world is None
@@ -536,6 +617,8 @@ class PlanExecutionSystem:
             activity.current = (
                 ActivityType.WORKING
                 if action.action is ActionType.WORK
+                else ActivityType.DRINKING
+                if action.action is ActionType.DRINK
                 else ActivityType.IDLE
             )
             activity.previous = None
@@ -620,6 +703,16 @@ class PlanExecutionSystem:
             primitive = navigation.primitives[
                 navigation.current_primitive_index
             ]
+            if primitive.kind is NavigationPrimitiveKind.INTERACT:
+                if self._advance_navigation_interaction(
+                    context,
+                    agent_id,
+                    plan,
+                    navigation,
+                    primitive,
+                ):
+                    continue
+                return
             if primitive.kind is NavigationPrimitiveKind.MOVE:
                 if self._advance_navigation_move(
                     context,
@@ -673,6 +766,84 @@ class PlanExecutionSystem:
             correlation_id=navigation.correlation_id,
         )
         self._complete(context, agent_id, plan)
+
+    def _advance_navigation_interaction(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        plan: PlanComponent,
+        navigation: NavigationComponent,
+        primitive: NavigationPrimitive,
+    ) -> bool:
+        if primitive.interaction is None:
+            self._fail_navigation(
+                context,
+                agent_id,
+                plan,
+                navigation,
+                "navigation_interaction_missing",
+            )
+            return False
+        if not context.registry.has_component(
+            primitive.interaction.target_id,
+            OpenableComponent,
+        ):
+            self._fail_navigation(
+                context,
+                agent_id,
+                plan,
+                navigation,
+                "navigation_door_missing",
+            )
+            return False
+        current = context.registry.get_component(
+            agent_id,
+            SpatialLocationComponent,
+        ).locator
+        if current != primitive.origin:
+            self._fail_navigation(
+                context,
+                agent_id,
+                plan,
+                navigation,
+                "navigation_interaction_origin_mismatch",
+            )
+            return False
+        openable = context.registry.get_component(
+            primitive.interaction.target_id,
+            OpenableComponent,
+        )
+        if not openable.is_open:
+            failure = execute_navigation_interaction(
+                context,
+                agent_id,
+                primitive.interaction,
+                navigation.action_instance,
+            )
+            if failure is not None:
+                self._fail_navigation(
+                    context,
+                    agent_id,
+                    plan,
+                    navigation,
+                    failure,
+                )
+                return False
+        context.events.emit(
+            "navigation.interaction_completed",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=agent_id,
+            payload={
+                "target_id": primitive.interaction.target_id,
+                "verb": primitive.interaction.verb.value,
+                "primitive_index": navigation.current_primitive_index,
+                **action_lineage_payload(navigation.action_instance),
+            },
+            correlation_id=navigation.correlation_id,
+        )
+        navigation.current_primitive_index += 1
+        return True
 
     def _advance_navigation_move(
         self,
@@ -849,12 +1020,37 @@ class PlanExecutionSystem:
                 "unsupported_transition_destination",
             )
             return False
-        for other_id, other_spatial in context.registry.query(
-            SpatialLocationComponent
-        ):
+        next_physical_state: PhysicalStateComponent | None = None
+        if context.registry.has_component(
+            agent_id,
+            PhysicalStateComponent,
+        ) and context.registry.has_resource(SpatialIndex):
+            physical_state = context.registry.get_component(
+                agent_id,
+                PhysicalStateComponent,
+            )
+            next_physical_state = replace(
+                physical_state,
+                pose=replace(
+                    physical_state.pose,
+                    room_id=primitive.destination.space_id,
+                    anchor=destination_coordinate,
+                ),
+            )
+            destination_world = local_world_for_space(
+                context.registry,
+                primitive.destination.space_id,
+            )
+            spatial_index = context.registry.get_resource(SpatialIndex)
             if (
-                other_id != agent_id
-                and other_spatial.locator == primitive.destination
+                destination_world is None
+                or not destination_world.grid.are_walkable(
+                    next_physical_state.occupied_cells
+                )
+                or not spatial_index.can_place(
+                    next_physical_state,
+                    excluding=agent_id,
+                )
             ):
                 self._fail_navigation(
                     context,
@@ -878,6 +1074,21 @@ class PlanExecutionSystem:
         context.registry.get_component(
             agent_id, PositionComponent
         ).coordinate = destination_coordinate
+        if next_physical_state is not None:
+            context.registry.get_resource(SpatialIndex).update(
+                SpatialIndexEntry(
+                    agent_id,
+                    next_physical_state,
+                    dynamic=True,
+                )
+            )
+            context.registry.set_component(agent_id, next_physical_state)
+            sync_held_object_poses(
+                context.registry,
+                agent_id,
+                next_physical_state.pose.room_id,
+                destination_coordinate,
+            )
         if context.registry.has_component(agent_id, MovementComponent):
             movement = context.registry.get_component(
                 agent_id, MovementComponent
@@ -1122,6 +1333,45 @@ class PlanExecutionSystem:
                 "transaction_request_lost",
             )
 
+    def _check_interaction(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        plan: PlanComponent,
+    ) -> None:
+        if context.registry.has_component(
+            agent_id,
+            InteractionRequestComponent,
+        ):
+            request = context.registry.get_component(
+                agent_id,
+                InteractionRequestComponent,
+            )
+            if request.status == "failed":
+                reason = request.failure_reason or "interaction_failed"
+                context.registry.remove_component(
+                    agent_id,
+                    InteractionRequestComponent,
+                )
+                self._fail(context, agent_id, plan, reason)
+            elif request.status == "completed":
+                context.registry.remove_component(
+                    agent_id,
+                    InteractionRequestComponent,
+                )
+                self._complete(context, agent_id, plan)
+            return
+        if not context.registry.has_component(
+            agent_id,
+            InteractionExecutionComponent,
+        ):
+            self._fail(
+                context,
+                agent_id,
+                plan,
+                "interaction_request_lost",
+            )
+
     @staticmethod
     def _activity_target_valid(
         context: SystemContext,
@@ -1131,6 +1381,16 @@ class PlanExecutionSystem:
     ) -> bool:
         if action.target is None:
             return True
+        if action.action in {ActionType.READ, ActionType.DRINK}:
+            return (
+                physical_activity_failure(
+                    context.registry,
+                    agent_id,
+                    action.target,
+                    action.action,
+                )
+                is None
+            )
         position = context.registry.get_component(
             agent_id, PositionComponent
         ).coordinate
@@ -1143,7 +1403,12 @@ class PlanExecutionSystem:
             )
             return zone is not None and position in zone.tiles
         return (
-            station.position == position
+            is_at_interaction_approach(
+                context.registry,
+                agent_id,
+                station.id,
+                fallback=station.position,
+            )
             and action.action.value in station.supported_actions
         )
 
@@ -1154,14 +1419,18 @@ class PlanExecutionSystem:
         world: WorldMap,
         action: ActionInstance,
     ) -> str | None:
-        position = context.registry.get_component(agent_id, PositionComponent)
         if action.target is not None:
             try:
                 station = world.station(action.target)
             except KeyError:
                 return None
             if (
-                station.position == position.coordinate
+                is_at_interaction_approach(
+                    context.registry,
+                    agent_id,
+                    station.id,
+                    fallback=station.position,
+                )
                 and action.action.value in station.supported_actions
             ):
                 return station.id
@@ -1170,7 +1439,12 @@ class PlanExecutionSystem:
             (
                 station
                 for station in world.stations
-                if station.position == position.coordinate
+                if is_at_interaction_approach(
+                    context.registry,
+                    agent_id,
+                    station.id,
+                    fallback=station.position,
+                )
                 and action.action.value in station.supported_actions
             ),
             key=lambda station: station.id,
@@ -1249,6 +1523,41 @@ class TimedPlanActionSystem:
             )
             if plan.remaining_duration > 0:
                 continue
+            if (
+                plan.current.action in {ActionType.READ, ActionType.DRINK}
+                and physical_activity_failure(
+                    context.registry,
+                    agent_id,
+                    plan.current.target,
+                    plan.current.action,
+                )
+                is not None
+            ):
+                activity = context.registry.get_component(
+                    agent_id,
+                    ActivityComponent,
+                )
+                activity.current = plan.previous_activity or ActivityType.IDLE
+                fail_plan_action(
+                    context,
+                    agent_id,
+                    plan,
+                    "activity_precondition_failed",
+                )
+                continue
+            if (
+                plan.current.action is ActionType.DRINK
+                and plan.current.target is not None
+            ):
+                failure = complete_drink(
+                    context,
+                    agent_id,
+                    plan.current.target,
+                    plan.current,
+                )
+                if failure is not None:
+                    fail_plan_action(context, agent_id, plan, failure)
+                    continue
             activity = context.registry.get_component(agent_id, ActivityComponent)
             previous_activity = activity.current
             activity.current = plan.previous_activity or ActivityType.IDLE

@@ -1,18 +1,18 @@
 # Scenario and Element Authoring
 
-**Owner:** Portable scenario source schema version 4, reusable element schema,
+**Owner:** Portable scenario source schema version 6, reusable element schema,
 and structured authoring/staging workflow.
 
 Writable libraries default to `data\scenarios\` and `data\elements\`. Tracked
 references live under `examples\scenarios\` and `examples\elements\`.
 
-## Scenario source version 4
+## Scenario source version 6
 
 Every accepted source has this strict root:
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "name": "example",
   "seed": 42,
   "dt": 1.0,
@@ -74,8 +74,8 @@ Character slots refer to external schema-version-2 profiles. See
 
 ## Reusable elements
 
-Element files currently use `schema_version: 1`; scenario sources that reference
-them remain version 4. Each element is one strict, hash-protected resource:
+Element files use `schema_version: 3`; scenario sources that reference them use
+version 6. Each element is one strict, hash-protected resource:
 
 | `kind` | Purpose |
 | --- | --- |
@@ -83,6 +83,53 @@ them remain version 4. Each element is one strict, hash-protected resource:
 | `room` | Local grid and object placements |
 | `object` | Affordance or transaction point |
 | `npc_role` | Run-scoped service-character briefing, senses, and restricted tools |
+
+Version-3 objects require an explicit physical footprint, obstruction, and
+composable capability record. Version-3 rooms use the fixed metric of 9
+microcells per legacy cell. Source `width`, `height`, blocked cells, zones,
+ordinary object `position`, portal coordinates, entrance coordinates, and
+staff positions remain coarse legacy-cell authoring fields. Materialization
+scales the room to microcell dimensions. A physical placement `anchor` and
+footprint offsets are room-local microcells; `orientation` is one of
+`NORTH`, `EAST`, `SOUTH`, or `WEST`.
+
+Physical object fields are:
+
+| Field | Contract |
+| --- | --- |
+| `physical.footprint.cells` | Non-empty unique local microcell offsets, rotated around the placement anchor |
+| `physical.intrinsics` | Optional positive `mass_kg`, SI `dimensions_cm`, and `TINY|SMALL|MEDIUM|LARGE|BULKY` semantic size independent from footprint |
+| `physical.obstruction` | Independent movement, vision, hearing, and smell closed-state behavior |
+| `physical.capabilities.slots` | Stable slot IDs, accepted live relation kinds, and positive capacities |
+| capability records | Optional support, container, portable/two-handed, readable, consumable, usable, openable, wearable typed effects, and scent-source behavior |
+| `physical.initial_open` | Initial open state; requires `openable` and cannot combine with initial locking |
+| `physical.owner_id`, `custodian_id` | Descriptive owner and initial physical custodian; they do not create abstract possessions |
+| `placement` | Microcell anchor, cardinal orientation, and initial parent relation/slot |
+
+Parent relations are `ON_FLOOR`, `ON_SUPPORT`, `IN_CONTAINER`, `HELD_BY`,
+`ATTACHED_TO`, and `OCCUPIES_SLOT`. Slotted relations require a compatible
+`slot_id`; parent graphs must be acyclic and placements must remain within the
+materialized room. Runtime uses the ECS components and `SpatialIndex`, not the
+element hierarchy, as live truth.
+
+Wearables declare compatible closed equipment slots and ordered typed
+`ADD`/`MULTIPLY` effects targeting vision, recognition, hearing, or smell
+range. `EQUIP`/`UNEQUIP` create and remove the live slotted `ATTACHED_TO`
+relation. Effects are deterministic domain state and cannot be inferred from
+names or prose. Additive effect values and scent-source emission ranges are
+authored in legacy-cell range units and scaled exactly to runtime microcells;
+multipliers are dimensionless.
+
+Blocked room cells act as walls for vision, hearing, and smell. Structural
+objects independently declare whether each sense passes or is blocked.
+Footprint-aware supercover sweeps allow partial visibility when any stable
+observer-to-target path is clear. Windows can pass vision while blocking sound
+and scent; mirrors block through-vision but do not reflect entities.
+
+Building entrances and portals may set `door_object_id` to a materialized
+openable object. The link makes navigation use that object's live open/locked
+and effective obstruction state; it does not duplicate door state in the
+building definition.
 
 Element IDs and filenames must match. IDs use lowercase letters, numbers, dots,
 underscores, and hyphens. Building references contain the expected SHA-256
@@ -97,6 +144,9 @@ resolved definitions and hashes.
 
 `examples\elements\standard-restaurant.json` and its referenced room, object,
 and NPC-role records are the compact element-authoring example.
+
+Use [Content migration](CONTENT_MIGRATION.md) for old catalogs. Runtime
+libraries deliberately reject legacy versions.
 
 ## Environment and services
 
@@ -127,3 +177,15 @@ support create/import, edit, duplicate, rename, download, and guarded delete.
 Each browser tab has independent server-side draft state. Stale content hashes,
 cross-reference failures, duplicate keys, malformed JSON, and invalid IDs are
 reported explicitly.
+
+The structured forms are generated from reviewed schema descriptors for every
+scenario-version-6 and element-version-3 field, including room metric,
+footprints, obstruction, capabilities/slots, initial state, physical anchor,
+orientation, relation/slot, and entrance/portal door links. Submitted values
+remain in the server-side draft when strict validation fails, so malformed or
+incomplete work can be corrected without weakening the runtime models.
+
+Authoring previews label physical objects separately from legacy station and
+transaction-point views. A physical-only object can remain selectable and
+inspectable even when a coarse legacy map cannot place it; placement names do
+not grant capabilities or determine behavior.

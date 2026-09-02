@@ -10,6 +10,7 @@ class ActivityType(StrEnum):
     WALKING = "WALKING"
     WORKING = "WORKING"
     EATING = "EATING"
+    DRINKING = "DRINKING"
     SLEEPING = "SLEEPING"
     RELAXING = "RELAXING"
 
@@ -27,6 +28,11 @@ def default_activity_rates() -> dict[ActivityType, ActivityRates]:
         ActivityType.WALKING: ActivityRates(satiety=-0.05, energy=-0.04, stress=0.01),
         ActivityType.WORKING: ActivityRates(satiety=-0.03, energy=-0.05, stress=0.04),
         ActivityType.EATING: ActivityRates(satiety=1.0, energy=-0.005, stress=-0.01),
+        ActivityType.DRINKING: ActivityRates(
+            satiety=0.1,
+            energy=-0.002,
+            stress=-0.01,
+        ),
         ActivityType.SLEEPING: ActivityRates(satiety=-0.01, energy=0.2, stress=-0.05),
         ActivityType.RELAXING: ActivityRates(satiety=-0.015, energy=0.01, stress=-0.1),
     }

@@ -33,6 +33,7 @@ from stage0_sim.application.data_capture import (
     DatasetRecordFilter,
     RecordCategory,
     RecordVisibility,
+    RunnerPhase,
 )
 from stage0_sim.application.data_management import (
     AggregateDatasetSummary,
@@ -48,7 +49,7 @@ from stage0_sim.application.manager import (
     SimulationManager,
     SimulationNotFoundError,
 )
-from stage0_sim.application.runner import RunnerStatus
+from stage0_sim.application.runner import RunnerStatus, SimulationRunner
 from stage0_sim.application.scenario import (
     CharacterSlotDefinition,
     CityWorldDefinition,
@@ -63,9 +64,12 @@ from stage0_sim.application.scenario_resolution import (
 from stage0_sim.application.scenarios import ScenarioLibrary, ScenarioLibraryError
 from stage0_sim.application.telemetry import (
     build_agent_snapshot,
+    build_physical_room_snapshot,
     build_ui_bootstrap,
+    build_world_object_snapshot,
     build_world_snapshot,
 )
+from stage0_sim.domain.components import PhysicalObjectIdentityComponent
 from stage0_sim.domain.events import DomainEvent, JsonValue
 from stage0_sim.resources import ensure_bundled_demo_character
 
@@ -80,6 +84,27 @@ MAX_MAP_ZOOM = 3.0
 ROOM_ZOOM = 2.5
 BUILDING_ZOOM = 1.75
 CITY_ZONE_ZOOM = 1.2
+MICROCELL_GRID_ZOOM = 2.75
+
+FURNITURE_TOKENS = frozenset(
+    {
+        "bed",
+        "bench",
+        "bookcase",
+        "cabinet",
+        "chair",
+        "counter",
+        "desk",
+        "display",
+        "dresser",
+        "shelf",
+        "sofa",
+        "stand",
+        "table",
+        "wardrobe",
+        "workstation",
+    }
+)
 
 EVENT_FILTERS: dict[str, re.Pattern[str]] = {
     "system1": re.compile(r"^(system1\.|threshold\.breached$)"),
@@ -104,6 +129,8 @@ DATASET_VIEW_OPTIONS: tuple[tuple[str, str], ...] = (
     ("decisions", "Decisions timeline"),
     ("actions", "Actions timeline"),
     ("interactions", "Interactions timeline"),
+    ("physical_object_states", "Physical object states"),
+    ("physical_relations", "Physical relations"),
     ("transitions", "State transitions"),
     ("population", "Population aggregates"),
     ("resource_samples", "Resource samples"),
@@ -115,6 +142,8 @@ DATASET_TABLE_VIEWS: dict[str, str] = {
     "decisions": "decisions",
     "actions": "actions",
     "interactions": "interactions",
+    "physical_object_states": "physical_object_states",
+    "physical_relations": "physical_relation_samples",
     "transitions": "transitions",
     "population": "population",
     "resource_samples": "resource_samples",
@@ -148,6 +177,15 @@ DATASET_FILTER_KEYS: tuple[str, ...] = (
     *(name for name, _ in DATASET_DOMAIN_FILTERS),
     "status",
     "outcome",
+    "object_id",
+    "room_id",
+    "parent_id",
+    "relation_kind",
+    "phase",
+    "is_open",
+    "is_locked",
+    "interaction_verb",
+    "interaction_type",
     "include_private",
     "limit",
 )
@@ -493,6 +531,7 @@ async def _stage_scenario(
     session.scenario_warnings = ()
     session.character_assignments = dict(prepared.assignments)
     session.selected_agent_id = None
+    session.selected_object_id = None
     session.follow_selected = False
     session.view_level = "auto"
     session.zoom = 1.0
@@ -508,6 +547,8 @@ async def operator_page(request: Request) -> Response:
         session.selected_agent_id = request.query_params.get("selected", "").strip() or None
         if session.selected_agent_id is None:
             session.follow_selected = False
+    if "object" in request.query_params:
+        session.selected_object_id = request.query_params.get("object", "").strip() or None
     manager = _manager(request)
     managed = _managed_run(manager, session)
     prepared = (
@@ -524,8 +565,16 @@ async def operator_page(request: Request) -> Response:
         snapshot = build_world_snapshot(managed.runner)
         bootstrap = build_ui_bootstrap(managed.runner)
         agents = [
-            build_agent_snapshot(managed.runner, entity_id)
+            build_agent_snapshot(
+                managed.runner,
+                entity_id,
+                operator=True,
+            )
             for entity_id in managed.runner.registry.entities()
+            if not managed.runner.registry.has_component(
+                entity_id,
+                PhysicalObjectIdentityComponent,
+            )
         ]
         all_events = list(managed.runner.events.events)
         status = managed.runner.status.value
@@ -537,6 +586,37 @@ async def operator_page(request: Request) -> Response:
     selected_agent = next(
         (agent for agent in agents if agent["id"] == session.selected_agent_id),
         None,
+    )
+    selected_object_payload = (
+        build_world_object_snapshot(
+            managed.runner,
+            session.selected_object_id,
+            operator=True,
+        )
+        if managed is not None and session.selected_object_id is not None
+        else None
+    )
+    if session.selected_object_id is not None and selected_object_payload is None:
+        session.selected_object_id = None
+    selected_object = (
+        _operator_object_view(
+            selected_object_payload,
+            session,
+            session.scenario,
+            agents,
+        )
+        if selected_object_payload is not None
+        else None
+    )
+    world_view = _world_view(
+        session,
+        session.scenario,
+        snapshot,
+        bootstrap,
+        selected_agent,
+        events,
+        managed.runner if managed is not None else None,
+        agents,
     )
     event_filter = request.query_params.get("filter", "all")
     event_search = request.query_params.get("search", "").strip().casefold()
@@ -587,16 +667,24 @@ async def operator_page(request: Request) -> Response:
             "bootstrap": bootstrap,
             "agents": agents,
             "selected_agent": selected_agent,
+            "selected_object": selected_object,
             "status": status,
             "controls": _control_availability(managed, session.scenario_id),
-            "world_view": _world_view(
-                session,
-                session.scenario,
-                snapshot,
-                bootstrap,
-                selected_agent,
-                events,
+            "world_view": world_view,
+            "object_options": (
+                world_view.get("objects", [])
+                if world_view is not None
+                else []
             ),
+            "object_option_ids": [
+                str(item["id"])
+                for item in (
+                    world_view.get("objects", [])
+                    if world_view is not None
+                    else []
+                )
+                if isinstance(item, dict) and "id" in item
+            ],
             "environment": (
                 snapshot.get("environment")
                 if snapshot is not None
@@ -646,7 +734,10 @@ async def dataset_explorer(request: Request, run_id: str) -> Response:
     try:
         if view not in {value for value, _ in DATASET_VIEW_OPTIONS}:
             raise ValueError(f"unknown dataset view: {view}")
-        summary = manager.data_query.summary(run_id)
+        summary = manager.data_query.summary(
+            run_id,
+            include_private=include_private,
+        )
         query_filter, record_filter = _dataset_filters(
             request,
             raw_records=view == "records",
@@ -674,7 +765,10 @@ async def dataset_explorer(request: Request, run_id: str) -> Response:
             ]
             next_cursor = table_page.next_cursor
         elif view == "schema":
-            schema = manager.data_query.schema(run_id)
+            schema = manager.data_query.schema(
+                run_id,
+                include_private=include_private,
+            )
     except (KeyError, ValueError) as error:
         explorer_error = str(error).strip("'")
 
@@ -723,6 +817,7 @@ async def dataset_explorer(request: Request, run_id: str) -> Response:
             "record_visibilities": tuple(
                 visibility.value for visibility in RecordVisibility
             ),
+            "runner_phases": tuple(phase.value for phase in RunnerPhase),
             "domain_filters": DATASET_DOMAIN_FILTERS,
             "include_private": include_private,
             "next_page_url": next_page_url,
@@ -751,7 +846,7 @@ async def data_management_page(request: Request) -> Response:
     manager = _manager(request)
     if "privacy_setting" in request.query_params:
         session.include_private_derived = (
-            request.query_params.get("exclude_private_derived") != "true"
+            request.query_params.get("include_private_derived") == "true"
         )
     try:
         filters = _data_run_filters(request.query_params)
@@ -1290,6 +1385,9 @@ async def update_view(request: Request) -> Response:
         session.selected_agent_id = selected_agent or None
         if session.selected_agent_id is None:
             session.follow_selected = False
+    if form.get("selected_object_present") == "yes":
+        selected_object = str(form.get("selected_object", "")).strip()
+        session.selected_object_id = selected_object or None
     level = str(form.get("view_level", session.view_level)).lower()
     if level in {"auto", "room", "building", "city_zone", "city"}:
         session.view_level = level
@@ -1880,6 +1978,18 @@ def _dataset_optional_float(request: Request, name: str) -> float | None:
     return parsed
 
 
+def _dataset_optional_bool(request: Request, name: str) -> bool | None:
+    value = _dataset_optional_value(request, name)
+    if value is None:
+        return None
+    normalized = value.casefold()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise ValueError(f"{name} must be true or false")
+
+
 def _dataset_filters(
     request: Request,
     *,
@@ -1905,6 +2015,11 @@ def _dataset_filters(
         raise ValueError(
             f"unknown record visibility: {visibility_value}"
         ) from error
+    phase_value = _dataset_optional_value(request, "phase")
+    try:
+        phase = RunnerPhase(phase_value) if phase_value is not None else None
+    except ValueError as error:
+        raise ValueError(f"unknown runner phase: {phase_value}") from error
     include_private = _dataset_include_private(request)
     if (
         visibility is RecordVisibility.PRIVATE_RESEARCH
@@ -1946,6 +2061,21 @@ def _dataset_filters(
         **domain_ids,
         "status": _dataset_optional_value(request, "status"),
         "outcome": _dataset_optional_value(request, "outcome"),
+        "object_id": _dataset_optional_value(request, "object_id"),
+        "room_id": _dataset_optional_value(request, "room_id"),
+        "parent_id": _dataset_optional_value(request, "parent_id"),
+        "relation_kind": _dataset_optional_value(
+            request, "relation_kind"
+        ),
+        "phase": phase,
+        "is_open": _dataset_optional_bool(request, "is_open"),
+        "is_locked": _dataset_optional_bool(request, "is_locked"),
+        "interaction_verb": _dataset_optional_value(
+            request, "interaction_verb"
+        ),
+        "interaction_type": _dataset_optional_value(
+            request, "interaction_type"
+        ),
         "include_private": include_private,
         "limit": limit,
     }
@@ -2025,6 +2155,9 @@ def _dataset_entry(
                     "decision_id",
                     "action_id",
                     "interaction_id",
+                    "physical_state_id",
+                    "relation_sample_id",
+                    "object_id",
                     "transition_id",
                     "population_sample_id",
                     "resource_sample_id",
@@ -2299,12 +2432,18 @@ def _world_view(
     bootstrap: dict[str, JsonValue] | None,
     selected_agent: dict[str, JsonValue] | None,
     events: list[DomainEvent],
+    runner: SimulationRunner | None = None,
+    operator_agents: list[dict[str, JsonValue]] | None = None,
 ) -> dict[str, Any] | None:
     if snapshot is None or bootstrap is None:
         return _scenario_world_view(session, scenario)
     static_world = bootstrap.get("world")
     city = bootstrap.get("city")
-    agents = cast(list[dict[str, JsonValue]], snapshot.get("agents", []))
+    agents = (
+        operator_agents
+        if operator_agents is not None
+        else cast(list[dict[str, JsonValue]], snapshot.get("agents", []))
+    )
     level = _effective_view_level(session)
     if not isinstance(city, dict):
         level = "building"
@@ -2371,6 +2510,15 @@ def _world_view(
             title = f"Building view · {building.name} · {room.name}"
             if level == "room":
                 title = f"Room view · {room.name} · {building.name}"
+            physical_room = (
+                build_physical_room_snapshot(
+                    runner,
+                    room.id,
+                    operator=True,
+                )
+                if runner is not None
+                else None
+            )
             return _grid_view(
                 local_world,
                 local_agents,
@@ -2378,6 +2526,11 @@ def _world_view(
                 title,
                 overlays,
                 semantic_level=level,
+                physical_room=physical_room,
+                door_links=_door_object_links(
+                    city_world,
+                    room.id,
+                ),
             )
     if level == "building" and isinstance(static_world, dict):
         return _grid_view(
@@ -2544,6 +2697,463 @@ def _scenario_world_view(
     return None
 
 
+def _door_object_links(
+    city: CityWorldDefinition,
+    room_id: str,
+) -> dict[str, list[dict[str, Any]]]:
+    links: dict[str, list[dict[str, Any]]] = {}
+    for building in sorted(city.buildings, key=lambda item: item.id):
+        for entrance in sorted(building.entrances, key=lambda item: item.id):
+            if entrance.room_id != room_id or entrance.door_object_id is None:
+                continue
+            links.setdefault(entrance.door_object_id, []).append(
+                {
+                    "kind": "entrance",
+                    "id": entrance.id,
+                    "label": f"Entrance {entrance.id}",
+                    "door_object_id": entrance.door_object_id,
+                    "room_id": entrance.room_id,
+                    "coordinate": entrance.local_coordinate.model_dump(
+                        mode="json",
+                    ),
+                }
+            )
+    for portal in sorted(city.portals, key=lambda item: item.id):
+        if (
+            portal.door_object_id is None
+            or room_id not in {portal.from_room_id, portal.to_room_id}
+        ):
+            continue
+        coordinate = (
+            portal.from_coordinate
+            if portal.from_room_id == room_id
+            else portal.to_coordinate
+        )
+        other_room_id = (
+            portal.to_room_id
+            if portal.from_room_id == room_id
+            else portal.from_room_id
+        )
+        links.setdefault(portal.door_object_id, []).append(
+            {
+                "kind": "portal",
+                "id": portal.id,
+                "label": f"Portal {portal.id} to {other_room_id}",
+                "door_object_id": portal.door_object_id,
+                "room_id": room_id,
+                "other_room_id": other_room_id,
+                "coordinate": coordinate.model_dump(mode="json"),
+                "available": portal.available,
+                "bidirectional": portal.bidirectional,
+            }
+        )
+    return links
+
+
+def _cell_rectangles(
+    cells: object,
+) -> list[dict[str, int]]:
+    if not isinstance(cells, list):
+        return []
+    rows: dict[int, set[int]] = {}
+    for cell in cells:
+        if not isinstance(cell, dict):
+            continue
+        x_value = cell.get("x")
+        y_value = cell.get("y")
+        if (
+            isinstance(x_value, bool)
+            or isinstance(y_value, bool)
+            or not isinstance(x_value, (int, float))
+            or not isinstance(y_value, (int, float))
+        ):
+            continue
+        rows.setdefault(int(y_value), set()).add(int(x_value))
+    active: dict[tuple[int, int], dict[str, int]] = {}
+    complete: list[dict[str, int]] = []
+    previous_y: int | None = None
+    for y, row in sorted(rows.items()):
+        spans: list[tuple[int, int]] = []
+        start: int | None = None
+        previous_x: int | None = None
+        for x in sorted(row):
+            if start is None:
+                start = x
+            elif previous_x is not None and x != previous_x + 1:
+                spans.append((start, previous_x - start + 1))
+                start = x
+            previous_x = x
+        if start is not None and previous_x is not None:
+            spans.append((start, previous_x - start + 1))
+        next_active: dict[tuple[int, int], dict[str, int]] = {}
+        contiguous_row = previous_y is not None and y == previous_y + 1
+        for x, width in spans:
+            key = (x, width)
+            rectangle = active.get(key) if contiguous_row else None
+            if rectangle is None:
+                rectangle = {
+                    "x": x,
+                    "y": y,
+                    "width": width,
+                    "height": 1,
+                }
+            else:
+                rectangle["height"] += 1
+            next_active[key] = rectangle
+        complete.extend(
+            rectangle
+            for key, rectangle in active.items()
+            if key not in next_active
+        )
+        active = next_active
+        previous_y = y
+    complete.extend(active.values())
+    return sorted(
+        complete,
+        key=lambda item: (
+            item["y"],
+            item["x"],
+            item["height"],
+            item["width"],
+        ),
+    )
+
+
+def _scaled_rectangles(
+    rectangles: list[dict[str, int]],
+    scale: int,
+) -> list[dict[str, int]]:
+    return [
+        {
+            "x": rectangle["x"] * scale,
+            "y": rectangle["y"] * scale,
+            "width": rectangle["width"] * scale,
+            "height": rectangle["height"] * scale,
+        }
+        for rectangle in rectangles
+    ]
+
+
+def _zone_rectangles(
+    zone: dict[str, Any],
+    scale: int,
+) -> list[dict[str, int]]:
+    bounds = zone.get("bounds")
+    if zone.get("tiles") is None and isinstance(bounds, dict):
+        return [
+            {
+                "x": int(bounds.get("x", 0)) * scale,
+                "y": int(bounds.get("y", 0)) * scale,
+                "width": int(bounds.get("width", 0)) * scale,
+                "height": int(bounds.get("height", 0)) * scale,
+            }
+        ]
+    return _scaled_rectangles(
+        _cell_rectangles(zone.get("tiles")),
+        scale,
+    )
+
+
+def _rectangle_center(
+    rectangles: list[dict[str, int]],
+) -> tuple[float, float]:
+    if not rectangles:
+        return 0.5, 0.5
+    min_x = min(item["x"] for item in rectangles)
+    min_y = min(item["y"] for item in rectangles)
+    max_x = max(item["x"] + item["width"] for item in rectangles)
+    max_y = max(item["y"] + item["height"] for item in rectangles)
+    return (min_x + max_x) / 2, (min_y + max_y) / 2
+
+
+def _coordinate_summary(
+    cells: object,
+    *,
+    limit: int = 16,
+) -> str:
+    if not isinstance(cells, list):
+        return "0 cells"
+    coordinates = [
+        f"({cell.get('x')}, {cell.get('y')})"
+        for cell in cells
+        if isinstance(cell, dict)
+    ]
+    suffix = (
+        f", +{len(coordinates) - limit} more"
+        if len(coordinates) > limit
+        else ""
+    )
+    detail = ", ".join(coordinates[:limit])
+    return f"{len(coordinates)} cells" + (
+        f": {detail}{suffix}" if detail else ""
+    )
+
+
+def _object_classification(
+    item: dict[str, JsonValue],
+    links: list[dict[str, Any]],
+) -> str:
+    physical = item.get("physical")
+    capabilities = (
+        physical.get("capabilities")
+        if isinstance(physical, dict)
+        else None
+    )
+    tokens = set(
+        re.findall(
+            r"[a-z0-9]+",
+            " ".join(
+                str(item.get(key, "")).casefold()
+                for key in ("id", "definition_id", "name", "kind")
+            ),
+        )
+    )
+    if links or "door" in tokens:
+        return "door"
+    if "window" in tokens:
+        return "window"
+    if isinstance(capabilities, dict) and capabilities.get("portable") is not None:
+        return "portable"
+    if tokens.intersection(FURNITURE_TOKENS):
+        return "furniture"
+    return "physical"
+
+
+def _object_interaction_states(
+    object_id: str,
+    agents: list[dict[str, JsonValue]],
+) -> list[dict[str, JsonValue]]:
+    states: list[dict[str, JsonValue]] = []
+    for agent in sorted(agents, key=lambda item: str(item["id"])):
+        interaction = agent.get("interaction")
+        if not isinstance(interaction, dict):
+            continue
+        for phase in ("request", "execution"):
+            value = interaction.get(phase)
+            if not isinstance(value, dict) or object_id not in {
+                value.get("target_id"),
+                value.get("destination_id"),
+            }:
+                continue
+            action = value.get("action")
+            states.append(
+                {
+                    "agent_id": str(agent["id"]),
+                    "phase": phase,
+                    "verb": str(value.get("verb", "interaction")),
+                    "status": str(value.get("status", "unknown")),
+                    "slot_id": (
+                        str(value["slot_id"])
+                        if value.get("slot_id") is not None
+                        else None
+                    ),
+                    "action_id": (
+                        str(action["action_id"])
+                        if isinstance(action, dict)
+                        and action.get("action_id") is not None
+                        else None
+                    ),
+                    "action_name": (
+                        str(action["action_name"])
+                        if isinstance(action, dict)
+                        and action.get("action_name") is not None
+                        else None
+                    ),
+                }
+            )
+    return states
+
+
+def _physical_object_view(
+    item: dict[str, JsonValue],
+    *,
+    selected: bool,
+    links: list[dict[str, Any]],
+    agents: list[dict[str, JsonValue]],
+) -> dict[str, Any]:
+    object_id = str(item["id"])
+    physical = cast(dict[str, JsonValue], item.get("physical", {}))
+    pose = cast(dict[str, JsonValue], physical.get("pose", {}))
+    anchor = cast(dict[str, JsonValue], pose.get("anchor", {}))
+    footprint = cast(dict[str, JsonValue], physical.get("footprint", {}))
+    occupied_cells = physical.get("occupied_cells", [])
+    rectangles = _cell_rectangles(occupied_cells)
+    center_x, center_y = _rectangle_center(rectangles)
+    openable = physical.get("openable")
+    open_state = (
+        "open"
+        if isinstance(openable, dict) and openable.get("is_open") is True
+        else "closed"
+        if isinstance(openable, dict)
+        else "fixed"
+    )
+    lock_state = (
+        "locked"
+        if isinstance(openable, dict) and openable.get("is_locked") is True
+        else "unlocked"
+        if isinstance(openable, dict)
+        else "not-lockable"
+    )
+    slots = physical.get("slots")
+    slot_values = (
+        [slot for slot in slots if isinstance(slot, dict)]
+        if isinstance(slots, list)
+        else []
+    )
+    occupied_slot_count = 0
+    for slot in slot_values:
+        occupancy = slot.get("occupancy")
+        if not isinstance(occupancy, dict):
+            continue
+        count = occupancy.get("count")
+        if isinstance(count, (int, float)) and not isinstance(count, bool):
+            occupied_slot_count += int(count)
+    obstruction = cast(
+        dict[str, JsonValue],
+        physical.get("obstruction", {}),
+    )
+    classification = _object_classification(item, links)
+    classes = [
+        "physical-object",
+        f"physical-object--{classification}",
+        f"state-{open_state}",
+        f"state-{lock_state}",
+        "state-occupied" if occupied_slot_count else "state-empty",
+    ]
+    if selected:
+        classes.append("selected")
+    if links:
+        classes.append("door-linked")
+    if physical.get("held_by") is not None:
+        classes.append("state-held")
+    if obstruction.get("blocks_movement") is True:
+        classes.append("blocks-movement")
+    if obstruction.get("blocks_vision") is True:
+        classes.append("blocks-vision")
+    if obstruction.get("blocks_hearing") is True:
+        classes.append("blocks-hearing")
+    if obstruction.get("blocks_smell") is True:
+        classes.append("blocks-smell")
+    capabilities = cast(
+        dict[str, JsonValue],
+        physical.get("capabilities", {}),
+    )
+    capability_labels = [
+        label
+        for label, present in (
+            ("portable", capabilities.get("portable") is not None),
+            ("support", bool(capabilities.get("support_slot_ids"))),
+            ("container", bool(capabilities.get("container_slot_ids"))),
+            ("openable", capabilities.get("openable") is True),
+            ("readable", capabilities.get("readable") is True),
+            ("consumable", capabilities.get("consumable") is not None),
+            ("usable", capabilities.get("usable") is not None),
+            ("wearable", capabilities.get("wearable") is not None),
+            ("scent source", capabilities.get("scent_source") is not None),
+        )
+        if present
+    ]
+    state_labels = [classification, open_state, lock_state]
+    if occupied_slot_count:
+        state_labels.append(f"occupied by {occupied_slot_count}")
+    if physical.get("held_by") is not None:
+        state_labels.append(f"held by {physical['held_by']}")
+    interaction_target = physical.get("interaction_target")
+    approach_anchors: list[dict[str, JsonValue]] = []
+    occupancy_anchors: list[dict[str, JsonValue]] = []
+    if selected and isinstance(interaction_target, dict):
+        raw_approaches = interaction_target.get("approach_anchors")
+        if isinstance(raw_approaches, list):
+            approach_anchors = [
+                value
+                for value in raw_approaches
+                if isinstance(value, dict)
+            ]
+        raw_occupancy = interaction_target.get("occupancy_anchors")
+        if isinstance(raw_occupancy, dict):
+            occupancy_anchors = [
+                {
+                    **value,
+                    "slot_id": str(slot_id),
+                }
+                for slot_id, values in sorted(raw_occupancy.items())
+                if isinstance(values, list)
+                for value in values
+                if isinstance(value, dict)
+            ]
+    name = str(item.get("name", object_id))
+    aria_label = (
+        f"{name}, {classification}, {'; '.join(state_labels[1:])}, "
+        f"anchor {anchor.get('x', '?')}, {anchor.get('y', '?')}"
+    )
+    return {
+        **item,
+        "id": object_id,
+        "name": name,
+        "dom_id": re.sub(r"[^a-zA-Z0-9_-]+", "-", object_id),
+        "classification": classification,
+        "class_names": " ".join(classes),
+        "selected": selected,
+        "rectangles": rectangles,
+        "center_x": center_x,
+        "center_y": center_y,
+        "open_state": open_state,
+        "lock_state": lock_state,
+        "occupied_slot_count": occupied_slot_count,
+        "state_summary": ", ".join(state_labels),
+        "aria_label": aria_label,
+        "footprint_summary": _coordinate_summary(footprint.get("cells")),
+        "occupied_cells_summary": _coordinate_summary(occupied_cells),
+        "capability_labels": capability_labels,
+        "links": links,
+        "approach_anchors": approach_anchors,
+        "occupancy_anchors": occupancy_anchors,
+        "interaction_states": _object_interaction_states(
+            object_id,
+            agents,
+        ),
+    }
+
+
+def _operator_object_view(
+    item: dict[str, JsonValue],
+    session: OperatorSession,
+    scenario: ScenarioDefinition | None,
+    agents: list[dict[str, JsonValue]],
+) -> dict[str, Any]:
+    physical = item.get("physical")
+    room_id = (
+        str(cast(dict[str, JsonValue], physical.get("pose", {})).get("room_id", ""))
+        if isinstance(physical, dict)
+        else str(item.get("room_id", ""))
+    )
+    scenario_world = scenario.world if scenario is not None else None
+    links = (
+        _door_object_links(scenario_world, room_id).get(str(item["id"]), [])
+        if isinstance(scenario_world, CityWorldDefinition)
+        else []
+    )
+    if not isinstance(physical, dict):
+        return {
+            **item,
+            "id": str(item["id"]),
+            "name": str(item.get("name", item["id"])),
+            "classification": str(item.get("kind", "world object")),
+            "physical": None,
+            "links": links,
+            "interaction_states": _object_interaction_states(
+                str(item["id"]),
+                agents,
+            ),
+        }
+    return _physical_object_view(
+        item,
+        selected=session.selected_object_id == str(item["id"]),
+        links=links,
+        agents=agents,
+    )
+
+
 def _grid_view(
     world: dict[str, Any],
     agents: list[dict[str, JsonValue]],
@@ -2552,85 +3162,244 @@ def _grid_view(
     overlays: dict[str, dict[str, Any]],
     *,
     semantic_level: str = "building",
+    physical_room: dict[str, JsonValue] | None = None,
+    door_links: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    width = max(1, int(world.get("width", 1)))
-    height = max(1, int(world.get("height", 1)))
-    zones = []
-    for zone in world.get("zones", []):
-        tiles = zone.get("tiles")
-        if tiles is None and zone.get("bounds"):
-            bounds = zone["bounds"]
-            tiles = [
-                {"x": x, "y": y}
-                for y in range(bounds["y"], bounds["y"] + bounds["height"])
-                for x in range(bounds["x"], bounds["x"] + bounds["width"])
-            ]
-        zones.append({**zone, "tiles": tiles or []})
-    rendered_agents = []
-    paths = []
-    for agent in agents:
+    spatial = (
+        cast(dict[str, JsonValue], physical_room.get("spatial", {}))
+        if physical_room is not None
+        else {}
+    )
+    physical = (
+        physical_room is not None
+        and spatial.get("coordinate_system") == "microcell"
+    )
+    scale = (
+        max(1, int(cast(int, spatial.get("microcells_per_legacy_cell", 1))))
+        if physical
+        else 1
+    )
+    width = (
+        max(1, int(cast(int, spatial.get("width_microcells", 1))))
+        if physical
+        else max(1, int(world.get("width", 1)))
+    )
+    height = (
+        max(1, int(cast(int, spatial.get("height_microcells", 1))))
+        if physical
+        else max(1, int(world.get("height", 1)))
+    )
+    zones = [
+        {
+            **zone,
+            "rectangles": _zone_rectangles(zone, scale),
+        }
+        for zone in world.get("zones", [])
+        if isinstance(zone, dict)
+    ]
+    blocked = _scaled_rectangles(
+        _cell_rectangles(world.get("blocked")),
+        scale,
+    )
+    rendered_agents: list[dict[str, Any]] = []
+    paths: list[dict[str, Any]] = []
+    for agent in sorted(agents, key=lambda item: str(item["id"])):
         position = agent.get("position")
-        if isinstance(position, dict):
-            agent_id = str(agent["id"])
-            overlay = overlays.get(agent_id, {})
-            movement = agent.get("movement")
-            destination_point = movement.get("destination") if isinstance(movement, dict) else None
-            rendered_agents.append(
+        physical_state = agent.get("physical")
+        body_rectangles = (
+            _cell_rectangles(physical_state.get("occupied_cells"))
+            if physical and isinstance(physical_state, dict)
+            else []
+        )
+        if not body_rectangles and isinstance(position, dict):
+            body_rectangles = [
                 {
-                    "id": agent["id"],
-                    "name": _agent_name(agent),
-                    "actor_kind": agent.get("actor_kind", "character"),
-                    "x": position.get("x", 0),
-                    "y": position.get("y", 0),
-                    "selected": agent["id"] == session.selected_agent_id,
-                    "system1": cast(dict[str, JsonValue], agent.get("system1", {})).get("state"),
-                    "visible": bool(overlay.get("visible")),
-                    "speech": overlay.get("speech"),
-                    "vision_count": overlay.get("vision_count", 0),
-                    "heard": bool(overlay.get("heard")),
-                    "destination": (
-                        destination_point
-                        if isinstance(destination_point, dict)
-                        and "destinations" in session.overlays
-                        else None
-                    ),
+                    "x": int(_number(position.get("x"))) * scale,
+                    "y": int(_number(position.get("y"))) * scale,
+                    "width": scale,
+                    "height": scale,
                 }
-            )
-        movement = agent.get("movement")
+            ]
+        if not body_rectangles:
+            continue
+        agent_id = str(agent["id"])
+        overlay = overlays.get(agent_id, {})
+        center_x, center_y = _rectangle_center(body_rectangles)
+        posture = (
+            physical_state.get("posture")
+            if isinstance(physical_state, dict)
+            else None
+        )
+        posture_value = (
+            str(posture.get("value", "UNKNOWN"))
+            if isinstance(posture, dict)
+            else "UNKNOWN"
+        )
+        hands = (
+            physical_state.get("hands")
+            if isinstance(physical_state, dict)
+            else None
+        )
+        raw_held_object_ids = (
+            hands.get("held_object_ids")
+            if isinstance(hands, dict)
+            else None
+        )
+        held_object_ids = (
+            [str(value) for value in raw_held_object_ids]
+            if isinstance(raw_held_object_ids, list)
+            else []
+        )
+        movement = (
+            agent.get("physical_movement")
+            if physical
+            else agent.get("movement")
+        )
+        destination_point = (
+            movement.get("destination")
+            if isinstance(movement, dict)
+            else None
+        )
+        system1 = agent.get("system1")
+        name = _agent_name(agent)
+        rendered_agents.append(
+            {
+                "id": agent_id,
+                "dom_id": re.sub(r"[^a-zA-Z0-9_-]+", "-", agent_id),
+                "name": name,
+                "aria_label": (
+                    f"{name}, {posture_value.casefold()}, "
+                    f"{len(body_rectangles)} footprint shape"
+                    + (
+                        f", holding {', '.join(held_object_ids)}"
+                        if held_object_ids
+                        else ""
+                    )
+                ),
+                "actor_kind": agent.get("actor_kind", "character"),
+                "x": center_x,
+                "y": center_y,
+                "body_rectangles": body_rectangles,
+                "selected": agent["id"] == session.selected_agent_id,
+                "system1": (
+                    system1.get("state")
+                    if isinstance(system1, dict)
+                    else None
+                ),
+                "visible": bool(overlay.get("visible")),
+                "speech": overlay.get("speech"),
+                "vision_count": overlay.get("vision_count", 0),
+                "heard": bool(overlay.get("heard")),
+                "posture": posture_value,
+                "support_id": (
+                    posture.get("support_id")
+                    if isinstance(posture, dict)
+                    else None
+                ),
+                "held_object_ids": held_object_ids,
+                "destination": (
+                    destination_point
+                    if isinstance(destination_point, dict)
+                    and "destinations" in session.overlays
+                    else None
+                ),
+            }
+        )
         if (
             "paths" in session.overlays
             and isinstance(movement, dict)
             and isinstance(movement.get("path"), list)
         ):
             raw_path = movement.get("path")
-            points = (
-                [
-                    f"{_number(point.get('x')) + 0.5},{_number(point.get('y')) + 0.5}"
-                    for point in raw_path
-                    if isinstance(point, dict)
+            assert isinstance(raw_path, list)
+            points = [
+                (
+                    _number(point.get("x")) + 0.5,
+                    _number(point.get("y")) + 0.5,
+                )
+                for point in raw_path
+                if isinstance(point, dict)
+            ]
+            if not physical:
+                points = [
+                    (
+                        (x - 0.5) * scale + scale / 2,
+                        (y - 0.5) * scale + scale / 2,
+                    )
+                    for x, y in points
                 ]
-                if isinstance(raw_path, list)
-                else []
-            )
             if points:
-                paths.append(" ".join(points))
+                paths.append(
+                    {
+                        "agent_id": agent_id,
+                        "name": name,
+                        "points": " ".join(
+                            f"{x},{y}"
+                            for x, y in points
+                        ),
+                    }
+                )
+    object_views: list[dict[str, Any]] = []
+    if physical_room is not None:
+        raw_objects = physical_room.get("objects")
+        if isinstance(raw_objects, list):
+            for value in raw_objects:
+                if not isinstance(value, dict) or not isinstance(
+                    value.get("physical"),
+                    dict,
+                ):
+                    continue
+                object_id = str(value["id"])
+                object_views.append(
+                    _physical_object_view(
+                        value,
+                        selected=object_id == session.selected_object_id,
+                        links=(door_links or {}).get(object_id, []),
+                        agents=agents,
+                    )
+                )
+    physical_object_ids = {
+        str(item["id"])
+        for item in object_views
+    }
     return {
         "kind": "grid",
         "title": title,
         "width": width,
         "height": height,
         "view_box": f"0 0 {width} {height}",
-        "base_display_width": width * 72,
-        "display_width": width * 72 * session.zoom,
+        "base_display_width": width * 72 / scale,
+        "display_width": width * 72 / scale * session.zoom,
         "semantic_level": semantic_level,
         "follow_selected": session.follow_selected,
         "camera_x": session.camera_x,
         "camera_y": session.camera_y,
+        "coordinate_system": "microcell" if physical else "legacy_cell",
+        "physical": physical,
+        "microcells_per_legacy_cell": scale,
+        "show_microcell_grid": (
+            physical
+            and session.zoom >= MICROCELL_GRID_ZOOM
+        ),
         "zones": zones,
-        "blocked": world.get("blocked", []),
-        "stations": world.get("stations", []),
-        "transaction_points": world.get("transaction_points", []),
+        "blocked": blocked,
+        "blocked_items": [
+            item
+            for item in world.get("blocked", [])
+            if isinstance(item, dict)
+        ],
+        "stations": [
+            item
+            for item in world.get("stations", [])
+            if str(item.get("id")) not in physical_object_ids
+        ],
+        "transaction_points": [
+            item
+            for item in world.get("transaction_points", [])
+            if str(item.get("id")) not in physical_object_ids
+        ],
         "agents": rendered_agents,
+        "objects": object_views,
         "paths": paths,
     }
 

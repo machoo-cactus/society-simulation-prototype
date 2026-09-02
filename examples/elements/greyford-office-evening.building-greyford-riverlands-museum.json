@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-riverlands-museum-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "946e696d468219daf516f24c83244b9c2b400ac2a10994a54e42e214dc7e3127",
+        "content_hash": "0a13511e0bc88917de3fef4f14260f2f5b59577feb009faff027386ca9790d7e",
         "id": "greyford-office-evening.map-greyford-riverlands-museum",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

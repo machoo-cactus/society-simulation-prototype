@@ -18,7 +18,7 @@ def test_scenario_loader_bootstraps_entities(tmp_path: Path) -> None:
     scenario_path.write_text(
         json.dumps(
             {
-                "schema_version": 4,
+                "schema_version": 6,
                 "name": "test",
                 "seed": 7,
                 "entities": [
@@ -44,7 +44,8 @@ def test_scenario_loader_bootstraps_entities(tmp_path: Path) -> None:
 def test_scenario_loader_rejects_duplicate_entities(tmp_path: Path) -> None:
     scenario_path = tmp_path / "invalid.json"
     scenario_path.write_text(
-        '{"name":"invalid","entities":[{"id":"same"},{"id":"same"}]}',
+        '{"schema_version":6,"name":"invalid",'
+        '"entities":[{"id":"same"},{"id":"same"}]}',
         encoding="utf-8",
     )
 
@@ -98,7 +99,9 @@ def test_cli_rejects_schema_v2_user_input(
     exit_code = main(["run", str(scenario_path), "--ticks", "0"])
 
     assert exit_code == 2
-    assert "scenario schema version 4 is required" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "scenario schema version 6 is required" in error
+    assert "stage0-sim migrate content" in error
 
 
 def test_cli_runs_packaged_demo_without_repository_examples(
@@ -128,3 +131,33 @@ def test_cli_runs_packaged_demo_without_repository_examples(
     assert '"event_type":"simulation.tick"' in output_path.read_text(
         encoding="utf-8"
     )
+
+
+def test_cli_migrate_content_defaults_to_check_and_supports_output(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    legacy = Path("tests/fixtures/migrations/catalog/legacy")
+    common = [
+        "migrate",
+        "content",
+        "--characters-dir",
+        str(legacy / "characters"),
+        "--elements-dir",
+        str(legacy / "elements"),
+        "--scenarios-dir",
+        str(legacy / "scenarios"),
+    ]
+
+    assert main(common) == 1
+    checked = json.loads(capsys.readouterr().out)
+    assert checked["succeeded"] is True
+    assert checked["changed_count"] == 6
+
+    output = tmp_path / "output"
+    report = tmp_path / "report.json"
+    assert main([*common, "--output", str(output), "--report", str(report)]) == 0
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["succeeded"] is True
+    assert report.is_file()
+    assert (output / "scenarios/legacy-city.json").is_file()

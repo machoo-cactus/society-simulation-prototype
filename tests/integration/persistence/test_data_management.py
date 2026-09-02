@@ -477,7 +477,7 @@ def test_catalog_filters_newest_first_cursor_and_metadata(tmp_path: Path) -> Non
             persisted_statuses=("completed",),
             effective_statuses=("completed",),
             scenario_name="Alpha",
-            dataset_schema_version="stage0.dataset.v3",
+            dataset_schema_version="stage0.dataset.v4",
             capture_complete=True,
             started_at_or_after=base,
             started_before=base + timedelta(days=3),
@@ -544,7 +544,7 @@ def test_mixed_groups_pooled_macro_private_filter_and_exports(
         initial_speed=1,
         scenario=_scenario(
             "scenario-b",
-            schema_version=4,
+            schema_version=5,
             world_type="grid",
             cognition_mode="global_barrier",
             capture_profile="reduced",
@@ -558,7 +558,8 @@ def test_mixed_groups_pooled_macro_private_filter_and_exports(
         PersistedRunFilter(scenario_name=None),
     )
 
-    included = service.aggregate(selection)
+    included = service.aggregate(selection, include_private_derived=True)
+    default = service.aggregate(selection)
     excluded = service.aggregate(selection, include_private_derived=False)
     first_json = io.StringIO()
     second_json = io.StringIO()
@@ -590,6 +591,7 @@ def test_mixed_groups_pooled_macro_private_filter_and_exports(
         "run-b",
     ]
     assert excluded_duration.pooled.count == 2
+    assert default.include_private_derived is False
     assert excluded_duration.pooled.mean == pytest.approx(5.5)
     assert excluded.distributions["record.visibility"] == {"OPERATOR": 4}
     assert included.private_derived_warning is not None

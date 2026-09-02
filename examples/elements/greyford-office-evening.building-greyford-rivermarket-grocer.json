@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-rivermarket-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "5eaa481b48c5e7a6846c4452f427c40cdd6abd4970f174890c9744fd10524428",
+        "content_hash": "b842630e3002864bd10f0c34126a22c454cfdf935d9af44699b5b83dc4e90569",
         "id": "greyford-office-evening.map-greyford-rivermarket-grocer",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

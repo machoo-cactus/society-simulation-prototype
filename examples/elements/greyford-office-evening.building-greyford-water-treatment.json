@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-water-treatment-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "a6ddf9a04045f66a74c18677860d0744bb8fc4539069fae0ffd5f28cc68fd806",
+        "content_hash": "043986b22ee4d6c79b90ae5df60540b69e84b65f370ac755a09723809a332d82",
         "id": "greyford-office-evening.map-greyford-water-treatment",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

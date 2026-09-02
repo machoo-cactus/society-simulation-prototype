@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Browser, Page, expect
 
 from tests.helpers.paths import (
     EXAMPLE_SCENARIOS,
@@ -305,31 +305,21 @@ def test_saved_missing_and_hash_drift_dependencies_block_staging(
         missing_path.unlink(missing_ok=True)
 
 
-def test_element_library_crud_is_accessible_and_hash_protected(page: Page) -> None:
+def test_element_library_crud_is_accessible_and_hash_protected(
+    page: Page,
+    browser: Browser,
+    ui_server: str,
+) -> None:
     page.goto("/ui/elements/?kind=npc_role")
     expect(page.get_by_role("heading", name="Element Library")).to_be_visible()
+    expect(page.get_by_text("schema version 2", exact=False)).to_be_visible()
     page.get_by_label("Element resource ID").fill("playwright-server")
-    page.get_by_label("Element definition JSON").fill(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "id": "playwright-server",
-                "name": "Playwright Server",
-                "description": "Synthetic browser fixture.",
-                "kind": "npc_role",
-                "briefing": "Serve deterministic test requests.",
-                "tool_allowlist": [
-                    "serve_transaction",
-                    "say",
-                    "wait",
-                    "skip",
-                ],
-                "vision_range": 6,
-                "recognition_range": 4,
-                "hearing_multiplier": 1.0,
-            },
-            indent=2,
-        )
+    page.get_by_label("Name", exact=True).fill("Playwright Server")
+    page.get_by_label("Description", exact=True).fill(
+        "Synthetic browser fixture."
+    )
+    page.get_by_label("Briefing", exact=True).fill(
+        "Serve deterministic test requests."
     )
     page.get_by_role("button", name="Create element").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
@@ -352,6 +342,35 @@ def test_element_library_crud_is_accessible_and_hash_protected(page: Page) -> No
     expect(page.locator(".notice[role=status]")).to_contain_text(
         "Deleted playwright-server-copy."
     )
+
+    context = browser.new_context(
+        base_url=ui_server,
+        java_script_enabled=False,
+    )
+    no_js_page = context.new_page()
+    try:
+        no_js_page.goto("/ui/elements/?kind=npc_role")
+        no_js_page.get_by_label("Element resource ID").fill(
+            "playwright-no-js-role"
+        )
+        no_js_page.get_by_label("Name", exact=True).fill(
+            "Playwright No-JS Role"
+        )
+        no_js_page.get_by_label("Briefing", exact=True).fill(
+            "Created through a native server-rendered form."
+        )
+        no_js_page.get_by_role("button", name="Create element").click()
+        expect(no_js_page.locator(".notice[role=status]")).to_contain_text(
+            "Saved Playwright No-JS Role."
+        )
+        expect(
+            no_js_page.get_by_role(
+                "link",
+                name=re.compile("Playwright No-JS Role"),
+            )
+        ).to_be_visible()
+    finally:
+        context.close()
 
 
 def test_reference_scenario_resolves_shared_restaurant_elements(

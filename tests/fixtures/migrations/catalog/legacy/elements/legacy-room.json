@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "legacy-room",
+  "name": "Legacy Room",
+  "description": "A one-cell legacy room.",
+  "kind": "room",
+  "room_type": "TEST",
+  "width": 1,
+  "height": 1,
+  "objects": [
+    {
+      "key": "object",
+      "element": {
+        "kind": "object",
+        "id": "legacy-object",
+        "content_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

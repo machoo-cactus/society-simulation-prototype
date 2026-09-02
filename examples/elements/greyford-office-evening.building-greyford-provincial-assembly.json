@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-provincial-assembly-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "07763ff58774faa04f8218f54fd3c23134ed42eeb7dc558d49e9085a02048724",
+        "content_hash": "c2065302b241cb7b9dd0c9e0ed86ea414c804468b0fe88bf7b0c709d05a7b73a",
         "id": "greyford-office-evening.map-greyford-provincial-assembly",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

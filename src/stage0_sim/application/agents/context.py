@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import Literal, cast
 
 from stage0_sim.application.agents.contracts import (
@@ -20,16 +21,28 @@ from stage0_sim.application.perception.renderer import (
 from stage0_sim.domain.calendar import SimulationCalendar
 from stage0_sim.domain.components import (
     ActivityComponent,
+    CarriedLoadComponent,
+    CharacterEmbodimentComponent,
     CharacterProfileComponent,
     ControllerComponent,
+    CustodyComponent,
+    EffectiveSensesComponent,
+    EquipmentStateComponent,
     GoalComponent,
     HomeostasisComponent,
     NpcComponent,
+    ObjectIntrinsicComponent,
+    OpenableComponent,
     PerceptionComponent,
+    PhysicalObjectIdentityComponent,
+    PhysicalRelationKind,
     PositionComponent,
     PossessionsComponent,
+    ScentSourceComponent,
     SpatialLocationComponent,
+    SpatialParentRelationComponent,
     TransactionRequestComponent,
+    WearableComponent,
 )
 from stage0_sim.domain.economy import (
     ItemAmount,
@@ -42,6 +55,10 @@ from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.systems.interactions import (
+    available_interactions,
+    available_physical_actions,
+)
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
 from stage0_sim.domain.world import CityWorld, TravelMode, WorldGrid, WorldMap
 
@@ -83,6 +100,8 @@ def build_character_observation(
                     "transaction_point",
                     "building",
                     "outdoor",
+                    "room",
+                    "physical_object",
                 ],
                 destination.kind,
             ),
@@ -122,6 +141,62 @@ def build_character_observation(
             "building",
             "outdoor",
         }
+    ]
+    targets_by_id = {target.id: target for target in targets}
+    for target_id in sorted(perception.visible_objects_now):
+        if not registry.has_component(
+            target_id,
+            PhysicalObjectIdentityComponent,
+        ):
+            continue
+        identity = registry.get_component(
+            target_id,
+            PhysicalObjectIdentityComponent,
+        )
+        existing = targets_by_id.get(target_id)
+        physical_actions = available_physical_actions(
+            registry,
+            agent_id,
+            target_id,
+        )
+        interactions = available_interactions(
+            registry,
+            agent_id,
+            target_id,
+        )
+        if existing is None:
+            targets_by_id[target_id] = ObservedTarget(
+                id=target_id,
+                kind="physical_object",
+                name=identity.name,
+                supported_actions=physical_actions,
+                available_interactions=interactions,
+                public_state=_observed_physical_state(
+                    registry,
+                    agent_id,
+                    target_id,
+                    recognized=target_id in perception.recognized_objects_now,
+                ),
+            )
+        else:
+            targets_by_id[target_id] = replace(
+                existing,
+                supported_actions=tuple(
+                    dict.fromkeys(
+                        (*existing.supported_actions, *physical_actions)
+                    )
+                ),
+                available_interactions=interactions,
+                public_state=_observed_physical_state(
+                    registry,
+                    agent_id,
+                    target_id,
+                    recognized=target_id in perception.recognized_objects_now,
+                ),
+            )
+    targets = [
+        targets_by_id[target_id]
+        for target_id in sorted(targets_by_id)
     ]
     available_travel_modes: tuple[str, ...] = (TravelMode.WALK.value,)
     spatial_payload: dict[str, JsonValue] | None = None
@@ -228,6 +303,9 @@ def build_character_observation(
         available_travel_modes=available_travel_modes,
         calendar_time=calendar_time,
         environment=environment,
+        senses=_observed_senses(registry, agent_id),
+        equipment=_observed_equipment(registry, agent_id),
+        carried_load=_observed_carried_load(registry, agent_id),
         possessions=_observed_possessions(registry, agent_id),
         structured_goals=_observed_goals(registry, agent_id),
     )
@@ -359,6 +437,9 @@ def _build_npc_observation(
         recent_outcome=controller.last_outcome,
         spatial_location=spatial_payload,
         available_travel_modes=(),
+        senses=_observed_senses(registry, agent_id),
+        equipment=_observed_equipment(registry, agent_id),
+        carried_load=_observed_carried_load(registry, agent_id),
         possessions=(),
         service_requests=tuple(
             sorted(
@@ -475,3 +556,152 @@ def _offer_available(
     return can_debit(
         possessions.holdings, offer.character_gives
     ) and can_debit(point_state.holdings, offer.character_receives)
+
+
+def _observed_physical_state(
+    registry: Registry,
+    observer_id: str,
+    target_id: str,
+    *,
+    recognized: bool,
+) -> dict[str, JsonValue]:
+    state: dict[str, JsonValue] = {}
+    if registry.has_component(target_id, OpenableComponent):
+        openable = registry.get_component(target_id, OpenableComponent)
+        state["is_open"] = openable.is_open
+        state["is_locked"] = openable.is_locked
+    if registry.has_component(target_id, SpatialParentRelationComponent):
+        relation = registry.get_component(
+            target_id,
+            SpatialParentRelationComponent,
+        )
+        state["relation"] = relation.kind.value
+        state["parent_id"] = relation.parent_id
+        state["slot_id"] = relation.slot_id
+        if relation.kind is PhysicalRelationKind.HELD_BY:
+            state["held_by"] = relation.parent_id
+    if registry.has_component(target_id, CustodyComponent):
+        state["custodian_id"] = registry.get_component(
+            target_id,
+            CustodyComponent,
+        ).custodian_id
+    if recognized and registry.has_component(
+        target_id,
+        ObjectIntrinsicComponent,
+    ):
+        intrinsic = registry.get_component(
+            target_id,
+            ObjectIntrinsicComponent,
+        )
+        state["semantic_size"] = {
+            "dimensions_cm": (
+                {
+                    "length_cm": intrinsic.dimensions.length_cm,
+                    "width_cm": intrinsic.dimensions.width_cm,
+                    "height_cm": intrinsic.dimensions.height_cm,
+                }
+                if intrinsic.dimensions is not None
+                else None
+            ),
+            "size_class": (
+                intrinsic.size_class.value
+                if intrinsic.size_class is not None
+                else None
+            ),
+        }
+        intrinsic_relation = (
+            registry.get_component(
+                target_id,
+                SpatialParentRelationComponent,
+            )
+            if registry.has_component(
+                target_id,
+                SpatialParentRelationComponent,
+            )
+            else None
+        )
+        if (
+            intrinsic.mass_kg is not None
+            and intrinsic_relation is not None
+            and intrinsic_relation.parent_id == observer_id
+            and intrinsic_relation.kind in {
+                PhysicalRelationKind.HELD_BY,
+                PhysicalRelationKind.ATTACHED_TO,
+            }
+        ):
+            state["mass_kg"] = intrinsic.mass_kg
+    if recognized and registry.has_component(target_id, WearableComponent):
+        wearable = registry.get_component(target_id, WearableComponent)
+        state["wearable_slots"] = [
+            slot.value
+            for slot in sorted(
+                wearable.compatible_slots,
+                key=lambda item: item.value,
+            )
+        ]
+    if recognized and registry.has_component(target_id, ScentSourceComponent):
+        scent = registry.get_component(target_id, ScentSourceComponent)
+        state["scent"] = {
+            "scent_id": scent.scent_id,
+            "description": scent.description,
+        }
+    return state
+
+
+def _observed_senses(
+    registry: Registry,
+    agent_id: str,
+) -> dict[str, JsonValue] | None:
+    if not registry.has_component(agent_id, EffectiveSensesComponent):
+        return None
+    effective = registry.get_component(agent_id, EffectiveSensesComponent)
+    return {
+        "vision_range": effective.vision_range,
+        "recognition_range": effective.recognition_range,
+        "hearing_range": effective.hearing_range,
+        "smell_range": effective.smell_range,
+    }
+
+
+def _observed_equipment(
+    registry: Registry,
+    agent_id: str,
+) -> dict[str, JsonValue] | None:
+    if not registry.has_component(agent_id, EquipmentStateComponent):
+        return None
+    equipment = registry.get_component(agent_id, EquipmentStateComponent)
+    return {
+        slot.value: list(object_ids)
+        for slot, object_ids in sorted(
+            equipment.equipped_object_ids.items(),
+            key=lambda item: item[0].value,
+        )
+    }
+
+
+def _observed_carried_load(
+    registry: Registry,
+    agent_id: str,
+) -> dict[str, JsonValue] | None:
+    if not registry.has_component(agent_id, CarriedLoadComponent):
+        return None
+    load = registry.get_component(agent_id, CarriedLoadComponent)
+    embodiment = (
+        registry.get_component(agent_id, CharacterEmbodimentComponent)
+        if registry.has_component(agent_id, CharacterEmbodimentComponent)
+        else None
+    )
+    return {
+        "known_mass_kg": load.known_mass_kg,
+        "unknown_mass_object_ids": list(load.unknown_mass_object_ids),
+        "max_single_object_mass_kg": (
+            embodiment.max_single_object_mass_kg
+            if embodiment is not None
+            else None
+        ),
+        "max_carried_mass_kg": (
+            embodiment.max_carried_mass_kg
+            if embodiment is not None
+            else None
+        ),
+    }

@@ -18,6 +18,7 @@ from stage0_sim.domain.lineage import (
     action_lineage_payload,
 )
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.systems.interactions import is_at_interaction_approach
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
 from stage0_sim.domain.world import AffordanceStation
 
@@ -383,8 +384,12 @@ class AffordanceExecutionSystem:
                 return reason
         if action not in station.supported_actions:
             return "action_not_supported"
-        position = context.registry.get_component(agent_id, PositionComponent)
-        if position.coordinate != station.position:
+        if not is_at_interaction_approach(
+            context.registry,
+            agent_id,
+            station.id,
+            fallback=station.position,
+        ):
             return "agent_not_at_station"
         active_count = sum(
             execution.station_id == station.id

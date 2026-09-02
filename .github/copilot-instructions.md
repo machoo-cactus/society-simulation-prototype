@@ -54,12 +54,12 @@ $env:STAGE0_RUN_PLAYWRIGHT = "1"
 ## Current contracts
 
 - Release: `0.2.0`
-- Scenario source: version 4
+- Scenario source: version 6
 - Character source: version 2, template `human-v1`
-- Reusable element source: version 1
-- Dataset: `stage0.dataset.v3`
-- SQLite: schema 8, fresh-only
-- Telemetry: `stage0.telemetry.v2`
+- Reusable element source: version 3
+- Dataset: `stage0.dataset.v4`
+- SQLite: schema 10, fresh-only
+- Telemetry: `stage0.telemetry.v3`
 - Cognition: typed character-controller tools behind one global barrier
 - Navigation: `navigate_to` and `NAVIGATE`
 - Action lifecycle: `action.queued`, `action.started`,
@@ -75,12 +75,26 @@ software selecting decisions.
 
 - Dependency direction is `domain <- application <- adapters/API/UI`.
 - Domain systems alone decide physical outcomes; providers return proposals.
+- Physical ECS components plus `SpatialIndex` are live truth. `CityWorld` and
+  element hierarchy are immutable construction/display metadata.
+- Semantic mass/dimensions are distinct from rendered collision footprints.
+  Equipment uses live slotted `ATTACHED_TO` relations and deterministic typed
+  effects; per-sense structural blockers and footprint sweeps remain domain
+  authority.
+- Local physical execution is fixed at 9 microcells per legacy cell with a
+  5×5-microcell character body; physical anchors are microcells and coarse
+  compatibility positions may be legacy cells.
 - Never call a model or embedding provider from an ordered domain system.
 - System 1 is deterministic, non-bypassable, and clears incompatible work.
 - System order, stable entity iteration, tie-breaking, and commit order are
   simulation semantics.
 - Tool calls become immutable intents and are revalidated before deterministic
   commit. A commit is not proof of success.
+- Physical interaction verbs and
+  `interaction.requested|started|completed|failed|cancelled` are closed
+  contracts. Door links use live open/locked state and domain traversal.
+- Custody/hands/live relations, descriptive ownership, and abstract
+  possessions are independent representations.
 - Telemetry and research traces are never character perception or controller
   context.
 - Perception exposes observer-specific execution evidence, not private plans,
@@ -93,6 +107,8 @@ software selecting decisions.
 - Failures are explicit; do not create success-shaped fallbacks.
 - Browser forms/links and Python state remain authoritative. JavaScript is only
   progressive transport and browser interaction, with a no-JavaScript fallback.
+- Operator SVGs project footprints, bodies, posture/held/door/path/anchor
+  state; keep markup content-bounded and expose state without relying on color.
 - Scenario staging must not start or advance a run.
 - Datasets are research records, not checkpoints. Private exports require
   explicit handling.
@@ -105,6 +121,7 @@ software selecting decisions.
 - [Runtime semantics](../docs/RUNTIME.md)
 - [Configuration](../docs/CONFIGURATION.md)
 - [Scenario and element authoring](../docs/SCENARIO_EDITOR_GUIDE.md)
+- [Content migration](../docs/CONTENT_MIGRATION.md)
 - [Character authoring](../docs/CHARACTER_PROFILE_GUIDE.md)
 - [Actions and events](../docs/ACTIONS_AND_EVENTS.md)
 - [Research data](../docs/DATA_COLLECTION.md)

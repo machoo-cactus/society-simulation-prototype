@@ -51,15 +51,15 @@
   "perception": {
     "blocked_tiles_are_opaque": true,
     "fact_max_age_seconds": 300.0,
-    "hearing_range": 10,
     "inbox_limit": 100,
     "recognition_range": 5,
     "renderer": "deterministic",
     "vision_range": 8,
+    "voice_range": 10,
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 4,
+  "schema_version": 6,
   "seed": 20260901,
   "speed": 10.0,
   "system1": {
@@ -92,7 +92,7 @@
               "y": 350.0
             },
             "element": {
-              "content_hash": "3dee333123943f93a6afa98dfa1d5e5e862700edad12ff64afe045d33e539783",
+              "content_hash": "50ade6d8ff32ecb474f7ff156e4e38f4f5b17994f2503080b43a7b7856ef9621",
               "id": "standard-restaurant",
               "kind": "building"
             },
@@ -114,7 +114,7 @@
               "y": 350.0
             },
             "element": {
-              "content_hash": "3dee333123943f93a6afa98dfa1d5e5e862700edad12ff64afe045d33e539783",
+              "content_hash": "50ade6d8ff32ecb474f7ff156e4e38f4f5b17994f2503080b43a7b7856ef9621",
               "id": "standard-restaurant",
               "kind": "building"
             },

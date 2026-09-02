@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-mobility-centre-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "36297c36f5f378c64f02482e8d8dcc552164f131a8dc7ca9c8c2fc5b84586980",
+        "content_hash": "d9f6b5eb56121b229b3e5cbc24995c6903856b71fccf7568594477f6c85c2f4f",
         "id": "greyford-office-evening.map-greyford-mobility-centre",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

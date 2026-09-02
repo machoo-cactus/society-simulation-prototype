@@ -37,6 +37,31 @@ During refresh:
 Accessible zoom/focus/follow controls remain the fallback for pointer drag and
 wheel zoom. Inspection and camera following are independent presentation state.
 
+## Physical room SVG contract
+
+The server route and Jinja template, not browser JavaScript, derive the room
+SVG from operator snapshots. Room-scale coordinates are microcells with a
+legacy-cell pattern as the overview guide. The one-microcell pattern is emitted
+only at close zoom. Grid patterns and merged rectangles must keep markup
+proportional to zones, blocked regions, objects, characters, paths, and
+selected anchors—not to room width × height in microcells.
+
+The SVG and inspector must retain:
+
+- exact object footprint/occupied-cell shapes and 5×5 character bodies;
+- cardinal pose, posture/support, held state, and current interaction state;
+- open/closed and locked/unlocked door state plus entrance/portal links;
+- movement paths, destinations when enabled, and selected approach/occupancy
+  anchors;
+- accessible SVG title/description and object/character labels;
+- text, ARIA, class, shape, or glyph state so color is never the only signal;
+- ordinary object selectors, inspect links, zoom controls, and inspector
+  content with JavaScript disabled.
+
+Operator access is intentionally authoritative and may include hidden state
+under operator conventions. Browser rendering must not reinterpret that state
+as character perception.
+
 ## Accessibility contract
 
 Every page keeps:
@@ -119,7 +144,8 @@ The suite must retain:
   stage isolation;
 - character CRUD, import/download, validation, and conflicts;
 - world inspection, semantic zoom, pan/follow/focus, accessible SVG, vital
-  mutation, event filtering/detail/copy/clear, transcript, and downloads;
+  mutation, physical footprints/body/posture/held/doors/paths/anchors, bounded
+  SVG markup, event filtering/detail/copy/clear, transcript, and downloads;
 - dataset summary/schema, filters, pagination, details, filtered exports,
   private-data rejection/opt-in, and no-JavaScript fallback;
 - dataset-catalog selection, pooled versus macro aggregation, privacy warnings,

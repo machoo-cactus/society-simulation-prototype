@@ -31,6 +31,7 @@ from stage0_sim.domain.components import (
     NavigationComponent,
     NavigationPrimitiveKind,
     NavigationStatus,
+    OpenableComponent,
     PlanAction,
     PlanComponent,
     PositionComponent,
@@ -154,6 +155,7 @@ def _cross_building_navigation_payload() -> dict:
         {
             "id": "office-desk",
             "name": "Office Desk",
+            "definition_id": "office-desk",
             "object_kind": "affordance",
             "building_id": "building-office",
             "room_id": office_room["id"],
@@ -198,6 +200,59 @@ def _cross_building_navigation_payload() -> dict:
                         "walk-parking-to-office",
                     ],
                 },
+            }
+        ]
+    }
+    return payload
+
+
+def _door_navigation_payload(*, locked: bool) -> dict:
+    payload = _city_payload_without_plan()
+    home = next(
+        building
+        for building in payload["world"]["buildings"]
+        if building["id"] == "building-home"
+    )
+    entrance = home["entrances"][0]
+    entrance["door_object_id"] = "home-door"
+    payload["world"]["objects"].append(
+        {
+            "id": "home-door",
+            "name": "Home Door",
+            "definition_id": "home-door",
+            "object_kind": "physical",
+            "building_id": "building-home",
+            "room_id": "building-home.interior",
+            "position": {"x": 2, "y": 1},
+            "physical": {
+                "footprint": {"cells": [{"x": 0, "y": 0}]},
+                "obstruction": {
+                    "movement": "HARD",
+                    "vision": "OPAQUE",
+                },
+                "capabilities": {
+                    "openable": {"initially_locked": locked}
+                },
+                "initial_open": False,
+            },
+            "placement": {
+                "anchor": {"x": 22, "y": 13},
+                "orientation": "NORTH",
+                "parent_relation": {
+                    "kind": "ON_FLOOR",
+                    "parent_id": "building-home.interior",
+                },
+            },
+        }
+    )
+    components = payload["entities"][0]["components"]
+    components["spatial_location"]["local_coordinate"] = {"x": 1, "y": 1}
+    components["plan"] = {
+        "queue": [
+            {
+                "action": "NAVIGATE",
+                "target": "building-office",
+                "mode": "CAR",
             }
         ]
     }
@@ -275,6 +330,48 @@ def test_recursive_planner_refines_same_space_and_cross_space_routes() -> None:
         if leg.transition_id is not None
     ] == ["entrance-a", "bridge"]
     assert cross_first.destination == last.locator(Coordinate(2, 0))
+
+
+def test_navigation_opens_an_unlocked_door_through_interaction_primitive() -> None:
+    runner = _city_runner(_door_navigation_payload(locked=False))
+
+    runner.run_for(700)
+
+    door = runner.registry.get_component("home-door", OpenableComponent)
+    navigation = runner.registry.get_component(
+        "agent-001",
+        NavigationComponent,
+    )
+    assert door.is_open
+    assert navigation.status is NavigationStatus.ARRIVED
+    assert any(
+        primitive.kind is NavigationPrimitiveKind.INTERACT
+        for primitive in navigation.primitives
+    )
+    assert any(
+        event.event_type == "interaction.completed"
+        and event.payload.get("target_id") == "home-door"
+        and event.payload.get("source") == "navigation"
+        for event in runner.events.events
+    )
+
+
+def test_navigation_fails_explicitly_at_a_locked_door() -> None:
+    runner = _city_runner(_door_navigation_payload(locked=True))
+
+    runner.run_for(20)
+
+    navigation = runner.registry.get_component(
+        "agent-001",
+        NavigationComponent,
+    )
+    assert navigation.status is NavigationStatus.FAILED
+    assert navigation.failure_reason == "object_locked"
+    assert any(
+        event.event_type == "interaction.failed"
+        and event.payload.get("reason") == "object_locked"
+        for event in runner.events.events
+    )
 
 
 def test_known_topology_hides_global_places_until_information_references_them() -> None:
@@ -543,7 +640,7 @@ def test_navigate_tool_commits_one_general_navigation_intention() -> None:
     assert runner.registry.get_component(
         "agent-001",
         PositionComponent,
-    ).coordinate == Coordinate(1, 0)
+    ).coordinate == Coordinate(13, 4)
     started = [
         event
         for event in runner.events.events
@@ -610,17 +707,17 @@ def test_navigation_avoids_an_occupied_locator_in_a_multi_tile_zone() -> None:
     assert navigation.route is not None
     assert navigation.route.destination.local_reference == {
         "kind": "coordinate",
-        "x": 2,
-        "y": 0,
+        "x": 22,
+        "y": 4,
     }
     assert runner.registry.get_component(
         "agent-001",
         PositionComponent,
-    ).coordinate == Coordinate(2, 0)
+    ).coordinate == Coordinate(22, 4)
     assert runner.registry.get_component(
         "agent-002",
         PositionComponent,
-    ).coordinate == Coordinate(0, 0)
+    ).coordinate == Coordinate(4, 4)
 
 
 def test_cross_building_navigate_tool_commits_navigation() -> None:
@@ -729,7 +826,7 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
     assert runner.registry.get_component(
         "agent-001",
         PositionComponent,
-    ).coordinate == Coordinate(2, 1)
+    ).coordinate == Coordinate(22, 13)
     event_types = [event.event_type for event in runner.events.events]
     assert "travel.requested" in event_types
     assert "travel.arrived" in event_types
@@ -774,7 +871,7 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
     assert learned.content["destination_id"] == "office-desk"
     assert learned.content["locator"] == {
         "space_id": "building-office.interior",
-        "local_reference": {"kind": "coordinate", "x": 2, "y": 1},
+        "local_reference": {"kind": "coordinate", "x": 22, "y": 13},
     }
     assert learned.content["transition_ids"] == [
         leg.transition_id
@@ -860,7 +957,7 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
     assert fresh_runner.registry.get_component(
         "agent-001",
         PositionComponent,
-    ).coordinate == Coordinate(2, 1)
+    ).coordinate == Coordinate(22, 13)
 
 
 def test_stale_known_locator_fails_explicitly_at_authoritative_planning() -> None:
@@ -1077,7 +1174,7 @@ def test_sequential_queued_navigation_refreshes_each_request() -> None:
     assert runner.registry.get_component(
         "agent-001",
         PositionComponent,
-    ).coordinate == Coordinate(2, 0)
+    ).coordinate == Coordinate(22, 4)
     assert [
         event.payload["target"]
         for event in runner.events.events

@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "id": "legacy-object",
+  "name": "Legacy Object",
+  "description": "A generic object whose dimensions are intentionally unknown.",
+  "kind": "object"
+}

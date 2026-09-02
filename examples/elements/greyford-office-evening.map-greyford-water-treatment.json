@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "ffef11b202b6d8abf25bc25530bc7d1a03d736ab00901b55d4e91f5b27f17429",
+        "content_hash": "0fa0eccc2ca5be1001bf13279a8f3286b63fc5139b3c17f1ea1e168eed8dea5b",
         "id": "greyford-office-evening.station-greyford-water-treatment-primary",
         "kind": "object"
       },
       "id": "station-greyford-water-treatment-primary",
       "key": "station-greyford-water-treatment-primary",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 6,
         "y": 3
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 8,
   "zones": [
     {

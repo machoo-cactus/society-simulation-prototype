@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-quayside-station-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "4be198bd396ee168f5f01b109be604a4b70b155ab2e88994853a0b0d73d3db4a",
+        "content_hash": "5f658bbb92c0b3a7b8870e906301bf8fdb33402dc883cdee7ae6f908049983ad",
         "id": "greyford-office-evening.map-greyford-quayside-metro-station",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

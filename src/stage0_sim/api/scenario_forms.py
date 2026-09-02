@@ -6,13 +6,14 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, time
 from enum import Enum
-from typing import Any, ForwardRef, Literal, Union, get_args, get_origin
+from typing import Any, ForwardRef, Literal, Union, cast, get_args, get_origin
 from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
+from stage0_sim.application import elements as element_models
 from stage0_sim.application import scenario as scenario_models
 from stage0_sim.application.elements import (
     BuildingInstanceDefinition,
@@ -25,6 +26,7 @@ from stage0_sim.application.elements import (
     RoomOverrideDefinition,
     ScenarioSourceDefinition,
 )
+from stage0_sim.application.migrations.constants import ELEMENT_SCHEMA_VERSION
 
 type PathPart = str | int
 type FieldPath = tuple[PathPart, ...]
@@ -156,6 +158,85 @@ class ScenarioEditorDraftStore:
             self._drafts.popitem(last=False)
 
 
+@dataclass(slots=True)
+class ElementEditorDraft:
+    token: str
+    session_id: str
+    resource_id: str
+    original_id: str | None
+    original_hash: str
+    kind: element_models.ElementKind
+    root: ScenarioEditorNode
+    errors: list[ScenarioEditorError] = field(default_factory=list)
+    raw_json: str = ""
+
+
+class ElementEditorDraftStore:
+    def __init__(
+        self,
+        *,
+        maximum_drafts: int = 128,
+        maximum_session_drafts: int = 16,
+    ) -> None:
+        self._drafts: OrderedDict[str, ElementEditorDraft] = OrderedDict()
+        self.maximum_drafts = maximum_drafts
+        self.maximum_session_drafts = maximum_session_drafts
+
+    def create(
+        self,
+        session_id: str,
+        kind: element_models.ElementKind,
+        value: dict[str, Any],
+        *,
+        resource_id: str = "",
+        original_id: str | None = None,
+        original_hash: str = "",
+    ) -> ElementEditorDraft:
+        token = uuid4().hex
+        draft = ElementEditorDraft(
+            token=token,
+            session_id=session_id,
+            resource_id=resource_id,
+            original_id=original_id,
+            original_hash=original_hash,
+            kind=kind,
+            root=node_from_value(ELEMENT_EDITOR_SCHEMAS[kind], value),
+            raw_json=json.dumps(
+                value,
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+        )
+        self._drafts[token] = draft
+        self._trim(session_id)
+        return draft
+
+    def get(self, session_id: str, token: str) -> ElementEditorDraft | None:
+        draft = self._drafts.get(token)
+        if draft is None or draft.session_id != session_id:
+            return None
+        self._drafts.move_to_end(token)
+        return draft
+
+    def delete(self, session_id: str, token: str) -> None:
+        draft = self._drafts.get(token)
+        if draft is not None and draft.session_id == session_id:
+            del self._drafts[token]
+
+    def _trim(self, session_id: str) -> None:
+        session_tokens = [
+            token for token, draft in self._drafts.items() if draft.session_id == session_id
+        ]
+        while len(session_tokens) > self.maximum_session_drafts:
+            del self._drafts[session_tokens.pop(0)]
+        while len(self._drafts) > self.maximum_drafts:
+            self._drafts.popitem(last=False)
+
+
+type StructuredEditorDraft = ScenarioEditorDraft | ElementEditorDraft
+
+
 KNOWN_ENTITY_COMPONENT_MODELS: dict[str, type[BaseModel] | None] = {
     "position": scenario_models.PositionDefinition,
     "spatial_location": scenario_models.SpatialLocationDefinition,
@@ -169,6 +250,7 @@ KNOWN_ENTITY_COMPONENT_MODELS: dict[str, type[BaseModel] | None] = {
     "information": scenario_models.InformationComponentDefinition,
     "controller": scenario_models.ControllerDefinition,
     "senses": scenario_models.SensesDefinition,
+    "embodiment": scenario_models.CharacterEmbodimentDefinition,
     "memory": scenario_models.MemoryComponentDefinition,
     "conversation": scenario_models.ConversationComponentDefinition,
     "metadata": None,
@@ -223,6 +305,93 @@ EXTENSIBLE_PROFILE_MODELS: frozenset[type[BaseModel]] = frozenset(
 # scenario model gains a field until the editor classification is reviewed.
 SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     ElementReference: frozenset(["kind", "id", "content_hash"]),
+    element_models.NpcRoleElementDefinition: frozenset(
+        [
+            "schema_version",
+            "id",
+            "name",
+            "description",
+            "kind",
+            "briefing",
+            "tool_allowlist",
+            "vision_range",
+            "recognition_range",
+            "hearing_range",
+            "smell_range",
+        ]
+    ),
+    element_models.ObjectElementDefinition: frozenset(
+        [
+            "schema_version",
+            "id",
+            "name",
+            "description",
+            "kind",
+            "object_type",
+            "physical",
+            "supported_actions",
+            "actions",
+            "offers",
+            "holdings",
+            "available",
+            "capacity",
+            "operation",
+            "npc_role",
+            "request_timeout",
+            "environment",
+        ]
+    ),
+    element_models.ObjectPlacementDefinition: frozenset(
+        ["key", "id", "element", "position", "placement", "staff_position"]
+    ),
+    element_models.RoomElementDefinition: frozenset(
+        [
+            "schema_version",
+            "id",
+            "name",
+            "description",
+            "kind",
+            "room_type",
+            "width",
+            "height",
+            "spatial_metric",
+            "blocked",
+            "zones",
+            "objects",
+        ]
+    ),
+    element_models.RoomPlacementDefinition: frozenset(
+        ["key", "element", "offset"]
+    ),
+    element_models.BuildingPortalDefinition: frozenset(
+        [
+            "key",
+            "from_room_key",
+            "from_coordinate",
+            "to_room_key",
+            "to_coordinate",
+            "bidirectional",
+            "available",
+            "door_object_id",
+        ]
+    ),
+    element_models.BuildingEntranceElementDefinition: frozenset(
+        ["key", "id", "room_key", "local_coordinate", "door_object_id"]
+    ),
+    element_models.BuildingElementDefinition: frozenset(
+        [
+            "schema_version",
+            "id",
+            "name",
+            "description",
+            "kind",
+            "available",
+            "environment",
+            "rooms",
+            "portals",
+            "entrances",
+        ]
+    ),
     ObjectOverrideDefinition: frozenset(
         [
             "name",
@@ -305,6 +474,73 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         ]
     ),
     scenario_models.CoordinateDefinition: frozenset(["x", "y"]),
+    scenario_models.SpatialMetricDefinition: frozenset(
+        ["microcells_per_legacy_cell"]
+    ),
+    scenario_models.FootprintDefinition: frozenset(["cells"]),
+    scenario_models.PhysicalObstructionDefinition: frozenset(
+        ["movement", "vision", "hearing", "smell"]
+    ),
+    scenario_models.ObjectDimensionsDefinition: frozenset(
+        ["length_cm", "width_cm", "height_cm"]
+    ),
+    scenario_models.ObjectIntrinsicsDefinition: frozenset(
+        ["mass_kg", "dimensions_cm", "size_class"]
+    ),
+    scenario_models.OccupancySlotDefinition: frozenset(
+        ["id", "accepted_relations", "capacity"]
+    ),
+    scenario_models.PortableCapabilityDefinition: frozenset(["two_handed"]),
+    scenario_models.ReadableCapabilityDefinition: frozenset(["document_id"]),
+    scenario_models.ConsumableCapabilityDefinition: frozenset(
+        ["item_id", "servings"]
+    ),
+    scenario_models.UsableCapabilityDefinition: frozenset(["use_kind"]),
+    scenario_models.OpenableCapabilityDefinition: frozenset(
+        ["initially_locked"]
+    ),
+    scenario_models.ObjectEffectDefinition: frozenset(
+        ["id", "target", "operation", "value"]
+    ),
+    scenario_models.WearableCapabilityDefinition: frozenset(
+        ["compatible_slots", "effects"]
+    ),
+    scenario_models.ScentSourceCapabilityDefinition: frozenset(
+        ["scent_id", "description", "emission_range"]
+    ),
+    scenario_models.SupportCapabilityDefinition: frozenset(["slot_ids"]),
+    scenario_models.ContainerCapabilityDefinition: frozenset(["slot_ids"]),
+    scenario_models.PhysicalCapabilitiesDefinition: frozenset(
+        [
+            "slots",
+            "support",
+            "container",
+            "portable",
+            "readable",
+            "consumable",
+            "usable",
+            "openable",
+            "wearable",
+            "scent_source",
+        ]
+    ),
+    scenario_models.PhysicalObjectDefinition: frozenset(
+        [
+            "footprint",
+            "intrinsics",
+            "obstruction",
+            "capabilities",
+            "initial_open",
+            "owner_id",
+            "custodian_id",
+        ]
+    ),
+    scenario_models.PhysicalParentRelationDefinition: frozenset(
+        ["kind", "parent_id", "slot_id"]
+    ),
+    scenario_models.PhysicalPlacementDefinition: frozenset(
+        ["anchor", "orientation", "parent_relation"]
+    ),
     scenario_models.ItemCatalogEntryDefinition: frozenset(
         ["id", "name", "unit"]
     ),
@@ -317,7 +553,8 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "tool_allowlist",
             "vision_range",
             "recognition_range",
-            "hearing_multiplier",
+            "hearing_range",
+            "smell_range",
         ]
     ),
     scenario_models.TransactionOfferDefinition: frozenset(
@@ -382,6 +619,7 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         [
             "width",
             "height",
+            "spatial_metric",
             "blocked",
             "zones",
             "stations",
@@ -393,7 +631,13 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     scenario_models.CityDefinition: frozenset(["id", "name", "bounds_meters"]),
     scenario_models.DistrictDefinition: frozenset(["id", "name", "center"]),
     scenario_models.BuildingEntranceDefinition: frozenset(
-        ["id", "room_id", "local_coordinate", "neighborhood_node_id"]
+        [
+            "id",
+            "room_id",
+            "local_coordinate",
+            "neighborhood_node_id",
+            "door_object_id",
+        ]
     ),
     scenario_models.RoomDefinition: frozenset(
         ["id", "key", "name", "type", "building_id", "offset", "world"]
@@ -408,16 +652,20 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "to_coordinate",
             "bidirectional",
             "available",
+            "door_object_id",
         ]
     ),
     scenario_models.WorldObjectDefinition: frozenset(
         [
             "id",
+            "definition_id",
             "name",
             "object_kind",
             "building_id",
             "room_id",
             "position",
+            "physical",
+            "placement",
         ]
     ),
     scenario_models.BuildingDefinition: frozenset(
@@ -508,7 +756,7 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         [
             "vision_range",
             "recognition_range",
-            "hearing_range",
+            "voice_range",
             "whisper_range",
             "blocked_tiles_are_opaque",
             "inbox_limit",
@@ -814,12 +1062,25 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     ),
     scenario_models.ControllerDefinition: frozenset(["enabled", "tool_allowlist"]),
     scenario_models.SensesDefinition: frozenset(
-        ["vision_range", "recognition_range", "hearing_multiplier"]
+        ["vision_range", "recognition_range", "hearing_range", "smell_range"]
+    ),
+    scenario_models.EquipmentSlotCapacityDefinition: frozenset(
+        ["slot", "capacity"]
+    ),
+    scenario_models.CharacterEmbodimentDefinition: frozenset(
+        [
+            "max_single_object_mass_kg",
+            "max_carried_mass_kg",
+            "equipment_slots",
+        ]
     ),
     scenario_models.ActivityDefinition: frozenset({"type"}),
     scenario_models.PossessionsComponentDefinition: frozenset(["holdings"]),
     scenario_models.PlanActionDefinition: frozenset(
-        ["action", "target", "duration", "mode", "offer_id"]
+        ["action", "target", "duration", "mode", "offer_id", "interaction"]
+    ),
+    scenario_models.InteractionSpecificationDefinition: frozenset(
+        ["verb", "target_id", "destination_id", "slot_id"]
     ),
     scenario_models.PlanComponentDefinition: frozenset(["queue", "current"]),
     scenario_models.GoalsComponentDefinition: frozenset(
@@ -872,6 +1133,7 @@ def scenario_editor_coverage_errors() -> tuple[str, ...]:
         "CharacterSlotDefinition",
         "ControllerDefinition",
         "SensesDefinition",
+        "CharacterEmbodimentDefinition",
         "ActivityDefinition",
     }
     discovered_components = {
@@ -896,7 +1158,102 @@ def scenario_editor_coverage_errors() -> tuple[str, ...]:
             "discovered="
             f"{sorted(item.__name__ for item in discovered_components)!r}"
         )
+    errors.extend(
+        _recursive_descriptor_coverage_errors(
+            (
+                SCENARIO_EDITOR_SCHEMA,
+                SCENARIO_V5_EDITOR_SCHEMA,
+            ),
+            (
+                ScenarioSourceDefinition,
+                scenario_models.ScenarioDefinition,
+            ),
+            include_entity_components=True,
+        )
+    )
     return tuple(errors)
+
+
+def element_editor_coverage_errors() -> tuple[str, ...]:
+    return tuple(
+        _recursive_descriptor_coverage_errors(
+            tuple(ELEMENT_EDITOR_SCHEMAS.values()),
+            tuple(ELEMENT_EDITOR_MODELS.values()),
+        )
+    )
+
+
+def _recursive_descriptor_coverage_errors(
+    schemas: tuple[ScenarioFieldSchema, ...],
+    roots: tuple[type[BaseModel], ...],
+    *,
+    include_entity_components: bool = False,
+) -> list[str]:
+    errors: list[str] = []
+    described_models: set[type[BaseModel]] = set()
+    visited_schemas: set[int] = set()
+
+    def visit_schema(schema: ScenarioFieldSchema) -> None:
+        if id(schema) in visited_schemas:
+            return
+        visited_schemas.add(id(schema))
+        if schema.model is not None:
+            described_models.add(schema.model)
+            described_fields = frozenset(
+                child.field_name for child in schema.children
+            )
+            actual_fields = frozenset(schema.model.model_fields)
+            if described_fields != actual_fields:
+                errors.append(
+                    f"{schema.model.__name__} descriptor: "
+                    f"described={sorted(described_fields)!r}, "
+                    f"actual={sorted(actual_fields)!r}"
+                )
+        for child in schema.children:
+            visit_schema(child)
+        if schema.item is not None:
+            visit_schema(schema.item)
+        if schema.value is not None:
+            visit_schema(schema.value)
+        for _key, _label, variant in schema.variants:
+            if variant is not None:
+                visit_schema(variant)
+
+    for schema in schemas:
+        visit_schema(schema)
+
+    expected_models: set[type[BaseModel]] = set()
+
+    def visit_annotation(annotation: Any) -> None:
+        if isinstance(annotation, ForwardRef):
+            return
+        origin = get_origin(annotation)
+        if origin is not None:
+            for argument in get_args(annotation):
+                if argument is not type(None):
+                    visit_annotation(argument)
+            return
+        if not _is_model(annotation) or annotation in expected_models:
+            return
+        expected_models.add(annotation)
+        for field_name, model_field in annotation.model_fields.items():
+            if (annotation, field_name) in ARBITRARY_JSON_FIELDS:
+                continue
+            visit_annotation(model_field.annotation)
+
+    for root in roots:
+        visit_annotation(root)
+    if include_entity_components:
+        for component_model in KNOWN_ENTITY_COMPONENT_MODELS.values():
+            if component_model is not None:
+                visit_annotation(component_model)
+    missing = expected_models - described_models
+    if missing:
+        errors.append(
+            "recursive descriptor models missing: "
+            f"{sorted(model.__name__ for model in missing)!r}"
+        )
+    return errors
 
 
 def _humanize(name: str) -> str:
@@ -1195,6 +1552,26 @@ SCENARIO_EDITOR_SCHEMA = _field_schema(
     ScenarioSourceDefinition,
     label="Scenario Source Definition",
 )
+SCENARIO_V5_EDITOR_SCHEMA = _field_schema(
+    scenario_models.ScenarioDefinition,
+    label="Scenario Version 6 Definition",
+)
+ELEMENT_EDITOR_MODELS: dict[
+    element_models.ElementKind,
+    type[element_models.ElementDefinitionBase],
+] = {
+    element_models.ElementKind.NPC_ROLE: element_models.NpcRoleElementDefinition,
+    element_models.ElementKind.OBJECT: element_models.ObjectElementDefinition,
+    element_models.ElementKind.ROOM: element_models.RoomElementDefinition,
+    element_models.ElementKind.BUILDING: element_models.BuildingElementDefinition,
+}
+ELEMENT_EDITOR_SCHEMAS: dict[
+    element_models.ElementKind,
+    ScenarioFieldSchema,
+] = {
+    kind: _field_schema(model, label=f"{_humanize(kind.value)} Definition")
+    for kind, model in ELEMENT_EDITOR_MODELS.items()
+}
 
 
 def _field_default(model: type[BaseModel], field_name: str) -> Any:
@@ -1354,7 +1731,7 @@ def refresh_node_paths(node: ScenarioEditorNode, path: FieldPath = ()) -> None:
             refresh_node_paths(item, (*path, item.key))
 
 
-def update_draft_from_form(draft: ScenarioEditorDraft, form: Any) -> None:
+def update_draft_from_form(draft: StructuredEditorDraft, form: Any) -> None:
     draft.resource_id = str(form.get("resource_id", draft.resource_id)).strip()
     _update_node_from_form(draft.root, form)
     refresh_node_paths(draft.root)
@@ -1382,7 +1759,7 @@ def _update_node_from_form(node: ScenarioEditorNode, form: Any) -> None:
 
 
 def apply_collection_action(
-    draft: ScenarioEditorDraft,
+    draft: StructuredEditorDraft,
     action: str,
 ) -> bool:
     parts = action.split(":")
@@ -1592,13 +1969,53 @@ def _encode_node(
 
 
 def encode_draft_value(
-    draft: ScenarioEditorDraft,
+    draft: StructuredEditorDraft,
 ) -> tuple[dict[str, Any], tuple[tuple[str, str], ...]]:
     errors: list[tuple[ScenarioEditorNode, str]] = []
     raw = _encode_node(draft.root, errors)
     if not isinstance(raw, dict):
         return {}, ((draft.root.id, "Scenario definition must be an object"),)
     return raw, tuple((node.id, message) for node, message in errors)
+
+
+def encode_element_draft_value(
+    draft: ElementEditorDraft,
+) -> tuple[dict[str, Any], tuple[tuple[str, str], ...]]:
+    raw, errors = encode_draft_value(draft)
+    raw["id"] = draft.resource_id
+    raw["schema_version"] = ELEMENT_SCHEMA_VERSION
+    raw["kind"] = draft.kind.value
+    return raw, errors
+
+
+def validate_element_draft(
+    draft: ElementEditorDraft,
+) -> element_models.ScenarioElementDefinition | None:
+    clear_draft_errors(draft)
+    raw, decode_errors = encode_element_draft_value(draft)
+    for node_id, message in decode_errors:
+        node = find_node(draft.root, node_id) or draft.root
+        _add_node_error(draft, node, message)
+    if decode_errors:
+        return None
+    model = ELEMENT_EDITOR_MODELS[draft.kind]
+    try:
+        element = model.model_validate(raw)
+    except ValidationError as error:
+        for item in error.errors(include_url=False):
+            location = tuple(item["loc"])
+            if location == ("id",):
+                draft.errors.append(
+                    ScenarioEditorError(
+                        message=f"id: {item['msg']}",
+                        control_id="element-resource-id",
+                    )
+                )
+                continue
+            node = _node_for_path(draft.root, location)
+            _add_node_error(draft, node, str(item["msg"]))
+        return None
+    return cast(element_models.ScenarioElementDefinition, element)
 
 
 def validate_draft(
@@ -1625,7 +2042,7 @@ def validate_draft(
     return scenario
 
 
-def clear_draft_errors(draft: ScenarioEditorDraft) -> None:
+def clear_draft_errors(draft: StructuredEditorDraft) -> None:
     for node in _all_nodes(draft.root):
         node.errors.clear()
     draft.errors.clear()
@@ -1683,7 +2100,7 @@ def _node_for_path(
 
 
 def _add_node_error(
-    draft: ScenarioEditorDraft,
+    draft: StructuredEditorDraft,
     node: ScenarioEditorNode,
     message: str,
 ) -> None:

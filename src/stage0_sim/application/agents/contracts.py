@@ -72,12 +72,16 @@ class ObservedTarget:
         "character",
         "building",
         "outdoor",
+        "room",
+        "physical_object",
     ]
     name: str
     supported_actions: tuple[str, ...] = ()
     offers: tuple["ObservedOffer", ...] = ()
     available: bool = True
     last_observed_tick: int | None = None
+    available_interactions: tuple[str, ...] = ()
+    public_state: dict[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +171,9 @@ class CharacterObservation:
     available_travel_modes: tuple[str, ...] = ()
     calendar_time: CalendarTimeObservation | None = None
     environment: EnvironmentObservation | None = None
+    senses: dict[str, JsonValue] | None = None
+    equipment: dict[str, JsonValue] | None = None
+    carried_load: dict[str, JsonValue] | None = None
     possessions: tuple[ObservedPossession, ...] = ()
     service_requests: tuple[ObservedServiceRequest, ...] = ()
     structured_goals: tuple[ObservedGoal, ...] = ()

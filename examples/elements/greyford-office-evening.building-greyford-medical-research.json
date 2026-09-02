@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-medical-research-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "6ea4e4f366f8deb5f9ef1e5c772e783165175c4446c40d5622395012685ce13c",
+        "content_hash": "34969cd6dab106db8500168817c084ec4dea271a770807fba263d94506dd2c1b",
         "id": "greyford-office-evening.map-greyford-medical-research",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

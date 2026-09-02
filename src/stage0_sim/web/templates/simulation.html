@@ -199,7 +199,7 @@
         <h2 id="world-heading">World</h2>
         <p id="world-heading-detail">{{ world_view.title if world_view else "Load a scenario to preview its world" }}</p>
       </div>
-      <form class="view-controls" method="post" action="/ui/view" data-ui-targets="#world-panel">
+      <form class="view-controls" method="post" action="/ui/view" data-ui-targets="#world-panel,#inspector-panel">
         <span class="semantic-scale">Detail: <strong>{{ world_view.semantic_level|title if world_view else "None" }}</strong></span>
         <button name="zoom_action" value="out" aria-label="Zoom out">−</button>
         <output data-map-zoom-output aria-label="Zoom level" aria-live="polite">{{ (session.zoom * 100)|round|int }}%</output>
@@ -240,6 +240,7 @@
           data-base-width="{{ world_view.base_display_width }}"
           data-map-zoom="{{ session.zoom }}"
           data-semantic-level="{{ world_view.semantic_level }}"
+          data-coordinate-system="{{ world_view.coordinate_system|default('city_meter') }}"
           data-camera-x="{{ world_view.camera_x }}"
           data-camera-y="{{ world_view.camera_y }}"
           data-follow-selected="{{ 'true' if world_view.follow_selected else 'false' }}"
@@ -248,49 +249,126 @@
         >
           <title>{{ world_view.title }}</title>
           {% if world_view.kind == "grid" %}
+            <defs>
+              <pattern id="legacy-cell-grid" width="{{ world_view.microcells_per_legacy_cell }}" height="{{ world_view.microcells_per_legacy_cell }}" patternUnits="userSpaceOnUse">
+                <path class="grid-pattern-line grid-pattern-line--legacy" d="M {{ world_view.microcells_per_legacy_cell }} 0 L 0 0 0 {{ world_view.microcells_per_legacy_cell }}"/>
+              </pattern>
+              {% if world_view.show_microcell_grid %}
+                <pattern id="microcell-grid" width="1" height="1" patternUnits="userSpaceOnUse">
+                  <path class="grid-pattern-line grid-pattern-line--microcell" d="M 1 0 L 0 0 0 1"/>
+                </pattern>
+              {% endif %}
+            </defs>
             <rect class="map-background" x="0" y="0" width="{{ world_view.width }}" height="{{ world_view.height }}"/>
             {% for zone in world_view.zones %}
-              {% for tile in zone.tiles %}
-                <rect class="zone zone--{{ zone.type|lower }}" x="{{ tile.x }}" y="{{ tile.y }}" width="1" height="1">
+              {% for rectangle in zone.rectangles %}
+                <rect class="zone zone--{{ zone.type|lower }}" x="{{ rectangle.x }}" y="{{ rectangle.y }}" width="{{ rectangle.width }}" height="{{ rectangle.height }}">
                   <title>{{ zone.name }}</title>
                 </rect>
               {% endfor %}
             {% endfor %}
-            {% for point in world_view.blocked %}
-              <rect class="blocked" x="{{ point.x }}" y="{{ point.y }}" width="1" height="1"><title>Blocked</title></rect>
+            {% for rectangle in world_view.blocked %}
+              <rect class="blocked" x="{{ rectangle.x }}" y="{{ rectangle.y }}" width="{{ rectangle.width }}" height="{{ rectangle.height }}"><title>Blocked legacy cells</title></rect>
             {% endfor %}
+            <rect class="grid-guide grid-guide--legacy" x="0" y="0" width="{{ world_view.width }}" height="{{ world_view.height }}" fill="url(#legacy-cell-grid)" aria-hidden="true"/>
+            {% if world_view.show_microcell_grid %}
+              <rect class="grid-guide grid-guide--microcell" x="0" y="0" width="{{ world_view.width }}" height="{{ world_view.height }}" fill="url(#microcell-grid)" aria-hidden="true"/>
+            {% endif %}
             {% for path in world_view.paths %}
-              <polyline class="path" points="{{ path }}"/>
+              <polyline class="path" points="{{ path.points }}" role="img" aria-label="{{ path.name }} movement path">
+                <title>{{ path.name }} movement path</title>
+              </polyline>
             {% endfor %}
             {% for station in world_view.stations %}
-              <rect class="station {% if station.environment_availability and not station.environment_availability.available %}resource-closed{% endif %}" x="{{ station.position.x + 0.22 }}" y="{{ station.position.y + 0.22 }}" width=".56" height=".56">
+              <rect class="station {% if station.environment_availability and not station.environment_availability.available %}resource-closed{% endif %}" x="{{ station.position.x * world_view.microcells_per_legacy_cell + 0.22 * world_view.microcells_per_legacy_cell }}" y="{{ station.position.y * world_view.microcells_per_legacy_cell + 0.22 * world_view.microcells_per_legacy_cell }}" width="{{ 0.56 * world_view.microcells_per_legacy_cell }}" height="{{ 0.56 * world_view.microcells_per_legacy_cell }}">
                 <title>{{ station.name }} · {{ (station.get("actions") or station.get("supported_actions") or [])|join(", ") }}{% if station.environment_availability and not station.environment_availability.available %} · Closed: {{ station.environment_availability.reason }}{% endif %}</title>
               </rect>
             {% endfor %}
             {% for point in world_view.transaction_points %}
-              <circle role="img" aria-label="Transaction point: {{ point.name }}" class="transaction-point {% if point.environment_availability and not point.environment_availability.available %}resource-closed{% endif %}" cx="{{ point.position.x + 0.5 }}" cy="{{ point.position.y + 0.5 }}" r=".3">
+              <circle role="img" aria-label="Transaction point: {{ point.name }}" class="transaction-point {% if point.environment_availability and not point.environment_availability.available %}resource-closed{% endif %}" cx="{{ point.position.x * world_view.microcells_per_legacy_cell + 0.5 * world_view.microcells_per_legacy_cell }}" cy="{{ point.position.y * world_view.microcells_per_legacy_cell + 0.5 * world_view.microcells_per_legacy_cell }}" r="{{ 0.3 * world_view.microcells_per_legacy_cell }}">
                 <title>{{ point.name }} · {{ point.operation|default("AUTOMATED")|lower }} · {{ point.offers|map(attribute="name")|join(", ") }}{% if point.runtime and point.runtime.staffing and point.runtime.staffing.npc_id %} · Staffed by {{ point.runtime.staffing.npc_id }}{% endif %}{% if point.environment_availability and not point.environment_availability.available %} · Closed: {{ point.environment_availability.reason }}{% endif %}</title>
               </circle>
               {% if point.staffing %}
-                <rect role="img" aria-label="Staff position for {{ point.name }}" class="npc-staff-position" x="{{ point.staffing.staff_position.x + 0.2 }}" y="{{ point.staffing.staff_position.y + 0.2 }}" width=".6" height=".6"><title>{{ point.name }} staff position</title></rect>
+                <rect role="img" aria-label="Staff position for {{ point.name }}" class="npc-staff-position" x="{{ point.staffing.staff_position.x * world_view.microcells_per_legacy_cell + 0.2 * world_view.microcells_per_legacy_cell }}" y="{{ point.staffing.staff_position.y * world_view.microcells_per_legacy_cell + 0.2 * world_view.microcells_per_legacy_cell }}" width="{{ 0.6 * world_view.microcells_per_legacy_cell }}" height="{{ 0.6 * world_view.microcells_per_legacy_cell }}"><title>{{ point.name }} staff position</title></rect>
+              {% endif %}
+            {% endfor %}
+            {% for object in world_view.objects %}
+              <a href="/ui/?object={{ object.id|urlencode }}#operator-object-inspector" aria-label="Inspect object {{ object.name }}" data-ui-link-targets="#world-panel,#inspector-panel">
+                <g
+                  class="{{ object.class_names }}"
+                  data-object-id="{{ object.id }}"
+                  data-object-kind="{{ object.classification }}"
+                  data-open-state="{{ object.open_state }}"
+                  data-lock-state="{{ object.lock_state }}"
+                  data-occupancy="{{ object.occupied_slot_count }}"
+                  role="img"
+                  tabindex="0"
+                  aria-labelledby="object-title-{{ object.dom_id }} object-desc-{{ object.dom_id }}"
+                >
+                  <title id="object-title-{{ object.dom_id }}">{{ object.aria_label }}</title>
+                  <desc id="object-desc-{{ object.dom_id }}">{{ object.occupied_cells_summary }}. {{ object.state_summary }}{% if object.links %}. Linked to {{ object.links|map(attribute="label")|join(", ") }}{% endif %}.</desc>
+                  {% for rectangle in object.rectangles %}
+                    <rect class="physical-object-footprint" x="{{ rectangle.x }}" y="{{ rectangle.y }}" width="{{ rectangle.width }}" height="{{ rectangle.height }}"/>
+                  {% endfor %}
+                  {% if object.lock_state == "locked" %}
+                    <text class="object-state-glyph object-state-glyph--lock" x="{{ object.center_x }}" y="{{ object.center_y }}">LOCK</text>
+                  {% elif object.open_state == "open" %}
+                    <text class="object-state-glyph object-state-glyph--open" x="{{ object.center_x }}" y="{{ object.center_y }}">OPEN</text>
+                  {% elif object.open_state == "closed" %}
+                    <text class="object-state-glyph object-state-glyph--closed" x="{{ object.center_x }}" y="{{ object.center_y }}">CLOSED</text>
+                  {% endif %}
+                  {% if object.links %}
+                    <text class="object-state-glyph object-state-glyph--link" x="{{ object.center_x }}" y="{{ object.center_y + 1.4 }}">LINK</text>
+                  {% endif %}
+                  {% if object.occupied_slot_count %}
+                    <text class="object-state-glyph object-state-glyph--occupied" x="{{ object.center_x }}" y="{{ object.center_y - 1.4 }}">O{{ object.occupied_slot_count }}</text>
+                  {% endif %}
+                </g>
+              </a>
+              {% if object.selected %}
+                {% for anchor in object.approach_anchors %}
+                  <circle class="interaction-anchor interaction-anchor--approach" cx="{{ anchor.x + 0.5 }}" cy="{{ anchor.y + 0.5 }}" r=".35" role="img" aria-label="Approach anchor at {{ anchor.x }}, {{ anchor.y }}"><title>Approach anchor</title></circle>
+                {% endfor %}
+                {% for anchor in object.occupancy_anchors %}
+                  <rect class="interaction-anchor interaction-anchor--occupancy" x="{{ anchor.x + 0.15 }}" y="{{ anchor.y + 0.15 }}" width=".7" height=".7" role="img" aria-label="Occupancy anchor {{ anchor.slot_id }} at {{ anchor.x }}, {{ anchor.y }}"><title>Occupancy anchor · {{ anchor.slot_id }}</title></rect>
+                {% endfor %}
               {% endif %}
             {% endfor %}
             {% for agent in world_view.agents %}
               {% if agent.destination %}
-                <circle class="destination-marker" cx="{{ agent.destination.x + 0.5 }}" cy="{{ agent.destination.y + 0.5 }}" r=".16"><title>{{ agent.name }} destination</title></circle>
+                <circle class="destination-marker" cx="{{ agent.destination.x + 0.5 }}" cy="{{ agent.destination.y + 0.5 }}" r="{{ 0.45 if world_view.physical else 0.16 }}"><title>{{ agent.name }} destination</title></circle>
               {% endif %}
-              <a href="/ui/?selected={{ agent.id }}" data-ui-link-targets="#world-panel,#inspector-panel">
-                <circle class="character-marker {% if agent.actor_kind == 'npc' %}npc{% endif %} {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %} {% if agent.system1 and agent.system1 != 'NORMAL' %}critical{% endif %}" cx="{{ agent.x + 0.5 }}" cy="{{ agent.y + 0.5 }}" r=".25">
-                  <title>{{ agent.name }} at {{ agent.x }}, {{ agent.y }}</title>
-                </circle>
-                {% if "names" in session.overlays %}<text class="map-label" x="{{ agent.x + 0.5 }}" y="{{ agent.y + 0.12 }}">{{ agent.name }}</text>{% endif %}
-                {% if "vision" in session.overlays and agent.vision_count %}<text class="sensor-label" x="{{ agent.x + 0.78 }}" y="{{ agent.y + 0.45 }}">V{{ agent.vision_count }}</text>{% endif %}
-                {% if "hearing" in session.overlays and agent.heard %}<text class="sensor-label" x="{{ agent.x + 0.78 }}" y="{{ agent.y + 0.7 }}">H</text>{% endif %}
-                {% if "speech" in session.overlays and agent.speech %}<text class="speech-label" x="{{ agent.x + 0.5 }}" y="{{ agent.y - 0.08 }}">{{ agent.speech[:36] }}</text>{% endif %}
+              <a href="/ui/?selected={{ agent.id|urlencode }}" aria-label="Inspect {{ agent.name }}" data-ui-link-targets="#world-panel,#inspector-panel">
+                <g
+                  class="character-group {% if world_view.physical %}physical-character{% else %}legacy-character{% endif %} {% if agent.actor_kind == 'npc' %}npc{% endif %} posture-{{ agent.posture|lower }} {% if agent.held_object_ids %}state-holding{% endif %} {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %} {% if agent.system1 and agent.system1 != 'NORMAL' %}critical{% endif %}"
+                  data-character-id="{{ agent.id }}"
+                  data-posture="{{ agent.posture }}"
+                  data-held-object-ids="{{ agent.held_object_ids|join(',') }}"
+                  role="img"
+                  tabindex="0"
+                  aria-labelledby="character-title-{{ agent.dom_id }} character-desc-{{ agent.dom_id }}"
+                >
+                  <title id="character-title-{{ agent.dom_id }}">{{ agent.aria_label }}</title>
+                  <desc id="character-desc-{{ agent.dom_id }}">{{ agent.name }} body footprint. Posture {{ agent.posture }}{% if agent.support_id %}, supported by {{ agent.support_id }}{% endif %}{% if agent.held_object_ids %}, holding {{ agent.held_object_ids|join(", ") }}{% endif %}.</desc>
+                  {% if world_view.physical %}
+                    {% for rectangle in agent.body_rectangles %}
+                      <rect class="character-body-footprint" x="{{ rectangle.x }}" y="{{ rectangle.y }}" width="{{ rectangle.width }}" height="{{ rectangle.height }}"/>
+                    {% endfor %}
+                    {% if agent.held_object_ids %}<text class="character-state-glyph" x="{{ agent.x }}" y="{{ agent.y }}">HOLD</text>{% endif %}
+                  {% else %}
+                    <circle class="character-marker" cx="{{ agent.x }}" cy="{{ agent.y }}" r=".25"/>
+                  {% endif %}
+                </g>
+                {% set label_offset = 3 if world_view.physical else 0.38 %}
+                {% set sensor_offset = 3 if world_view.physical else 0.28 %}
+                {% set hearing_offset = 2 if world_view.physical else 0.25 %}
+                {% set speech_offset = 5 if world_view.physical else 0.58 %}
+                {% if "names" in session.overlays %}<text class="map-label" x="{{ agent.x }}" y="{{ agent.y - label_offset }}">{{ agent.name }}</text>{% endif %}
+                {% if "vision" in session.overlays and agent.vision_count %}<text class="sensor-label" x="{{ agent.x + sensor_offset }}" y="{{ agent.y }}">V{{ agent.vision_count }}</text>{% endif %}
+                {% if "hearing" in session.overlays and agent.heard %}<text class="sensor-label" x="{{ agent.x + sensor_offset }}" y="{{ agent.y + hearing_offset }}">H</text>{% endif %}
+                {% if "speech" in session.overlays and agent.speech %}<text class="speech-label" x="{{ agent.x }}" y="{{ agent.y - speech_offset }}">{{ agent.speech[:36] }}</text>{% endif %}
               </a>
             {% endfor %}
-            {% for x in range(world_view.width + 1) %}<line class="grid-line" x1="{{ x }}" y1="0" x2="{{ x }}" y2="{{ world_view.height }}"/>{% endfor %}
-            {% for y in range(world_view.height + 1) %}<line class="grid-line" x1="0" y1="{{ y }}" x2="{{ world_view.width }}" y2="{{ y }}"/>{% endfor %}
           {% else %}
             <rect class="map-background" x="0" y="0" width="1000" height="650"/>
             {% for district in world_view.districts %}
@@ -309,9 +387,11 @@
             {% endfor %}
             {% for agent in world_view.agents %}
               <a href="/ui/?selected={{ agent.id|urlencode }}" aria-label="Inspect {{ agent.name }}" data-ui-link-targets="#world-panel,#inspector-panel">
-                <circle class="city-character {% if agent.actor_kind == 'npc' %}npc{% endif %} {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %}" cx="{{ agent.px }}" cy="{{ agent.py }}" r="9" data-character-id="{{ agent.id }}">
+                <g class="character-group city-character-group {% if agent.actor_kind == 'npc' %}npc{% endif %} {% if agent.selected %}selected{% endif %} {% if agent.visible and 'visibility' in session.overlays %}visible{% endif %}" data-character-id="{{ agent.id }}" role="img" tabindex="0">
                   <title>{{ agent.name }}</title>
-                </circle>
+                  <desc>{{ agent.name }} city-scale character marker.</desc>
+                  <circle class="city-character" cx="{{ agent.px }}" cy="{{ agent.py }}" r="9"/>
+                </g>
                 {% if "speech" in session.overlays and agent.speech %}<text class="city-speech-label" x="{{ agent.px }}" y="{{ agent.py - 18 }}">{{ agent.speech[:48] }}</text>{% endif %}
               </a>
             {% endfor %}
@@ -342,8 +422,110 @@
 
   <aside id="inspector-panel" class="panel inspector" aria-labelledby="inspector-heading">
     <header class="panel__header">
-      <div><h2 id="inspector-heading">Character inspector</h2><p>Omniscient operator telemetry</p></div>
+      <div><h2 id="inspector-heading">Operator inspector</h2><p>Omniscient live character and physical-object telemetry</p></div>
     </header>
+    <form class="object-picker" method="post" action="/ui/view" data-ui-targets="#world-panel,#inspector-panel" data-ui-remove-query="object">
+      <label for="selected-object">Physical object</label>
+      <select id="selected-object" name="selected_object" {% if not object_options and not selected_object %}disabled{% endif %}>
+        <option value="" {% if not session.selected_object_id %}selected{% endif %}>Not inspecting an object</option>
+        {% if selected_object and selected_object.id not in object_option_ids %}
+          <option value="{{ selected_object.id }}" selected>{{ selected_object.name }} ({{ selected_object.id }}) · outside current room</option>
+        {% endif %}
+        {% for object in object_options %}
+          <option value="{{ object.id }}" {% if object.id == session.selected_object_id %}selected{% endif %}>{{ object.name }} ({{ object.id }}) · {{ object.classification }} · {{ object.state_summary }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="selected_object_present" value="yes">
+      <input type="hidden" name="view_level" value="{{ session.view_level }}">
+      {% if session.live_refresh %}<input type="hidden" name="live_refresh" value="on">{% endif %}
+      <button type="submit" {% if not object_options and not selected_object %}disabled{% endif %}>Inspect object</button>
+    </form>
+    <section id="operator-object-inspector" class="object-inspector" aria-labelledby="object-inspector-heading">
+      <h3 id="object-inspector-heading">Physical object</h3>
+      {% if selected_object %}
+        {% set physical = selected_object.get("physical") %}
+        <p class="status-chip object-status">
+          {{ selected_object.classification|title }}
+          {% if physical %} · {{ selected_object.state_summary }}{% endif %}
+        </p>
+        <dl class="facts object-facts">
+          <div><dt>Name</dt><dd>{{ selected_object.name }}</dd></div>
+          <div><dt>Object ID</dt><dd><code>{{ selected_object.id }}</code></dd></div>
+          <div><dt>Definition</dt><dd><code>{{ selected_object.get("definition_id") or "legacy runtime object" }}</code></dd></div>
+          <div><dt>Kind</dt><dd>{{ selected_object.get("kind", "physical") }}</dd></div>
+          <div><dt>Room</dt><dd>{{ selected_object.get("room_id") or (physical.get("pose", {}).get("room_id") if physical else "—") }}</dd></div>
+          <div><dt>Legacy position</dt><dd>{% if selected_object.get("position") %}({{ selected_object.position.x }}, {{ selected_object.position.y }}){% else %}—{% endif %}</dd></div>
+          {% if physical %}
+            {% set pose = physical.get("pose", {}) %}
+            {% set anchor = pose.get("anchor", {}) %}
+            {% set obstruction = physical.get("obstruction", {}) %}
+            {% set intrinsics = physical.get("intrinsics") or {} %}
+            {% set relation = physical.get("parent_relation") %}
+            {% set openable = physical.get("openable") %}
+            <div><dt>Physical pose</dt><dd>anchor ({{ anchor.get("x", "—") }}, {{ anchor.get("y", "—") }}) microcells · {{ pose.get("orientation", "—") }}</dd></div>
+            <div><dt>Occupied cells</dt><dd>{{ selected_object.occupied_cells_summary }}</dd></div>
+            <div><dt>Rendered footprint</dt><dd>{{ selected_object.footprint_summary }}</dd></div>
+            <div><dt>Semantic size</dt><dd>
+              {% set dimensions = intrinsics.get("dimensions_cm") %}
+              {% if dimensions %}
+                {{ dimensions.get("length_cm") }} × {{ dimensions.get("width_cm") }} × {{ dimensions.get("height_cm") }} cm
+              {% else %}unknown dimensions{% endif %}
+              · {{ intrinsics.get("size_class") or "unknown class" }}
+            </dd></div>
+            <div><dt>Mass</dt><dd>{{ intrinsics.get("mass_kg") if intrinsics.get("mass_kg") is not none else "unknown" }}{% if intrinsics.get("mass_kg") is not none %} kg{% endif %}</dd></div>
+            <div><dt>Obstruction</dt><dd>movement {{ obstruction.get("movement", "—") }} · vision {{ obstruction.get("vision", "—") }} · hearing {{ obstruction.get("hearing", "—") }} · smell {{ obstruction.get("smell", "—") }}</dd></div>
+            <div><dt>Capabilities</dt><dd>{{ selected_object.capability_labels|join(", ") or "none" }}</dd></div>
+            <div><dt>Open state</dt><dd>{{ selected_object.open_state }}{% if openable %} · {{ selected_object.lock_state }}{% endif %}</dd></div>
+            <div><dt>Relation</dt><dd>{% if relation %}{{ relation.kind }} · parent {{ relation.parent_id }}{% if relation.slot_id %} · slot {{ relation.slot_id }}{% endif %}{% else %}none{% endif %}</dd></div>
+            <div><dt>Custody</dt><dd>{{ physical.get("custodian_id") or "none" }}</dd></div>
+            <div><dt>Held by</dt><dd>{{ physical.get("held_by") or "nobody" }}</dd></div>
+            <div><dt>Spatial index</dt><dd>{{ "indexed" if physical.get("spatial_indexed") else "not indexed" }}</dd></div>
+          {% endif %}
+        </dl>
+        {% if selected_object.links %}
+          <section class="inspector-section">
+            <h4>Door links</h4>
+            <ul>
+              {% for link in selected_object.links %}
+                <li>{{ link.label }} · {{ link.kind }} · door object <code>{{ link.door_object_id }}</code>{% if link.coordinate %} at ({{ link.coordinate.x }}, {{ link.coordinate.y }}){% endif %}{% if link.available is defined %} · {{ "available" if link.available else "unavailable" }}{% endif %}</li>
+              {% endfor %}
+            </ul>
+          </section>
+        {% endif %}
+        {% if physical %}
+          <section class="inspector-section">
+            <h4>Slots and occupancy</h4>
+            <ul>
+              {% for slot in physical.get("slots", []) %}
+                <li>
+                  <strong>{{ slot.id }}</strong> · capacity {{ slot.capacity }} · accepts {{ slot.accepted_relations|join(", ") }}
+                  {% if slot.occupancy %}
+                    · occupied {{ slot.occupancy.count }} · remaining {{ slot.occupancy.remaining_capacity }}
+                    {% if slot.occupancy.entity_ids %} · {{ slot.occupancy.entity_ids|join(", ") }}{% endif %}
+                  {% else %}
+                    · occupancy unavailable
+                  {% endif %}
+                </li>
+              {% else %}
+                <li>No occupancy slots</li>
+              {% endfor %}
+            </ul>
+          </section>
+          <section class="inspector-section">
+            <h4>Current interactions</h4>
+            <ul>
+              {% for interaction in selected_object.interaction_states %}
+                <li>{{ interaction.agent_id }} · {{ interaction.phase }} · {{ interaction.verb }} · {{ interaction.status }}{% if interaction.slot_id %} · slot {{ interaction.slot_id }}{% endif %}{% if interaction.action_name %} · {{ interaction.action_name }}{% endif %}{% if interaction.action_id %} ({{ interaction.action_id }}){% endif %}</li>
+              {% else %}
+                <li>No active interaction targets this object</li>
+              {% endfor %}
+            </ul>
+          </section>
+        {% endif %}
+      {% else %}
+        <p class="empty-state">{% if object_options %}Not inspecting a physical object. Select one from the room map or list.{% else %}No physical objects are rendered in the current room.{% endif %}</p>
+      {% endif %}
+    </section>
     <form class="agent-picker" method="post" action="/ui/view" data-ui-targets="#world-panel,#inspector-panel" data-ui-remove-query="selected">
       <label for="selected-agent">Character</label>
       <select id="selected-agent" name="selected_agent" {% if not agents %}disabled{% endif %}>
@@ -382,6 +564,18 @@
         <div><dt>Destination</dt><dd>{{ destination(selected_agent) }}</dd></div>
         <div><dt>Memories</dt><dd>{{ selected_agent.get("memory", {}).get("count", 0) }}</dd></div>
         <div><dt>Visible now</dt><dd>{{ selected_agent.get("perception", {}).get("visible_now", [])|join(", ") or "nobody" }}</dd></div>
+        {% set base_senses = selected_agent.get("base_senses", {}) %}
+        {% set senses = selected_agent.get("effective_senses", {}) %}
+        <div><dt>Base senses</dt><dd>vision {{ base_senses.get("vision_range", "—") }} · recognition {{ base_senses.get("recognition_range", "—") }} · hearing {{ base_senses.get("hearing_range", "—") }} · smell {{ base_senses.get("smell_range", "—") }}</dd></div>
+        <div><dt>Effective senses</dt><dd>vision {{ senses.get("vision_range", "—") }} · recognition {{ senses.get("recognition_range", "—") }} · hearing {{ senses.get("hearing_range", "—") }} · smell {{ senses.get("smell_range", "—") }}</dd></div>
+        {% set load = selected_agent.get("carried_load", {}) %}
+        <div><dt>Carried load</dt><dd>{{ load.get("known_mass_kg", 0) }} kg known / {{ load.get("max_carried_mass_kg", "—") }} kg limit{% if load.get("unknown_mass_object_ids") %} · unknown: {{ load.get("unknown_mass_object_ids")|join(", ") }}{% endif %}</dd></div>
+        <div><dt>Equipment</dt><dd>
+          {% set equipment = selected_agent.get("equipment", {}) %}
+          {% if equipment %}
+            {% for slot, objects in equipment.items() %}{{ slot }}: {{ objects|join(", ") }}{% if not loop.last %} · {% endif %}{% endfor %}
+          {% else %}none{% endif %}
+        </dd></div>
         </dl>
         <section class="inspector-section">
         <h3>Possessions</h3>

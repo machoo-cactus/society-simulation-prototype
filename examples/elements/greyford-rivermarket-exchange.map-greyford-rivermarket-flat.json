@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "a1946e29084ba8d6638b8197268ae9f0284e0759e4c7951ed22d27186a24e9ad",
+        "content_hash": "cd80264a279889e32db469abf5edabeaed4dbf8e0b942274bff2eb2a60630162",
         "id": "greyford-rivermarket-exchange.station-greyford-rivermarket-flat-sofa",
         "kind": "object"
       },
       "id": "station-greyford-rivermarket-flat-sofa",
       "key": "station-greyford-rivermarket-flat-sofa",
+      "placement": {
+        "anchor": {
+          "x": 22,
+          "y": 22
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 2,
         "y": 2
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 6,
   "zones": [
     {

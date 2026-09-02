@@ -4,18 +4,29 @@ import re
 from dataclasses import dataclass
 
 from stage0_sim.domain.components import (
+    STANDING_CHARACTER_FOOTPRINT,
     ActivityComponent,
+    CarriedLoadComponent,
+    CharacterEmbodimentComponent,
+    CharacterHandStateComponent,
+    CharacterPostureComponent,
     CharacterProfileComponent,
     CharacterSituationComponent,
     ControllerComponent,
     ConversationComponent,
     DriveComponent,
+    EffectiveSensesComponent,
+    EquipmentStateComponent,
     MovementComponent,
     NpcComponent,
     PerceptionComponent,
+    PhysicalPose,
+    PhysicalStateComponent,
     PlanComponent,
     PositionComponent,
     SensesComponent,
+    SpatialIndex,
+    SpatialIndexEntry,
     SpatialLocationComponent,
     TransactionRequestComponent,
 )
@@ -28,7 +39,7 @@ from stage0_sim.domain.npcs import (
     NpcStaffingState,
 )
 from stage0_sim.domain.systems import SystemContext
-from stage0_sim.domain.world import SpatialScale, WorldLocation
+from stage0_sim.domain.world import MovementObstruction, SpatialScale, WorldLocation
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +210,21 @@ def _materialize_npc(
                 )
             ),
         )
+    if assignment.place_id is not None and registry.has_resource(SpatialIndex):
+        state = PhysicalStateComponent(
+            pose=PhysicalPose(
+                assignment.place_id,
+                assignment.staff_position,
+            ),
+            footprint=STANDING_CHARACTER_FOOTPRINT,
+            movement_obstruction=MovementObstruction.HARD,
+        )
+        registry.get_resource(SpatialIndex).add(
+            SpatialIndexEntry(npc_id, state, dynamic=True)
+        )
+        registry.add_component(npc_id, state)
+        registry.add_component(npc_id, CharacterHandStateComponent())
+        registry.add_component(npc_id, CharacterPostureComponent())
     registry.add_component(npc_id, MovementComponent())
     registry.add_component(npc_id, ActivityComponent())
     registry.add_component(npc_id, DriveComponent())
@@ -215,9 +241,22 @@ def _materialize_npc(
         SensesComponent(
             vision_range=role.vision_range,
             recognition_range=role.recognition_range,
-            hearing_multiplier=role.hearing_multiplier,
+            hearing_range=role.hearing_range,
+            smell_range=role.smell_range,
         ),
     )
+    registry.add_component(
+        npc_id,
+        EffectiveSensesComponent(
+            vision_range=role.vision_range,
+            recognition_range=role.recognition_range,
+            hearing_range=role.hearing_range,
+            smell_range=role.smell_range,
+        ),
+    )
+    registry.add_component(npc_id, CharacterEmbodimentComponent())
+    registry.add_component(npc_id, EquipmentStateComponent())
+    registry.add_component(npc_id, CarriedLoadComponent())
     registry.add_component(npc_id, PerceptionComponent())
     registry.add_component(npc_id, ConversationComponent())
 
@@ -226,6 +265,23 @@ def _blocking_entity(
     context: SystemContext,
     assignment: NpcStaffingAssignment,
 ) -> str | None:
+    if (
+        assignment.place_id is not None
+        and context.registry.has_resource(SpatialIndex)
+    ):
+        state = PhysicalStateComponent(
+            pose=PhysicalPose(
+                assignment.place_id,
+                assignment.staff_position,
+            ),
+            footprint=STANDING_CHARACTER_FOOTPRINT,
+            movement_obstruction=MovementObstruction.HARD,
+        )
+        blockers = context.registry.get_resource(
+            SpatialIndex
+        ).blocking_entities(state)
+        if blockers:
+            return blockers[0]
     for entity_id, position in context.registry.query(PositionComponent):
         if position.coordinate != assignment.staff_position:
             continue

@@ -29,6 +29,7 @@ class OperatorSession:
     character_assignments: dict[str, str] = field(default_factory=dict)
     run_id: str | None = None
     selected_agent_id: str | None = None
+    selected_object_id: str | None = None
     view_level: str = "auto"
     follow_selected: bool = False
     zoom: float = 1.0
@@ -47,7 +48,7 @@ class OperatorSession:
     event_start_index: int = 0
     selected_data_run_ids: tuple[str, ...] = ()
     selected_data_filters: PersistedRunFilter | None = None
-    include_private_derived: bool = True
+    include_private_derived: bool = False
     pending_run_deletion: PendingRunDeletion | None = None
     message: str = ""
     error: str = ""
@@ -88,6 +89,7 @@ class OperatorSessionStore:
             if session.run_id in deleted:
                 session.run_id = None
                 session.selected_agent_id = None
+                session.selected_object_id = None
                 session.follow_selected = False
             pending = session.pending_run_deletion
             if pending is not None and deleted.intersection(pending.run_ids):

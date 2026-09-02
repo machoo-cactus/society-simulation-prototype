@@ -82,6 +82,7 @@ def test_library_filters_kinds_and_rejects_wrong_kind(tmp_path: Path) -> None:
                 "id": "checkout",
                 "name": "Checkout",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "transaction",
                 "offers": [
                     {
@@ -122,6 +123,7 @@ def test_library_blocks_deleting_or_renaming_referenced_elements(
                 "id": "checkout",
                 "name": "Checkout",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "transaction",
                 "offers": [
                     {
@@ -159,6 +161,10 @@ def test_library_blocks_deleting_or_renaming_referenced_elements(
                             element_content_hash(checkout),
                         ),
                         "position": {"x": 2, "y": 2},
+                        "placement": {
+                            "anchor": {"x": 22, "y": 22},
+                            "parent_relation": {"kind": "ON_FLOOR"},
+                        },
                         "staff_position": {"x": 2, "y": 1},
                     }
                 ],
@@ -221,6 +227,21 @@ def test_element_files_are_deterministic_and_newline_terminated(
     assert first == second
     assert first.endswith(b"\n")
     assert not tuple(tmp_path.glob(".*.tmp"))
+
+
+def test_element_library_rejects_legacy_content_with_migration_command(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "old-role.json").write_text(
+        '{"schema_version":1,"id":"old-role","name":"Old Role",'
+        '"kind":"npc_role"}',
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ElementLibraryError,
+        match="stage0-sim migrate content",
+    ):
+        FileSystemElementLibrary(tmp_path).get("old-role")
 
 
 def test_element_api_exposes_crud_filters_and_conflicts(

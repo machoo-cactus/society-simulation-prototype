@@ -16,6 +16,7 @@ from stage0_sim.application.data_capture import (
     DatasetRecordFilter,
     RecordCategory,
     RecordVisibility,
+    RunnerPhase,
 )
 from stage0_sim.application.element_library import ElementLibrary
 from stage0_sim.application.elements import ScenarioSourceDefinition
@@ -25,7 +26,7 @@ from stage0_sim.application.manager import (
     SimulationManager,
     SimulationNotFoundError,
 )
-from stage0_sim.application.runner import RunnerStatus
+from stage0_sim.application.runner import RunnerStatus, SimulationRunner
 from stage0_sim.application.scenario_resolution import (
     ScenarioResolutionError,
     resolve_scenario,
@@ -33,18 +34,23 @@ from stage0_sim.application.scenario_resolution import (
 from stage0_sim.application.telemetry import (
     TELEMETRY_SCHEMA_VERSION,
     build_agent_snapshot,
+    build_physical_room_snapshot,
     build_ui_bootstrap,
+    build_world_object_snapshot,
     build_world_snapshot,
 )
-from stage0_sim.domain.components import TransactionRequestComponent
+from stage0_sim.domain.components import (
+    PhysicalObjectIdentityComponent,
+    TransactionRequestComponent,
+)
 from stage0_sim.domain.economy import (
     TransactionPoint,
     TransactionPointRegistry,
 )
 from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
-from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.events import JsonValue, event_payload_is_private
 from stage0_sim.domain.npcs import NpcControlMode, NpcPoolRegistry
-from stage0_sim.domain.world import CityWorld, Room
+from stage0_sim.domain.world import CityWorld, Room, WorldMap
 
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 router.include_router(persisted_data_router)
@@ -118,6 +124,15 @@ class DatasetQueryParameters(BaseModel):
     operator_intervention_id: str | None = None
     status: str | None = None
     outcome: str | None = None
+    object_id: str | None = None
+    room_id: str | None = None
+    parent_id: str | None = None
+    relation_kind: str | None = None
+    phase: RunnerPhase | None = None
+    is_open: bool | None = None
+    is_locked: bool | None = None
+    interaction_verb: str | None = None
+    interaction_type: str | None = None
     include_private: bool = False
     cursor: str | None = None
     limit: int = Field(default=100, ge=1, le=1000)
@@ -179,6 +194,15 @@ class DatasetQueryParameters(BaseModel):
             operator_intervention_id=self.operator_intervention_id,
             status=self.status,
             outcome=self.outcome,
+            object_id=self.object_id,
+            room_id=self.room_id,
+            parent_id=self.parent_id,
+            relation_kind=self.relation_kind,
+            phase=self.phase,
+            is_open=self.is_open,
+            is_locked=self.is_locked,
+            interaction_verb=self.interaction_verb,
+            interaction_type=self.interaction_type,
             include_private=self.include_private,
             cursor=self.cursor,
             limit=self.limit,
@@ -358,8 +382,8 @@ async def get_building_world(
             ],
             "rooms": [
                 _room_runtime_payload(
+                    managed.runner,
                     room,
-                    city,
                     point_states,
                     pool,
                     queued_requests,
@@ -485,21 +509,25 @@ async def get_room_world(
         room = city.room(room_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return {
-        "run_id": run_id,
-        "room": {
-            "id": room.id,
-            "key": room.key,
-            "name": room.name,
-            "type": room.room_type,
-            "building_id": room.building_id,
-            "offset": room.offset.to_payload(),
-            "map": {
-                "width": room.world.grid.width,
-                "height": room.world.grid.height,
+    physical = build_physical_room_snapshot(managed.runner, room.id)
+    room_payload: dict[str, object] = {
+        "id": room.id,
+        "key": room.key,
+        "name": room.name,
+        "type": room.room_type,
+        "building_id": room.building_id,
+        "offset": room.world.to_legacy_coordinate(
+            room.offset
+        ).to_payload(),
+        "spatial": physical["spatial"],
+        "map": {
+                "width": room.world.legacy_dimensions()[0],
+                "height": room.world.legacy_dimensions()[1],
                 "blocked": [
                     coordinate.to_payload()
-                    for coordinate in sorted(room.world.grid.blocked)
+                    for coordinate in room.world.legacy_coordinates(
+                        room.world.grid.blocked
+                    )
                 ],
                 "zones": [
                     {
@@ -508,39 +536,21 @@ async def get_room_world(
                         "type": zone.zone_type,
                         "tiles": [
                             coordinate.to_payload()
-                            for coordinate in sorted(zone.tiles)
+                            for coordinate in room.world.legacy_coordinates(
+                                zone.tiles
+                            )
                         ],
                     }
                     for zone in room.world.zones
                 ],
             },
-            "objects": [
-                {
-                    "id": item.id,
-                    "name": item.name,
-                    "kind": item.object_kind,
-                    "position": item.position.to_payload(),
-                    "supported_actions": (
-                        list(item.station.supported_actions)
-                        if item.station is not None
-                        else []
-                    ),
-                    "offers": (
-                        [
-                            {
-                                "id": offer.id,
-                                "name": offer.name,
-                            }
-                            for offer in item.transaction_point.offers
-                        ]
-                        if item.transaction_point is not None
-                        else []
-                    ),
-                }
-                for item in city.objects
-                if item.room_id == room.id
-            ],
-        },
+        "object_ids": physical["object_ids"],
+        "indexed_entity_ids": physical["indexed_entity_ids"],
+        "objects": physical["objects"],
+    }
+    return {
+        "run_id": run_id,
+        "room": room_payload,
     }
 
 
@@ -554,46 +564,10 @@ async def get_world_object(
     registry = managed.runner.registry
     if not registry.has_resource(CityWorld):
         raise HTTPException(status_code=404, detail="run has no city world")
-    city = registry.get_resource(CityWorld)
-    try:
-        item = city.world_object(object_id)
-    except KeyError as error:
+    object_payload = build_world_object_snapshot(managed.runner, object_id)
+    if object_payload is None:
+        error = KeyError(f"unknown world object: {object_id}")
         raise HTTPException(status_code=404, detail=str(error)) from error
-    station_payload: dict[str, object] | None = None
-    if item.station is not None:
-        station_payload = {
-            "supported_actions": list(item.station.supported_actions),
-            "available": item.station.available,
-            "capacity": item.station.capacity,
-        }
-    transaction_payload: dict[str, object] | None = None
-    if item.transaction_point is not None:
-        transaction_payload = {
-            "available": item.transaction_point.available,
-            "capacity": item.transaction_point.capacity,
-            "operation": item.transaction_point.operation.value,
-            "staffing": _transaction_staffing_payload(
-                item.transaction_point
-            ),
-            "offers": [
-                {
-                    "id": offer.id,
-                    "name": offer.name,
-                    "duration": offer.duration,
-                }
-                for offer in item.transaction_point.offers
-            ],
-        }
-    object_payload: dict[str, object] = {
-        "id": item.id,
-        "name": item.name,
-        "kind": item.object_kind,
-        "building_id": item.building_id,
-        "room_id": item.room_id,
-        "position": item.position.to_payload(),
-        "station": station_payload,
-        "transaction_point": transaction_payload,
-    }
     return {
         "run_id": run_id,
         "object": object_payload,
@@ -602,41 +576,52 @@ async def get_world_object(
 
 def _transaction_staffing_payload(
     point: TransactionPoint,
+    world: WorldMap | None = None,
 ) -> dict[str, object] | None:
     if point.staffing is None:
         return None
     return {
         "role_id": point.staffing.role_id,
-        "staff_position": point.staffing.staff_position.to_payload(),
+        "staff_position": (
+            world.to_legacy_coordinate(
+                point.staffing.staff_position
+            ).to_payload()
+            if world is not None
+            else point.staffing.staff_position.to_payload()
+        ),
         "request_timeout": point.staffing.request_timeout,
     }
 
 
 def _room_runtime_payload(
+    runner: SimulationRunner,
     room: Room,
-    city: CityWorld,
     point_states: TransactionPointRegistry,
     pool: NpcPoolRegistry | None,
     queued_requests: dict[str, int],
     availability_registry: EnvironmentAvailabilityRegistry | None,
 ) -> dict[str, object]:
     world = room.world
+    physical = build_physical_room_snapshot(runner, room.id)
     return {
         "id": room.id,
         "key": room.key,
         "name": room.name,
         "type": room.room_type,
         "building_id": room.building_id,
-        "offset": room.offset.to_payload(),
-        "object_ids": [
-            item.id for item in city.objects if item.room_id == room.id
-        ],
+        "offset": world.to_legacy_coordinate(room.offset).to_payload(),
+        "spatial": physical["spatial"],
+        "object_ids": physical["object_ids"],
+        "indexed_entity_ids": physical["indexed_entity_ids"],
+        "objects": physical["objects"],
         "map": {
-            "width": world.grid.width,
-            "height": world.grid.height,
+            "width": world.legacy_dimensions()[0],
+            "height": world.legacy_dimensions()[1],
             "blocked": [
                 coordinate.to_payload()
-                for coordinate in sorted(world.grid.blocked)
+                for coordinate in world.legacy_coordinates(
+                    world.grid.blocked
+                )
             ],
             "zones": [
                 {
@@ -645,7 +630,7 @@ def _room_runtime_payload(
                     "type": zone.zone_type,
                     "tiles": [
                         coordinate.to_payload()
-                        for coordinate in sorted(zone.tiles)
+                        for coordinate in world.legacy_coordinates(zone.tiles)
                     ],
                 }
                 for zone in world.zones
@@ -654,7 +639,9 @@ def _room_runtime_payload(
                 {
                     "id": station.id,
                     "name": station.name,
-                    "position": station.position.to_payload(),
+                    "position": world.to_legacy_coordinate(
+                        station.position
+                    ).to_payload(),
                     "actions": list(station.supported_actions),
                     "available": station.available,
                     "capacity": station.capacity,
@@ -665,11 +652,13 @@ def _room_runtime_payload(
                 {
                     "id": point.id,
                     "name": point.name,
-                    "position": point.position.to_payload(),
+                    "position": world.to_legacy_coordinate(
+                        point.position
+                    ).to_payload(),
                     "available": point.available,
                     "capacity": point.capacity,
                     "operation": point.operation.value,
-                    "staffing": _transaction_staffing_payload(point),
+                    "staffing": _transaction_staffing_payload(point, world),
                     "runtime": {
                         "holdings": dict(
                             sorted(
@@ -882,7 +871,13 @@ async def get_agent(
     request: Request,
 ) -> dict[str, object]:
     managed = _managed_run(get_manager(request), run_id)
-    if agent_id not in managed.runner.registry.entities():
+    if (
+        agent_id not in managed.runner.registry.entities()
+        or managed.runner.registry.has_component(
+            agent_id,
+            PhysicalObjectIdentityComponent,
+        )
+    ):
         raise HTTPException(status_code=404, detail=f"unknown agent: {agent_id}")
     return {
         "run_id": run_id,
@@ -897,7 +892,13 @@ async def get_agent_spatial_context(
     request: Request,
 ) -> dict[str, object]:
     managed = _managed_run(get_manager(request), run_id)
-    if agent_id not in managed.runner.registry.entities():
+    if (
+        agent_id not in managed.runner.registry.entities()
+        or managed.runner.registry.has_component(
+            agent_id,
+            PhysicalObjectIdentityComponent,
+        )
+    ):
         raise HTTPException(status_code=404, detail=f"unknown agent: {agent_id}")
     agent = build_agent_snapshot(managed.runner, agent_id)
     return {
@@ -940,6 +941,7 @@ async def get_events(
     request: Request,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    include_private: bool = False,
 ) -> dict[str, object]:
     manager = get_manager(request)
     try:
@@ -952,6 +954,7 @@ async def get_events(
                 run_id,
                 offset=offset,
                 limit=limit,
+                include_private=include_private,
             )
         except KeyError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
@@ -961,7 +964,11 @@ async def get_events(
             "next_offset": offset + len(persisted),
             "total": total,
         }
-    events = managed.runner.events.events
+    events = tuple(
+        event
+        for event in managed.runner.events.events
+        if include_private or not event_payload_is_private(event.payload)
+    )
     page = events[offset : offset + limit]
     return {
         "events": [event.to_dict() for event in page],
@@ -975,10 +982,14 @@ async def get_events(
 async def get_dataset_summary(
     run_id: str,
     request: Request,
+    include_private: bool = False,
 ) -> dict[str, JsonValue]:
     manager = get_manager(request)
     try:
-        return manager.dataset_store.summary(run_id)
+        return manager.dataset_store.summary(
+            run_id,
+            include_private=include_private,
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -987,10 +998,14 @@ async def get_dataset_summary(
 async def get_dataset_schema(
     run_id: str,
     request: Request,
+    include_private: bool = False,
 ) -> dict[str, JsonValue]:
     manager = get_manager(request)
     try:
-        return manager.data_query.schema(run_id)
+        return manager.data_query.schema(
+            run_id,
+            include_private=include_private,
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -1041,6 +1056,15 @@ async def get_dataset_records(
         operator_intervention_id=dataset_filter.operator_intervention_id,
         status=dataset_filter.status,
         outcome=dataset_filter.outcome,
+        object_id=dataset_filter.object_id,
+        room_id=dataset_filter.room_id,
+        parent_id=dataset_filter.parent_id,
+        relation_kind=dataset_filter.relation_kind,
+        phase=dataset_filter.phase,
+        is_open=dataset_filter.is_open,
+        is_locked=dataset_filter.is_locked,
+        interaction_verb=dataset_filter.interaction_verb,
+        interaction_type=dataset_filter.interaction_type,
         include_private=dataset_filter.include_private,
         after_sequence=after_sequence,
         limit=dataset_filter.limit,
@@ -1105,6 +1129,34 @@ async def get_dataset_state(
         raise HTTPException(status_code=422, detail="kind must be sample or delta")
     table = "state_samples" if kind == "sample" else "state_deltas"
     return _query_table_response(request, run_id, table, query)
+
+
+@router.get("/runs/{run_id}/data/physical-object-states")
+async def get_dataset_physical_object_states(
+    run_id: str,
+    request: Request,
+    query: Annotated[DatasetQueryParameters, Query()],
+) -> dict[str, object]:
+    return _query_table_response(
+        request,
+        run_id,
+        "physical_object_states",
+        query,
+    )
+
+
+@router.get("/runs/{run_id}/data/physical-relations")
+async def get_dataset_physical_relations(
+    run_id: str,
+    request: Request,
+    query: Annotated[DatasetQueryParameters, Query()],
+) -> dict[str, object]:
+    return _query_table_response(
+        request,
+        run_id,
+        "physical_relation_samples",
+        query,
+    )
 
 
 @router.get("/runs/{run_id}/data/transitions")
@@ -1247,7 +1299,12 @@ async def export_complete_dataset(
         lines(),
         media_type="application/x-ndjson",
         headers={
-            "Content-Disposition": f'attachment; filename="{run_id}.jsonl"'
+            "Content-Disposition": f'attachment; filename="{run_id}.jsonl"',
+            "X-Stage0-Private-Included": "true",
+            "X-Stage0-Privacy-Warning": (
+                "Complete export includes PRIVATE_RESEARCH data; keep it "
+                "restricted."
+            ),
         },
     )
 
@@ -1268,6 +1325,11 @@ async def export_filtered_records(
                 status_code=422,
                 detail="raw record cursor must be an integer",
             ) from error
+        if after_sequence < 0:
+            raise HTTPException(
+                status_code=422,
+                detail="raw record cursor must not be negative",
+            )
     filters = DatasetRecordFilter(
         record_type=dataset_filter.record_type,
         category=dataset_filter.category,
@@ -1293,6 +1355,15 @@ async def export_filtered_records(
         operator_intervention_id=dataset_filter.operator_intervention_id,
         status=dataset_filter.status,
         outcome=dataset_filter.outcome,
+        object_id=dataset_filter.object_id,
+        room_id=dataset_filter.room_id,
+        parent_id=dataset_filter.parent_id,
+        relation_kind=dataset_filter.relation_kind,
+        phase=dataset_filter.phase,
+        is_open=dataset_filter.is_open,
+        is_locked=dataset_filter.is_locked,
+        interaction_verb=dataset_filter.interaction_verb,
+        interaction_type=dataset_filter.interaction_type,
         include_private=dataset_filter.include_private,
         after_sequence=after_sequence,
         limit=1000,
@@ -1314,6 +1385,12 @@ async def export_filtered_records(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Stage0-Private-Included": str(query.include_private).lower(),
+            "X-Stage0-Privacy-Warning": (
+                "Filtered export includes PRIVATE_RESEARCH data; keep it "
+                "restricted."
+                if query.include_private
+                else "Private research data excluded."
+            ),
         },
     )
 
@@ -1364,6 +1441,12 @@ async def export_analysis_bundle(
         filename=filename,
         headers={
             "X-Stage0-Private-Included": str(query.include_private).lower(),
+            "X-Stage0-Privacy-Warning": (
+                "Analysis bundle includes PRIVATE_RESEARCH data; keep it "
+                "restricted."
+                if query.include_private
+                else "Private research data excluded."
+            ),
         },
         background=BackgroundTask(os.unlink, temporary_path),
     )

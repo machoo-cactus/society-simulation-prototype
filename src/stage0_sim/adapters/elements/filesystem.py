@@ -22,6 +22,7 @@ from stage0_sim.application.elements import (
     ScenarioElementDefinition,
     element_content_hash,
 )
+from stage0_sim.application.migrations.constants import ELEMENT_SCHEMA_VERSION
 
 
 class FileSystemElementLibrary:
@@ -166,6 +167,14 @@ class FileSystemElementLibrary:
             raise ElementLibraryError(
                 f"element {element_id} is not valid JSON: {error}"
             ) from error
+        if (
+            not isinstance(raw, dict)
+            or raw.get("schema_version") != ELEMENT_SCHEMA_VERSION
+        ):
+            raise ElementLibraryError(
+                f"element {element_id} requires schema version "
+                f"{ELEMENT_SCHEMA_VERSION}; run 'stage0-sim migrate content'"
+            )
         try:
             element = SCENARIO_ELEMENT_ADAPTER.validate_python(raw)
         except ValidationError as error:

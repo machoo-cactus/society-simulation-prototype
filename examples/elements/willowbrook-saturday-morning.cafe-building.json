@@ -1,0 +1,39 @@
+{
+  "available": true,
+  "description": "A neighborhood cafe with a staffed counter and several seating choices.",
+  "entrances": [
+    {
+      "door_object_id": "willowbrook-saturday-morning.exterior-door",
+      "id": "entrance-willowbrook-cafe-front",
+      "key": "front",
+      "local_coordinate": {
+        "x": 0,
+        "y": 4
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "willowbrook-saturday-morning.cafe-building",
+  "kind": "building",
+  "name": "Corner Cup Cafe",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "634ad58fa6aa04b7289d72620aafe2e7e4f0ccb96f7b1e4e5c13198fe9300a69",
+        "id": "willowbrook-saturday-morning.cafe-room",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 3
+}

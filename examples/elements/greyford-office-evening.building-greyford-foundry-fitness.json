@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-foundry-fitness-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "f547a8be9a75c30b6caa47b16ceb30a3a8e9814fce2c51347c59777200f46826",
+        "content_hash": "ab84ea4f448b855d815079805d97c201ed713bffe33049e8e785afff5cc4e375",
         "id": "greyford-office-evening.map-greyford-foundry-fitness",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

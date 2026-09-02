@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-city-hall-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "8eef2e8c9dfa277f15f5a5242079bc386f9fcdbae85a821af2f66f80a613d245",
+        "content_hash": "f817022036c9c23d7e81709708e350dfde04a8ef65f33f96028caab1081e3a8a",
         "id": "greyford-office-evening.map-greyford-city-hall",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

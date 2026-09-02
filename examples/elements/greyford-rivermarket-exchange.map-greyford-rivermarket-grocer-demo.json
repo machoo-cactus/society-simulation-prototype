@@ -41,12 +41,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "859e73f6c7bdd906a016b64eb78383abd2850b8e17253db81c4bfb10ee8cb304",
+        "content_hash": "d22a9559c81b597ad16744a2329013bfdc63e139d6de16ad6a033781d497ce5c",
         "id": "greyford-rivermarket-exchange.station-greyford-rivermarket-grocer-browse",
         "kind": "object"
       },
       "id": "station-greyford-rivermarket-grocer-browse",
       "key": "station-greyford-rivermarket-grocer-browse",
+      "placement": {
+        "anchor": {
+          "x": 49,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 5,
         "y": 3
@@ -55,12 +67,24 @@
     },
     {
       "element": {
-        "content_hash": "1e9900bbfac56fb74ecbdc37bc1fdf4d51232363ade113f8f7a59d8343aad846",
+        "content_hash": "7313db6048c9b1b0b4d958a92694669689c3f84115d6bb8595a432092b6edff5",
         "id": "greyford-rivermarket-exchange.transaction-point-greyford-rivermarket-checkout",
         "kind": "object"
       },
       "id": "transaction-point-greyford-rivermarket-checkout",
       "key": "transaction-point-greyford-rivermarket-checkout",
+      "placement": {
+        "anchor": {
+          "x": 76,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 8,
         "y": 3
@@ -72,7 +96,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 10,
   "zones": [
     {

@@ -23,9 +23,18 @@ from stage0_sim.application.elements import (
     BuildingElementDefinition,
     CityWorldSourceDefinition,
     ElementKind,
+    ObjectElementDefinition,
+    ObjectPlacementDefinition,
+    RoomElementDefinition,
+    RoomPlacementDefinition,
     ScenarioSourceDefinition,
+    derive_instance_id,
+    element_content_hash,
 )
-from stage0_sim.application.scenario import CityWorldDefinition
+from stage0_sim.application.scenario import (
+    CityWorldDefinition,
+    WorldObjectDefinition,
+)
 from stage0_sim.application.scenario_resolution import (
     ScenarioResolutionError,
     resolve_scenario,
@@ -46,11 +55,22 @@ class EditorWorldItem:
 class EditorWorldPresentation:
     world_node: ScenarioEditorNode
     selected_node: ScenarioEditorNode | None
+    selected_item: EditorWorldItem | None
     scope_node: ScenarioEditorNode | None
     view: dict[str, Any] | None
     groups: tuple[tuple[str, str, str, tuple[EditorWorldItem, ...]], ...]
     breadcrumbs: tuple[tuple[str, str], ...]
     decode_issues: tuple[tuple[str, str], ...]
+    preview_issues: tuple[str, ...] = ()
+    read_only_inspector: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _BuildingPreview:
+    view: dict[str, Any] | None
+    groups: tuple[tuple[str, str, str, tuple[EditorWorldItem, ...]], ...]
+    inspectors: dict[str, dict[str, Any]]
+    issues: tuple[str, ...] = ()
 
 
 def build_editor_world(
@@ -75,6 +95,7 @@ def build_editor_world(
         return EditorWorldPresentation(
             world_node=world_node,
             selected_node=selected,
+            selected_item=None,
             scope_node=None,
             view=None,
             groups=_groups(
@@ -107,14 +128,17 @@ def build_editor_world(
                 element_library,
             )
             if preview is not None:
-                view, groups = preview
                 zone_node, zone_value, building_node, building_value = scoped_building
                 return EditorWorldPresentation(
                     world_node=world_node,
                     selected_node=selected,
+                    selected_item=_selected_item(
+                        preview.groups,
+                        draft.view.selected_node_id,
+                    ),
                     scope_node=building_node,
-                    view=view,
-                    groups=groups,
+                    view=preview.view,
+                    groups=preview.groups,
                     breadcrumbs=(
                         ("", str(world.get("city", {}).get("name", "City"))),
                         (zone_node.id, _record_label(zone_value, "City zone")),
@@ -127,6 +151,10 @@ def build_editor_world(
                         ),
                     ),
                     decode_issues=decode_issues,
+                    preview_issues=preview.issues,
+                    read_only_inspector=preview.inspectors.get(
+                        draft.view.selected_node_id
+                    ),
                 )
         view, items, placed = _city_presentation(
             draft,
@@ -168,6 +196,10 @@ def build_editor_world(
         return EditorWorldPresentation(
             world_node=world_node,
             selected_node=selected,
+            selected_item=_selected_item(
+                _groups(*items),
+                draft.view.selected_node_id,
+            ),
             scope_node=None,
             view=view,
             groups=_groups(*items),
@@ -188,6 +220,10 @@ def build_editor_world(
     return EditorWorldPresentation(
         world_node=world_node,
         selected_node=selected,
+        selected_item=_selected_item(
+            _groups(*items),
+            draft.view.selected_node_id,
+        ),
         scope_node=None,
         view=view,
         groups=_groups(*items),
@@ -732,20 +768,36 @@ def _resolved_building_preview(
     entity_values: list[Any],
     session: OperatorSession,
     library: ElementLibrary,
-) -> tuple[
-    dict[str, Any],
-    tuple[tuple[str, str, str, tuple[EditorWorldItem, ...]], ...],
-] | None:
+) -> _BuildingPreview | None:
     _zone_node, _zone, building_node, building_value = hierarchy
     try:
         source = ScenarioSourceDefinition.model_validate(raw)
         resolved = resolve_scenario(source, library)
-    except (ScenarioResolutionError, ValidationError):
-        return None
+    except (ScenarioResolutionError, ValidationError) as error:
+        issue = (
+            "The scenario draft could not be fully resolved. "
+            "The interior preview uses referenced element data: "
+            f"{error}"
+        )
+        fallback = _library_building_preview(
+            draft,
+            building_node,
+            building_value,
+            entity_nodes,
+            entity_values,
+            session,
+            library,
+            issue=issue,
+        )
+        return fallback or _unavailable_building_preview(issue)
     if not isinstance(resolved.source.world, CityWorldSourceDefinition):
-        return None
+        return _unavailable_building_preview(
+            "The resolved scenario source is not a city world."
+        )
     if not isinstance(resolved.scenario.world, CityWorldDefinition):
-        return None
+        return _unavailable_building_preview(
+            "The resolved scenario does not contain a city world."
+        )
     building_id = str(building_value.get("id", ""))
     runtime_building = next(
         (
@@ -756,30 +808,80 @@ def _resolved_building_preview(
         None,
     )
     if runtime_building is None:
-        return None
+        return _unavailable_building_preview(
+            f"Resolved building {building_id or '(missing ID)'} is unavailable."
+        )
     runtime_rooms = [
         room
         for room in resolved.scenario.world.rooms
         if room.building_id == runtime_building.id
     ]
     if not runtime_rooms:
-        return None
+        return _unavailable_building_preview(
+            f"Resolved building {runtime_building.id} has no rooms to preview."
+        )
     selected_room = _camera_room(runtime_rooms, session)
     payload = selected_room.world.model_dump(mode="json")
-    for field in ("blocked", "zones", "stations", "transaction_points"):
+    inspectors: dict[str, dict[str, Any]] = {}
+    legacy_groups: list[
+        tuple[str, str, str, tuple[EditorWorldItem, ...]]
+    ] = []
+    for field, label, item_kind in (
+        ("stations", "Legacy stations", "legacy station"),
+        (
+            "transaction_points",
+            "Legacy transaction points",
+            "legacy transaction point",
+        ),
+    ):
         values = payload.get(field)
-        if not isinstance(values, list):
-            continue
-        payload[field] = [
-            {
-                **value,
-                "node_id": building_node.id,
-                "selected": building_node.id
-                == draft.view.selected_node_id,
+        values = values if isinstance(values, list) else []
+        projected: list[dict[str, Any]] = []
+        items: list[EditorWorldItem] = []
+        for index, value in enumerate(values):
+            if not isinstance(value, dict):
+                continue
+            object_id = str(value.get("id") or f"{field}-{index + 1}")
+            selection_key = _synthetic_key(item_kind, object_id)
+            item_label = _record_label(value, f"{label} item {index + 1}")
+            projected.append(
+                {
+                    **value,
+                    "node_id": selection_key,
+                    "selected": selection_key
+                    == draft.view.selected_node_id,
+                }
+            )
+            items.append(
+                EditorWorldItem(
+                    selection_key,
+                    item_kind,
+                    item_label,
+                    field,
+                )
+            )
+            inspectors[selection_key] = {
+                "title": item_label,
+                "kind": item_kind,
+                "definition_id": next(
+                    (
+                        item.definition_id
+                        for item in resolved.scenario.world.objects
+                        if item.id == object_id
+                    ),
+                    "",
+                ),
+                "legacy_position": value.get("position"),
             }
-            for value in values
-            if isinstance(value, dict)
-        ]
+        payload[field] = projected
+        legacy_groups.append(
+            (
+                f"{field}-{selected_room.id}",
+                f"{label} · {selected_room.name}",
+                "",
+                tuple(items),
+            )
+        )
     agents: list[dict[str, Any]] = []
     entity_by_id: dict[str, ScenarioEditorNode] = {}
     entity_items: list[EditorWorldItem] = []
@@ -829,30 +931,75 @@ def _resolved_building_preview(
             )
     room_items = tuple(
         EditorWorldItem(
-            building_node.id,
+            _synthetic_key("room", room.id),
             "inherited room",
             room.name,
             "inherited_rooms",
         )
         for room in runtime_rooms
     )
-    object_items = tuple(
-        EditorWorldItem(
-            building_node.id,
-            "inherited object",
-            str(value.get("name") or value.get("id") or "Object"),
-            "inherited_objects",
-        )
-        for field in ("stations", "transaction_points")
-        for value in payload.get(field, [])
-        if isinstance(value, dict)
-    )
+    for room in runtime_rooms:
+        inspectors[_synthetic_key("room", room.id)] = {
+            "title": room.name,
+            "kind": "inherited room",
+            "room_id": room.id,
+            "room_key": room.key,
+            "room_type": room.type,
+            "offset": room.offset.model_dump(mode="json"),
+            "width": room.world.width,
+            "height": room.world.height,
+            "spatial_metric": room.world.spatial_metric.model_dump(mode="json"),
+        }
+    physical_groups: list[
+        tuple[str, str, str, tuple[EditorWorldItem, ...]]
+    ] = []
+    for room in runtime_rooms:
+        relation_groups: dict[str, list[EditorWorldItem]] = {}
+        for world_object in resolved.scenario.world.objects:
+            if world_object.room_id != room.id:
+                continue
+            relation = (
+                world_object.placement.parent_relation.kind.value
+                if world_object.placement is not None
+                else "UNPLACED"
+            )
+            selection_key = _synthetic_key(
+                "physical object",
+                world_object.id,
+            )
+            relation_groups.setdefault(relation, []).append(
+                EditorWorldItem(
+                    selection_key,
+                    "physical object",
+                    world_object.name,
+                    f"physical-{room.id}-{relation}",
+                    unplaced=not _valid_physical_object_projection(
+                        world_object
+                    ),
+                )
+            )
+            inspectors[selection_key] = _physical_object_inspector(
+                world_object,
+                runtime_building.entrances,
+                resolved.scenario.world.portals,
+            )
+        for relation, items in sorted(relation_groups.items()):
+            physical_groups.append(
+                (
+                    f"physical-{room.id}-{relation}",
+                    "Physical objects · "
+                    f"{room.name} · {_relation_label(relation)}",
+                    "",
+                    tuple(items),
+                )
+            )
     entities_collection = _required_node(draft, ("entities",))
-    return (
-        view,
-        _groups(
+    return _BuildingPreview(
+        view=view,
+        groups=_groups(
             ("inherited_rooms", "Inherited rooms", "", room_items),
-            ("inherited_objects", "Inherited objects", "", object_items),
+            *physical_groups,
+            *legacy_groups,
             (
                 "entities",
                 "Entities",
@@ -860,6 +1007,444 @@ def _resolved_building_preview(
                 tuple(entity_items),
             ),
         ),
+        inspectors=inspectors,
+    )
+
+
+def _library_building_preview(
+    draft: ScenarioEditorDraft,
+    building_node: ScenarioEditorNode,
+    building_value: dict[str, Any],
+    entity_nodes: list[ScenarioEditorNode],
+    entity_values: list[Any],
+    session: OperatorSession,
+    library: ElementLibrary,
+    *,
+    issue: str,
+) -> _BuildingPreview | None:
+    reference = building_value.get("element")
+    if not isinstance(reference, dict):
+        return None
+    element_id = str(reference.get("id", ""))
+    try:
+        building = library.get(element_id, ElementKind.BUILDING)
+    except ValueError:
+        return None
+    if not isinstance(building, BuildingElementDefinition):
+        return None
+    issues = [issue]
+    expected_hash = str(reference.get("content_hash", ""))
+    actual_hash = element_content_hash(building)
+    if expected_hash and expected_hash != actual_hash:
+        issues.append(
+            f"Referenced building hash {expected_hash} differs from "
+            f"the library hash {actual_hash}."
+        )
+    instance_id = str(building_value.get("id") or element_id)
+    room_entries: list[
+        tuple[RoomPlacementDefinition, RoomElementDefinition]
+    ] = []
+    for placement in building.rooms:
+        try:
+            room = library.get(placement.element.id, ElementKind.ROOM)
+        except ValueError as error:
+            issues.append(str(error))
+            continue
+        if isinstance(room, RoomElementDefinition):
+            room_entries.append((placement, room))
+    if not room_entries:
+        return None
+    selected_placement, selected_room = _source_camera_room(
+        room_entries,
+        session,
+    )
+    selected_room_id = derive_instance_id(
+        instance_id,
+        selected_placement.key,
+    )
+    payload = selected_room.model_dump(mode="json")
+    payload["zones"] = payload.get("zones") or []
+    payload["stations"] = []
+    payload["transaction_points"] = []
+    inspectors: dict[str, dict[str, Any]] = {}
+    physical_groups: list[
+        tuple[str, str, str, tuple[EditorWorldItem, ...]]
+    ] = []
+    legacy_items: dict[str, list[EditorWorldItem]] = {
+        "stations": [],
+        "transaction_points": [],
+    }
+    for room_placement, room in room_entries:
+        room_id = derive_instance_id(instance_id, room_placement.key)
+        room_key = _synthetic_key("room", room_id)
+        inspectors[room_key] = {
+            "title": room.name,
+            "kind": "inherited room",
+            "room_id": room_id,
+            "room_key": room_placement.key,
+            "room_type": room.room_type,
+            "offset": room_placement.offset.model_dump(mode="json"),
+            "width": room.width,
+            "height": room.height,
+            "spatial_metric": room.spatial_metric.model_dump(mode="json"),
+        }
+        relation_groups: dict[str, list[EditorWorldItem]] = {}
+        for object_placement in room.objects:
+            try:
+                object_element = library.get(
+                    object_placement.element.id,
+                    ElementKind.OBJECT,
+                )
+            except ValueError as error:
+                issues.append(str(error))
+                continue
+            if not isinstance(object_element, ObjectElementDefinition):
+                continue
+            object_id = derive_instance_id(room_id, object_placement.key)
+            relation = (
+                object_placement.placement.parent_relation.kind.value
+                if object_placement.placement is not None
+                else "UNPLACED"
+            )
+            selection_key = _synthetic_key("physical object", object_id)
+            relation_groups.setdefault(relation, []).append(
+                EditorWorldItem(
+                    selection_key,
+                    "physical object",
+                    object_element.name,
+                    f"physical-{room_id}-{relation}",
+                    unplaced=not _valid_source_physical_projection(
+                        object_element,
+                        object_placement,
+                    ),
+                )
+            )
+            inspectors[selection_key] = _source_physical_object_inspector(
+                object_id,
+                object_element,
+                object_placement,
+                building,
+            )
+            if room_id != selected_room_id:
+                continue
+            legacy_field = (
+                "stations"
+                if object_element.object_type == "affordance"
+                else "transaction_points"
+                if object_element.object_type == "transaction"
+                else ""
+            )
+            if not legacy_field or object_placement.position is None:
+                continue
+            legacy_kind = (
+                "legacy station"
+                if legacy_field == "stations"
+                else "legacy transaction point"
+            )
+            legacy_key = _synthetic_key(legacy_kind, object_id)
+            legacy_value: dict[str, Any] = {
+                **object_element.model_dump(mode="json"),
+                "id": object_id,
+                "name": object_element.name,
+                "position": object_placement.position.model_dump(mode="json"),
+                "node_id": legacy_key,
+                "selected": legacy_key == draft.view.selected_node_id,
+            }
+            if (
+                legacy_field == "transaction_points"
+                and object_placement.staff_position is not None
+            ):
+                legacy_value["staffing"] = {
+                    "staff_position": object_placement.staff_position.model_dump(
+                        mode="json"
+                    )
+                }
+            payload[legacy_field].append(legacy_value)
+            legacy_items[legacy_field].append(
+                EditorWorldItem(
+                    legacy_key,
+                    legacy_kind,
+                    object_element.name,
+                    legacy_field,
+                )
+            )
+            inspectors[legacy_key] = {
+                "title": object_element.name,
+                "kind": legacy_kind,
+                "definition_id": object_element.id,
+                "legacy_position": legacy_value["position"],
+            }
+        for relation, items in sorted(relation_groups.items()):
+            physical_groups.append(
+                (
+                    f"physical-{room_id}-{relation}",
+                    "Physical objects · "
+                    f"{room.name} · {_relation_label(relation)}",
+                    "",
+                    tuple(items),
+                )
+            )
+    agents: list[dict[str, Any]] = []
+    entity_by_id: dict[str, ScenarioEditorNode] = {}
+    entity_items: list[EditorWorldItem] = []
+    for index, entity_node in enumerate(entity_nodes):
+        entity = (
+            entity_values[index]
+            if index < len(entity_values)
+            and isinstance(entity_values[index], dict)
+            else {}
+        )
+        entity_id = str(entity.get("id") or f"Entity {index + 1}")
+        components = entity.get("components")
+        components = components if isinstance(components, dict) else {}
+        spatial = components.get("spatial_location")
+        local_coordinate = (
+            spatial.get("local_coordinate")
+            if isinstance(spatial, dict)
+            and spatial.get("place_id") == selected_room_id
+            else None
+        )
+        unplaced = not isinstance(local_coordinate, dict)
+        entity_items.append(
+            EditorWorldItem(
+                entity_node.id,
+                "entity",
+                entity_id,
+                "entities",
+                unplaced=unplaced,
+            )
+        )
+        if not unplaced:
+            agents.append({"id": entity_id, "position": local_coordinate})
+            entity_by_id[entity_id] = entity_node
+    title = (
+        "Building interior · "
+        f"{_building_instance_label(building_value, library)} · "
+        f"{selected_room.name}"
+    )
+    view = _grid_view(payload, agents, session, title, {})
+    for agent in view["agents"]:
+        matched_entity = entity_by_id.get(str(agent["id"]))
+        if matched_entity is not None:
+            agent["node_id"] = matched_entity.id
+            agent["selected"] = (
+                matched_entity.id == draft.view.selected_node_id
+            )
+    room_items = tuple(
+        EditorWorldItem(
+            _synthetic_key(
+                "room",
+                derive_instance_id(instance_id, placement.key),
+            ),
+            "inherited room",
+            room.name,
+            "inherited_rooms",
+        )
+        for placement, room in room_entries
+    )
+    entities_collection = _required_node(draft, ("entities",))
+    return _BuildingPreview(
+        view=view,
+        groups=_groups(
+            ("inherited_rooms", "Inherited rooms", "", room_items),
+            *physical_groups,
+            (
+                f"stations-{selected_room_id}",
+                f"Legacy stations · {selected_room.name}",
+                "",
+                tuple(legacy_items["stations"]),
+            ),
+            (
+                f"transaction-points-{selected_room_id}",
+                f"Legacy transaction points · {selected_room.name}",
+                "",
+                tuple(legacy_items["transaction_points"]),
+            ),
+            (
+                "entities",
+                "Entities",
+                entities_collection.id,
+                tuple(entity_items),
+            ),
+        ),
+        inspectors=inspectors,
+        issues=tuple(issues),
+    )
+
+
+def _unavailable_building_preview(issue: str) -> _BuildingPreview:
+    return _BuildingPreview(
+        view=None,
+        groups=(),
+        inspectors={},
+        issues=(issue,),
+    )
+
+
+def _source_camera_room(
+    rooms: list[tuple[RoomPlacementDefinition, RoomElementDefinition]],
+    session: OperatorSession,
+) -> tuple[RoomPlacementDefinition, RoomElementDefinition]:
+    width = max(placement.offset.x + room.width for placement, room in rooms)
+    height = max(placement.offset.y + room.height for placement, room in rooms)
+    target_x = session.camera_x * max(1, width)
+    target_y = session.camera_y * max(1, height)
+    return min(
+        rooms,
+        key=lambda item: (
+            (
+                item[0].offset.x + item[1].width / 2 - target_x
+            )
+            ** 2
+            + (
+                item[0].offset.y + item[1].height / 2 - target_y
+            )
+            ** 2,
+            item[0].key,
+        ),
+    )
+
+
+def _synthetic_key(kind: str, identifier: str) -> str:
+    return f"inherited:{kind.replace(' ', '-')}:{identifier}"
+
+
+def _relation_label(relation: str) -> str:
+    return relation.replace("_", " ").strip().title()
+
+
+def _valid_physical_object_projection(
+    world_object: WorldObjectDefinition,
+) -> bool:
+    if world_object.physical is None or world_object.placement is None:
+        return False
+    return _valid_xy(
+        world_object.placement.anchor.model_dump(mode="json")
+    ) and all(
+        _valid_xy(cell.model_dump(mode="json"))
+        for cell in world_object.physical.footprint.cells
+    )
+
+
+def _valid_source_physical_projection(
+    object_element: ObjectElementDefinition,
+    placement: ObjectPlacementDefinition,
+) -> bool:
+    if object_element.physical is None or placement.placement is None:
+        return False
+    return _valid_xy(
+        placement.placement.anchor.model_dump(mode="json")
+    ) and all(
+        _valid_xy(cell.model_dump(mode="json"))
+        for cell in object_element.physical.footprint.cells
+    )
+
+
+def _physical_object_inspector(
+    world_object: WorldObjectDefinition,
+    entrances: list[Any],
+    portals: list[Any],
+) -> dict[str, Any]:
+    physical = (
+        world_object.physical.model_dump(mode="json")
+        if world_object.physical is not None
+        else None
+    )
+    placement = (
+        world_object.placement.model_dump(mode="json")
+        if world_object.placement is not None
+        else None
+    )
+    door_links = [
+        f"Entrance {item.id}"
+        for item in entrances
+        if item.door_object_id == world_object.id
+    ]
+    door_links.extend(
+        f"Portal {item.id}"
+        for item in portals
+        if item.door_object_id == world_object.id
+    )
+    return {
+        "title": world_object.name,
+        "kind": "physical object",
+        "object_kind": world_object.object_kind,
+        "object_id": world_object.id,
+        "definition_id": world_object.definition_id,
+        "room_id": world_object.room_id,
+        "legacy_position": world_object.position.model_dump(mode="json"),
+        "physical": physical,
+        "placement": placement,
+        "door_links": door_links,
+        "unplaced": not _valid_physical_object_projection(world_object),
+    }
+
+
+def _source_physical_object_inspector(
+    object_id: str,
+    object_element: ObjectElementDefinition,
+    placement: ObjectPlacementDefinition,
+    building: BuildingElementDefinition,
+) -> dict[str, Any]:
+    aliases = {
+        object_id,
+        object_element.id,
+        placement.id or "",
+    }
+    door_links = [
+        f"Entrance {item.key}"
+        for item in building.entrances
+        if item.door_object_id in aliases
+    ]
+    door_links.extend(
+        f"Portal {item.key}"
+        for item in building.portals
+        if item.door_object_id in aliases
+    )
+    return {
+        "title": object_element.name,
+        "kind": "physical object",
+        "object_kind": object_element.object_type or "physical",
+        "object_id": object_id,
+        "definition_id": object_element.id,
+        "legacy_position": (
+            placement.position.model_dump(mode="json")
+            if placement.position is not None
+            else None
+        ),
+        "physical": (
+            object_element.physical.model_dump(mode="json")
+            if object_element.physical is not None
+            else None
+        ),
+        "placement": (
+            placement.placement.model_dump(mode="json")
+            if placement.placement is not None
+            else None
+        ),
+        "door_links": door_links,
+        "unplaced": not _valid_source_physical_projection(
+            object_element,
+            placement,
+        ),
+    }
+
+
+def _selected_item(
+    groups: tuple[
+        tuple[str, str, str, tuple[EditorWorldItem, ...]],
+        ...,
+    ],
+    selection_key: str,
+) -> EditorWorldItem | None:
+    return next(
+        (
+            item
+            for _key, _label, _collection_id, items in groups
+            for item in items
+            if item.node_id == selection_key
+        ),
+        None,
     )
 
 

@@ -62,6 +62,7 @@ def _source(
                 "id": "foyer-chair",
                 "name": "Foyer chair",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "affordance",
                 "supported_actions": ["RELAX"],
             }
@@ -73,6 +74,7 @@ def _source(
                 "id": "kitchen-table",
                 "name": "Kitchen table",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "affordance",
                 "actions": [
                     {
@@ -90,6 +92,7 @@ def _source(
                 "id": "checkout",
                 "name": "Checkout",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "transaction",
                 "operation": "STAFFED",
                 "npc_role": _reference(ElementKind.NPC_ROLE, cashier),
@@ -116,6 +119,7 @@ def _source(
                 "id": "office-desk",
                 "name": "Office desk",
                 "kind": "object",
+                "physical": {"footprint": {"cells": [{"x": 0, "y": 0}]}},
                 "object_type": "affordance",
                 "supported_actions": ["RELAX"],
             }
@@ -137,6 +141,10 @@ def _source(
                             ElementKind.OBJECT, foyer_chair
                         ),
                         "position": {"x": 1, "y": 2},
+                        "placement": {
+                            "anchor": {"x": 13, "y": 22},
+                            "parent_relation": {"kind": "ON_FLOOR"},
+                        },
                     }
                 ],
             }
@@ -158,6 +166,10 @@ def _source(
                             ElementKind.OBJECT, kitchen_table
                         ),
                         "position": {"x": 2, "y": 1},
+                        "placement": {
+                            "anchor": {"x": 22, "y": 13},
+                            "parent_relation": {"kind": "ON_FLOOR"},
+                        },
                     },
                     {
                         "key": "checkout",
@@ -165,6 +177,10 @@ def _source(
                             ElementKind.OBJECT, checkout
                         ),
                         "position": {"x": 1, "y": 2},
+                        "placement": {
+                            "anchor": {"x": 13, "y": 22},
+                            "parent_relation": {"kind": "ON_FLOOR"},
+                        },
                         "staff_position": {"x": 2, "y": 2},
                     },
                 ],
@@ -187,6 +203,10 @@ def _source(
                             ElementKind.OBJECT, office_desk
                         ),
                         "position": {"x": 2, "y": 1},
+                        "placement": {
+                            "anchor": {"x": 22, "y": 13},
+                            "parent_relation": {"kind": "ON_FLOOR"},
+                        },
                     }
                 ],
             }
@@ -255,7 +275,7 @@ def _source(
     )
     source = ScenarioSourceDefinition.model_validate(
         {
-            "schema_version": 4,
+            "schema_version": 6,
             "name": "Authoritative hierarchy",
             "items": [
                 {"id": "credit", "name": "Credit", "unit": "credit"},
@@ -488,7 +508,7 @@ def test_cross_room_and_cross_building_navigation_use_transitions(
     ).location
     assert location.place_id == "work-instance.office"
     assert location.local_coordinate is not None
-    assert location.local_coordinate.to_payload() == {"x": 2, "y": 1}
+    assert location.local_coordinate.to_payload() == {"x": 19, "y": 13}
     traversed = [
         event
         for event in runner.events.events
@@ -527,7 +547,7 @@ def test_same_room_navigation_uses_only_grid_movement(
     ).location
     assert location.place_id == "home-instance.foyer"
     assert location.local_coordinate is not None
-    assert location.local_coordinate.to_payload() == {"x": 1, "y": 2}
+    assert location.local_coordinate.to_payload() == {"x": 13, "y": 19}
     assert not any(
         event.event_type == "portal.traversed"
         for event in runner.events.events

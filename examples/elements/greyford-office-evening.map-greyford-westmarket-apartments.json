@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "7ac924da986d5f2b31404faeead531594854b846a9f55eb78cdf5437030644ea",
+        "content_hash": "c772ec8e3e43c0512b88c8467a823aa335d2a14a4dc29d62e77f953377d66c88",
         "id": "greyford-office-evening.station-greyford-westmarket-apartments-primary",
         "kind": "object"
       },
       "id": "station-greyford-westmarket-apartments-primary",
       "key": "station-greyford-westmarket-apartments-primary",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 6,
         "y": 3
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 8,
   "zones": [
     {

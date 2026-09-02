@@ -14,7 +14,7 @@
   "kind": "object",
   "name": "Riverfront Cycle Service Counter",
   "npc_role": {
-    "content_hash": "949032d9274666eb061f9ffeb10f997cff50397de64334f3de9217870d61b4e3",
+    "content_hash": "47160d0233152cbd270c073b477fe72ba80b6aa8baba762cc48c900b1467edd4",
     "id": "riverfront-service-clerk",
     "kind": "npc_role"
   },
@@ -39,7 +39,43 @@
     }
   ],
   "operation": "STAFFED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "openable": null,
+      "portable": null,
+      "readable": null,
+      "scent_source": null,
+      "slots": [],
+      "support": null,
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": 0,
+          "y": 0
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "NONE",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
   "request_timeout": 120.0,
-  "schema_version": 1,
+  "schema_version": 3,
   "supported_actions": null
 }

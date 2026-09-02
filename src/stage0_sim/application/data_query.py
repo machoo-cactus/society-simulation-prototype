@@ -24,11 +24,18 @@ class DatasetQueryRepository(Protocol):
         filters: DatasetQueryFilter | None = None,
     ) -> DatasetQueryPage: ...
 
-    def summary(self, run_id: str) -> dict[str, JsonValue]: ...
+    def summary(
+        self,
+        run_id: str,
+        *,
+        include_private: bool = False,
+    ) -> dict[str, JsonValue]: ...
 
     def data_dictionary(
         self,
         run_id: str | None = None,
+        *,
+        include_private: bool = False,
     ) -> dict[str, JsonValue]: ...
 
     def iter_records_ndjson(
@@ -66,11 +73,27 @@ class DatasetQueryService:
     ) -> DatasetQueryPage:
         return self._repository.query_table(run_id, table_name, filters)
 
-    def summary(self, run_id: str) -> dict[str, JsonValue]:
-        return self._repository.summary(run_id)
+    def summary(
+        self,
+        run_id: str,
+        *,
+        include_private: bool = False,
+    ) -> dict[str, JsonValue]:
+        return self._repository.summary(
+            run_id,
+            include_private=include_private,
+        )
 
-    def schema(self, run_id: str | None = None) -> dict[str, JsonValue]:
-        return self._repository.data_dictionary(run_id)
+    def schema(
+        self,
+        run_id: str | None = None,
+        *,
+        include_private: bool = False,
+    ) -> dict[str, JsonValue]:
+        return self._repository.data_dictionary(
+            run_id,
+            include_private=include_private,
+        )
 
     def raw_ndjson(
         self,

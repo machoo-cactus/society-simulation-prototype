@@ -21,7 +21,10 @@ from stage0_sim.application.data_capture import (
     ToolCallId,
     TransactionRequestId,
     capture_registry_state,
+    character_physical_state,
     opportunity_state,
+    physical_object_states,
+    physical_relation_samples,
     population_state,
     serialize_authoritative,
     state_delta,
@@ -52,7 +55,11 @@ from stage0_sim.domain.environment import (
     WeatherRuntime,
     wetness_band,
 )
-from stage0_sim.domain.events import DomainEvent, JsonValue
+from stage0_sim.domain.events import (
+    DomainEvent,
+    JsonValue,
+    event_payload_is_private,
+)
 from stage0_sim.domain.world import CityWorld
 
 
@@ -101,6 +108,13 @@ class _InteractionEpisode:
     participants: list[dict[str, JsonValue]]
     constituent_events: list[dict[str, JsonValue]]
     content_visibility: str
+    record_id: str = ""
+    interaction_verb: str | None = None
+    actor_id: str | None = None
+    target_id: str | None = None
+    destination_id: str | None = None
+    slot_id: str | None = None
+    correlation_id: str | None = None
     initiating_goal_id: str | None = None
     initiating_decision_id: str | None = None
     initiating_action_id: str | None = None
@@ -241,6 +255,7 @@ class RunDataCollector:
         if self._finalized:
             return
         joins = self._resolved_event_joins(event)
+        visibility = _event_visibility(event)
         self._event_lineage[event.event_id] = joins
         event_record = self._append(
             "event",
@@ -260,6 +275,7 @@ class RunDataCollector:
             joins=joins,
             causation_id=event.causation_id,
             correlation_id=event.correlation_id,
+            visibility=visibility,
         )
         self._current_event_record_id = event_record.record_id
         try:
@@ -380,6 +396,7 @@ class RunDataCollector:
                 context=context,
                 options=annotated_options,
             )
+        self._capture_physical_observations(phase)
         resources = snapshot["resources"]
         if not isinstance(resources, dict):
             raise TypeError("captured resource state must be an object")
@@ -418,6 +435,207 @@ class RunDataCollector:
         self._capture_resource_samples(phase)
         self._capture_exposure_intervals(phase)
         self._drain_research()
+
+    def _capture_physical_observations(self, phase: RunnerPhase) -> None:
+        registry = self.runner.registry
+        for state in physical_object_states(registry):
+            object_id = _required_text(state, "object_id")
+            pose = _required_object(state, "pose")
+            anchor = _required_object(pose, "anchor")
+            obstruction = _required_object(state, "obstruction")
+            intrinsics = _optional_object(state, "intrinsics")
+            openable = _optional_object(state, "openable")
+            parent = _optional_object(state, "parent_relation")
+            custody = _optional_object(state, "custody")
+            spatial_index = _required_object(state, "spatial_index")
+            related_ids = _physical_related_ids(state)
+            record = self._append(
+                "physical_object_state",
+                self.runner.clock.tick,
+                self.runner.clock.simulation_time,
+                object_id,
+                state,
+                None,
+                category=RecordCategory.STATE,
+                source=RecordSource.DATASET_COLLECTOR,
+                phase=phase,
+                visibility=RecordVisibility.PRIVATE_RESEARCH,
+                related_entity_ids=related_ids,
+                schema_id="stage0.feature.physical_object_state",
+                schema_version="2",
+            )
+            self.store.append_physical_object_state(
+                run_id=self.run_id,
+                physical_state_id=f"{record.record_id}:physical-state",
+                record_id=record.record_id,
+                object_id=object_id,
+                definition_id=_required_text(state, "definition_id"),
+                name=_required_text(state, "name"),
+                room_id=_required_text(pose, "room_id"),
+                anchor_x=_required_int(anchor, "x"),
+                anchor_y=_required_int(anchor, "y"),
+                orientation=_required_text(pose, "orientation"),
+                phase=phase,
+                simulation_tick=self.runner.clock.tick,
+                simulation_time=self.runner.clock.simulation_time,
+                movement_obstruction=_required_text(
+                    obstruction, "movement"
+                ),
+                vision_obstruction=_required_text(
+                    obstruction, "vision"
+                ),
+                hearing_transmission=_required_text(
+                    obstruction, "hearing"
+                ),
+                smell_transmission=_required_text(
+                    obstruction, "smell"
+                ),
+                blocks_movement=_required_bool(
+                    obstruction, "blocks_movement"
+                ),
+                blocks_vision=_required_bool(
+                    obstruction, "blocks_vision"
+                ),
+                blocks_hearing=_required_bool(
+                    obstruction, "blocks_hearing"
+                ),
+                blocks_smell=_required_bool(
+                    obstruction, "blocks_smell"
+                ),
+                mass_kg=(
+                    _optional_float(intrinsics, "mass_kg")
+                    if intrinsics is not None
+                    else None
+                ),
+                size_class=(
+                    _optional_text(intrinsics, "size_class")
+                    if intrinsics is not None
+                    else None
+                ),
+                is_open=(
+                    _required_bool(openable, "is_open")
+                    if openable is not None
+                    else None
+                ),
+                is_locked=(
+                    _required_bool(openable, "is_locked")
+                    if openable is not None
+                    else None
+                ),
+                parent_id=(
+                    _optional_text(parent, "parent_id")
+                    if parent is not None
+                    else None
+                ),
+                relation_kind=(
+                    _optional_text(parent, "relation_kind")
+                    if parent is not None
+                    else None
+                ),
+                slot_id=(
+                    _optional_text(parent, "slot_id")
+                    if parent is not None
+                    else None
+                ),
+                custodian_id=(
+                    _optional_text(custody, "custodian_id")
+                    if custody is not None
+                    else None
+                ),
+                held_by_id=(
+                    _optional_text(custody, "held_by_id")
+                    if custody is not None
+                    else None
+                ),
+                spatial_index_revision=_optional_int(
+                    spatial_index, "revision"
+                ),
+                topology_revision=_optional_int(
+                    spatial_index, "topology_revision"
+                ),
+                state=state,
+            )
+        for relation in physical_relation_samples(registry):
+            object_id = _required_text(relation, "object_id")
+            spatial_index = _required_object(
+                relation, "spatial_index"
+            )
+            parent_id = _required_text(relation, "parent_id")
+            related_ids = tuple(
+                dict.fromkeys(
+                    value
+                    for value in (
+                        parent_id,
+                        _optional_text(relation, "custodian_id"),
+                        _optional_text(relation, "held_by_id"),
+                    )
+                    if value is not None and value != object_id
+                )
+            )
+            record = self._append(
+                "physical_relation_sample",
+                self.runner.clock.tick,
+                self.runner.clock.simulation_time,
+                object_id,
+                relation,
+                None,
+                category=RecordCategory.STATE,
+                source=RecordSource.DATASET_COLLECTOR,
+                phase=phase,
+                visibility=RecordVisibility.PRIVATE_RESEARCH,
+                related_entity_ids=related_ids,
+                schema_id="stage0.feature.physical_relation_sample",
+                schema_version="1",
+            )
+            self.store.append_physical_relation_sample(
+                run_id=self.run_id,
+                relation_sample_id=(
+                    f"{record.record_id}:physical-relation"
+                ),
+                record_id=record.record_id,
+                object_id=object_id,
+                entity_kind=_required_text(relation, "entity_kind"),
+                room_id=_optional_text(relation, "room_id"),
+                parent_id=parent_id,
+                parent_kind=_required_text(relation, "parent_kind"),
+                relation_kind=_required_text(
+                    relation, "relation_kind"
+                ),
+                slot_id=_optional_text(relation, "slot_id"),
+                custodian_id=_optional_text(
+                    relation, "custodian_id"
+                ),
+                held_by_id=_optional_text(relation, "held_by_id"),
+                phase=phase,
+                simulation_tick=self.runner.clock.tick,
+                simulation_time=self.runner.clock.simulation_time,
+                spatial_index_revision=_optional_int(
+                    spatial_index, "revision"
+                ),
+                topology_revision=_optional_int(
+                    spatial_index, "topology_revision"
+                ),
+                relation=relation,
+            )
+        for entity_id in registry.entities():
+            character_state = character_physical_state(registry, entity_id)
+            if character_state is None:
+                continue
+            self._append(
+                "character_physical_state",
+                self.runner.clock.tick,
+                self.runner.clock.simulation_time,
+                entity_id,
+                character_state,
+                None,
+                category=RecordCategory.STATE,
+                source=RecordSource.DATASET_COLLECTOR,
+                phase=phase,
+                visibility=RecordVisibility.PRIVATE_RESEARCH,
+                related_entity_ids=_physical_related_ids(character_state),
+                schema_id="stage0.feature.character_physical_state",
+                schema_version="2",
+            )
 
     def _capture_resource_samples(self, phase: RunnerPhase) -> None:
         from stage0_sim.domain.world import WorldMap
@@ -713,7 +931,7 @@ class RunDataCollector:
                 ),
                 causation_id=event.causation_id,
                 schema_id="stage0.perception.fact",
-                schema_version="1",
+                schema_version="2",
             )
             fact_record_id = fact_record.record_id
             self._perception_fact_records[fact_id] = fact_record_id
@@ -933,6 +1151,8 @@ class RunDataCollector:
             interaction_ids.extend(self._speech_interactions(event))
         if event_type.startswith("transaction."):
             interaction_ids.extend(self._transaction_interactions(event))
+        if event_type.startswith("interaction."):
+            interaction_ids.extend(self._physical_interactions(event))
         if (
             event_type == "affordance.failed"
             and event.payload.get("reason") == "station_at_capacity"
@@ -953,6 +1173,9 @@ class RunDataCollector:
             "transaction.failed": "failed",
             "transaction.cancelled": "cancelled",
             "transaction.timed_out": "timed_out",
+            "interaction.completed": "completed",
+            "interaction.failed": "failed",
+            "interaction.cancelled": "cancelled",
         }.get(event_type)
         if terminal_status is not None:
             for interaction_id in unique_ids:
@@ -1110,6 +1333,148 @@ class RunDataCollector:
                 )
         return tuple(result)
 
+    def _physical_interactions(
+        self,
+        event: DomainEvent,
+    ) -> tuple[str, ...]:
+        if event.event_type not in {
+            "interaction.requested",
+            "interaction.started",
+            "interaction.completed",
+            "interaction.failed",
+            "interaction.cancelled",
+        }:
+            return ()
+        verb = event.payload.get("verb")
+        target_id = event.payload.get("target_id")
+        if not isinstance(verb, str) or not isinstance(target_id, str):
+            return ()
+        actor_id = event.agent_id
+        destination_id = event.payload.get("destination_id")
+        slot_id = event.payload.get("slot_id")
+        action_id = event.payload.get("action_id")
+        keys: list[tuple[str, ...]] = []
+        if isinstance(action_id, str):
+            keys.append(("physical_action", action_id))
+        if event.correlation_id is not None:
+            keys.append(("physical_correlation", event.correlation_id))
+        if event.causation_id is not None:
+            for existing_id in self._event_interactions.get(
+                event.causation_id, ()
+            ):
+                episode = self._interaction_episodes.get(existing_id)
+                if (
+                    episode is not None
+                    and episode.interaction_type == "physical_object"
+                ):
+                    keys.append(("physical_interaction", existing_id))
+                    self._interaction_keys[keys[-1]] = existing_id
+        fallback_key = (
+            "physical_subject",
+            actor_id or "",
+            verb,
+            target_id,
+            destination_id if isinstance(destination_id, str) else "",
+            slot_id if isinstance(slot_id, str) else "",
+        )
+        keys.append(fallback_key)
+        interaction_id = next(
+            (
+                self._interaction_keys[key]
+                for key in keys
+                if key in self._interaction_keys
+            ),
+            None,
+        )
+        if interaction_id is None:
+            basis = (
+                action_id
+                if isinstance(action_id, str)
+                else event.correlation_id or event.event_id
+            )
+            interaction_id = f"interaction:physical:{basis}"
+            participants = [self._participant(actor_id, "actor")]
+            participants.append(self._participant(target_id, "target"))
+            if (
+                isinstance(destination_id, str)
+                and destination_id != target_id
+            ):
+                participants.append(
+                    self._participant(destination_id, "destination")
+                )
+            self._start_interaction(
+                interaction_id,
+                "physical_object",
+                keys[0],
+                tuple(participants),
+                "PRIVATE_RESEARCH",
+                event=event,
+                context={
+                    "interaction_type": "physical_object",
+                    "verb": verb,
+                    "actor_id": actor_id,
+                    "target_id": target_id,
+                    "destination_id": (
+                        destination_id
+                        if isinstance(destination_id, str)
+                        else None
+                    ),
+                    "slot_id": slot_id if isinstance(slot_id, str) else None,
+                    "source": event.payload.get("source"),
+                },
+                initial_status=(
+                    "requested"
+                    if event.event_type == "interaction.requested"
+                    else "active"
+                ),
+                interaction_verb=verb,
+                actor_id=actor_id,
+                target_id=target_id,
+                destination_id=(
+                    destination_id
+                    if isinstance(destination_id, str)
+                    else None
+                ),
+                slot_id=slot_id if isinstance(slot_id, str) else None,
+            )
+        for key in keys:
+            self._interaction_keys[key] = interaction_id
+        self._interaction_keys[
+            ("physical_interaction", interaction_id)
+        ] = interaction_id
+        episode = self._interaction_episodes.get(interaction_id)
+        if episode is None:
+            return ()
+        if event.event_type == "interaction.started":
+            episode.status = "active"
+        elif event.event_type == "interaction.requested":
+            episode.status = "requested"
+        elif event.event_type.endswith(
+            (".completed", ".failed", ".cancelled")
+        ):
+            episode.status = event.event_type.removeprefix("interaction.")
+        self.store.append_interaction(
+            run_id=self.run_id,
+            interaction_id=interaction_id,
+            record_id=episode.record_id,
+            interaction_type=episode.interaction_type,
+            start_tick=episode.start_tick,
+            end_tick=None,
+            status=episode.status,
+            context=episode.context,
+            interaction_verb=episode.interaction_verb,
+            actor_id=episode.actor_id,
+            target_id=episode.target_id,
+            destination_id=episode.destination_id,
+            slot_id=episode.slot_id,
+            goal_id=episode.initiating_goal_id,
+            action_id=episode.initiating_action_id,
+            decision_id=episode.initiating_decision_id,
+            tool_call_id=episode.initiating_tool_call_id,
+            correlation_id=episode.correlation_id,
+        )
+        return (interaction_id,)
+
     def _contention_interaction(self, event: DomainEvent) -> str:
         interaction_id = f"interaction:contention:{event.event_id}"
         participants = [self._participant(event.agent_id, "contender")]
@@ -1154,6 +1519,12 @@ class RunDataCollector:
         *,
         event: DomainEvent | None = None,
         context: dict[str, JsonValue] | None = None,
+        initial_status: str = "active",
+        interaction_verb: str | None = None,
+        actor_id: str | None = None,
+        target_id: str | None = None,
+        destination_id: str | None = None,
+        slot_id: str | None = None,
     ) -> None:
         if interaction_id in self._interaction_episodes:
             return
@@ -1195,11 +1566,21 @@ class RunDataCollector:
                 if event is not None
                 else self.runner.clock.simulation_time
             ),
-            status="active",
+            status=initial_status,
             context=payload_context,
             participants=ordered_participants,
             constituent_events=[],
             content_visibility=content_visibility,
+            interaction_verb=interaction_verb,
+            actor_id=actor_id,
+            target_id=target_id,
+            destination_id=destination_id,
+            slot_id=slot_id,
+            correlation_id=(
+                event.correlation_id
+                if event is not None and event.correlation_id is not None
+                else interaction_id
+            ),
             initiating_goal_id=(
                 str(joins.goal_id) if joins.goal_id is not None else None
             ),
@@ -1232,7 +1613,13 @@ class RunDataCollector:
             {
                 "interaction_id": interaction_id,
                 "interaction_type": interaction_type,
-                "status": "active",
+                "interaction_verb": interaction_verb,
+                "actor_id": actor_id,
+                "target_id": target_id,
+                "destination_id": destination_id,
+                "slot_id": slot_id,
+                "correlation_id": episode.correlation_id,
+                "status": initial_status,
                 "participants": participant_payload,
                 "content_visibility": content_visibility,
                 "context": payload_context,
@@ -1249,9 +1636,7 @@ class RunDataCollector:
                 interaction_id=InteractionId(interaction_id),
                 transaction_request_id=joins.transaction_request_id,
             ),
-            correlation_id=(
-                event.correlation_id if event is not None else interaction_id
-            ),
+            correlation_id=episode.correlation_id,
             related_entity_ids=tuple(
                 str(item["participant_id"])
                 for item in ordered_participants[1:]
@@ -1259,6 +1644,7 @@ class RunDataCollector:
             schema_id="stage0.interaction.started",
             schema_version="1",
         )
+        episode.record_id = record.record_id
         self.store.append_interaction(
             run_id=self.run_id,
             interaction_id=interaction_id,
@@ -1266,8 +1652,30 @@ class RunDataCollector:
             interaction_type=interaction_type,
             start_tick=episode.start_tick,
             end_tick=None,
-            status="active",
+            status=initial_status,
             context=payload_context,
+            interaction_verb=interaction_verb,
+            actor_id=actor_id,
+            target_id=target_id,
+            destination_id=destination_id,
+            slot_id=slot_id,
+            goal_id=(
+                str(joins.goal_id) if joins.goal_id is not None else None
+            ),
+            action_id=(
+                str(joins.action_id) if joins.action_id is not None else None
+            ),
+            decision_id=(
+                str(joins.decision_id)
+                if joins.decision_id is not None
+                else None
+            ),
+            tool_call_id=(
+                str(joins.tool_call_id)
+                if joins.tool_call_id is not None
+                else None
+            ),
+            correlation_id=episode.correlation_id,
         )
         for participant in ordered_participants:
             self.store.append_interaction_participant(
@@ -1393,6 +1801,12 @@ class RunDataCollector:
             "feature_schema": "stage0.feature.interaction_episode.v1",
             "interaction_id": interaction_id,
             "interaction_type": episode.interaction_type,
+            "interaction_verb": episode.interaction_verb,
+            "actor_id": episode.actor_id,
+            "target_id": episode.target_id,
+            "destination_id": episode.destination_id,
+            "slot_id": episode.slot_id,
+            "correlation_id": episode.correlation_id,
             "terminal_status": terminal_status,
             "start_tick": episode.start_tick,
             "terminal_tick": terminal_tick,
@@ -1451,7 +1865,7 @@ class RunDataCollector:
                 ),
                 interaction_id=InteractionId(interaction_id),
             ),
-            correlation_id=interaction_id,
+            correlation_id=episode.correlation_id,
             related_entity_ids=tuple(
                 str(item["participant_id"])
                 for item in episode.participants[1:]
@@ -1469,6 +1883,16 @@ class RunDataCollector:
             status=terminal_status,
             context=episode.context,
             outcome=outcome,
+            interaction_verb=episode.interaction_verb,
+            actor_id=episode.actor_id,
+            target_id=episode.target_id,
+            destination_id=episode.destination_id,
+            slot_id=episode.slot_id,
+            goal_id=episode.initiating_goal_id,
+            action_id=episode.initiating_action_id,
+            decision_id=episode.initiating_decision_id,
+            tool_call_id=episode.initiating_tool_call_id,
+            correlation_id=episode.correlation_id,
         )
         self.store.append_interaction_episode(
             run_id=self.run_id,
@@ -1487,6 +1911,12 @@ class RunDataCollector:
             initiating_tool_call_id=episode.initiating_tool_call_id,
             content_visibility=episode.content_visibility,
             episode=payload,
+            interaction_verb=episode.interaction_verb,
+            actor_id=episode.actor_id,
+            target_id=episode.target_id,
+            destination_id=episode.destination_id,
+            slot_id=episode.slot_id,
+            correlation_id=episode.correlation_id,
         )
 
     def _append_interaction_boundary(
@@ -2264,6 +2694,8 @@ class RunDataCollector:
             record_type = "affordance"
         elif event.event_type.startswith("transaction."):
             record_type = "transaction"
+        elif event.event_type.startswith("interaction."):
+            record_type = "interaction"
         elif event.event_type.startswith("memory."):
             record_type = "memory_reference"
         elif event.event_type.startswith("information."):
@@ -2306,7 +2738,7 @@ class RunDataCollector:
                 visibility=(
                     RecordVisibility.PRIVATE_RESEARCH
                     if record_type == "memory_reference"
-                    else RecordVisibility.OPERATOR
+                    else _event_visibility(event)
                 ),
             )
         request_events = {
@@ -2330,6 +2762,7 @@ class RunDataCollector:
                 joins=self._resolved_event_joins(event),
                 causation_id=event.causation_id,
                 correlation_id=event.correlation_id,
+                visibility=_event_visibility(event),
             )
 
     def _track_decision_event(self, event: DomainEvent) -> None:
@@ -2647,6 +3080,7 @@ class RunDataCollector:
             joins=RecordJoinIds(plan_id=PlanId(plan_id)),
             causation_id=event.causation_id,
             correlation_id=event.correlation_id,
+            visibility=_event_visibility(event),
         )
         root = event.payload.get("root_correlation_id")
         self.store.append_plan(
@@ -2694,6 +3128,7 @@ class RunDataCollector:
             joins=joins,
             causation_id=event.causation_id,
             correlation_id=event.correlation_id,
+            visibility=_event_visibility(event),
         )
         episode = self._action_episodes.get(action_id)
         previous_status = episode.status if episode is not None else None
@@ -2812,6 +3247,7 @@ class RunDataCollector:
             joins=joins,
             causation_id=event.event_id,
             correlation_id=event.correlation_id,
+            visibility=_event_visibility(event),
             schema_id="stage0.feature.action_episode",
             schema_version="1",
         )
@@ -2923,6 +3359,8 @@ class RunDataCollector:
     def _event_category(event: DomainEvent) -> RecordCategory:
         if event.event_type.startswith(("plan.", "action.")):
             return RecordCategory.ACTION
+        if event.event_type.startswith("interaction."):
+            return RecordCategory.INTERACTION
         if event.event_type.startswith("tool."):
             return RecordCategory.TOOL
         if event.event_type.startswith("goal."):
@@ -3140,6 +3578,11 @@ class RunDataCollector:
                 agent_id,
                 state,
                 event.event_id,
+                visibility=(
+                    RecordVisibility.PRIVATE_RESEARCH
+                    if "physical" in state
+                    else RecordVisibility.OPERATOR
+                ),
             )
             if self.runner.registry.has_component(agent_id, PositionComponent):
                 position = self.runner.registry.get_component(
@@ -3370,6 +3813,142 @@ class RunDataCollector:
         )
 
 
+def _event_visibility(event: DomainEvent) -> RecordVisibility:
+    if event_payload_is_private(event.payload):
+        return RecordVisibility.PRIVATE_RESEARCH
+    return RecordVisibility.OPERATOR
+
+
+def _required_object(
+    payload: dict[str, JsonValue],
+    name: str,
+) -> dict[str, JsonValue]:
+    value = payload.get(name)
+    if not isinstance(value, dict):
+        raise TypeError(f"{name} must be an object")
+    return value
+
+
+def _optional_object(
+    payload: dict[str, JsonValue],
+    name: str,
+) -> dict[str, JsonValue] | None:
+    value = payload.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise TypeError(f"{name} must be an object")
+    return value
+
+
+def _required_text(payload: dict[str, JsonValue], name: str) -> str:
+    value = payload.get(name)
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a string")
+    return value
+
+
+def _optional_text(
+    payload: dict[str, JsonValue],
+    name: str,
+) -> str | None:
+    value = payload.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a string")
+    return value
+
+
+def _required_int(payload: dict[str, JsonValue], name: str) -> int:
+    value = payload.get(name)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"{name} must be an integer")
+    return value
+
+
+def _optional_int(
+    payload: dict[str, JsonValue],
+    name: str,
+) -> int | None:
+    value = payload.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"{name} must be an integer")
+    return value
+
+
+def _optional_float(
+    payload: dict[str, JsonValue],
+    name: str,
+) -> float | None:
+    value = payload.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        raise TypeError(f"{name} must be numeric")
+    return float(value)
+
+
+def _required_bool(payload: dict[str, JsonValue], name: str) -> bool:
+    value = payload.get(name)
+    if not isinstance(value, bool):
+        raise TypeError(f"{name} must be a boolean")
+    return value
+
+
+def _physical_related_ids(
+    payload: dict[str, JsonValue],
+) -> tuple[str, ...]:
+    primary_id = next(
+        (
+            value
+            for name in ("object_id", "character_id")
+            if isinstance((value := payload.get(name)), str)
+        ),
+        None,
+    )
+    singular_names = {
+        "parent_id",
+        "custodian_id",
+        "held_by_id",
+        "owner_id",
+        "support_id",
+        "target_id",
+        "destination_id",
+        "left_object_id",
+        "right_object_id",
+    }
+    plural_names = {
+        "occupant_ids",
+        "held_object_ids",
+        "physically_held_object_ids",
+        "physically_custodied_object_ids",
+    }
+    related: set[str] = set()
+
+    def visit(value: JsonValue) -> None:
+        if isinstance(value, dict):
+            for name, child in value.items():
+                if name in singular_names and isinstance(child, str):
+                    related.add(child)
+                elif name in plural_names and isinstance(child, list):
+                    related.update(
+                        item for item in child if isinstance(item, str)
+                    )
+                else:
+                    visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(payload)
+    if primary_id is not None:
+        related.discard(primary_id)
+    return tuple(sorted(related))
+
+
 def _action_context(state: dict[str, JsonValue]) -> dict[str, JsonValue]:
     components = state.get("components")
     if not isinstance(components, dict):
@@ -3387,6 +3966,13 @@ def _action_context(state: dict[str, JsonValue]) -> dict[str, JsonValue]:
                 "AffordanceExecutionComponent",
                 "TransactionRequestComponent",
                 "TransactionExecutionComponent",
+                "InteractionRequestComponent",
+                "InteractionExecutionComponent",
+                "PhysicalStateComponent",
+                "SpatialParentRelationComponent",
+                "CharacterPostureComponent",
+                "CharacterHandStateComponent",
+                "MovementComponent",
             )
         )
     }
@@ -3439,8 +4025,15 @@ def _share_place(registry: Registry, first: str, second: str) -> bool:
 
 
 def _actor_kind(registry: Registry, entity_id: str) -> str:
-    from stage0_sim.domain.components import NpcComponent
+    from stage0_sim.domain.components import (
+        NpcComponent,
+        PhysicalObjectIdentityComponent,
+    )
 
+    if entity_id not in registry.entities():
+        return "external"
+    if registry.has_component(entity_id, PhysicalObjectIdentityComponent):
+        return "physical_object"
     return (
         "npc"
         if registry.has_component(entity_id, NpcComponent)
@@ -3453,6 +4046,17 @@ def _entity_location(
     entity_id: str,
 ) -> dict[str, JsonValue]:
     result: dict[str, JsonValue] = {}
+    from stage0_sim.domain.components import PhysicalStateComponent
+
+    if entity_id not in registry.entities():
+        return result
+    if registry.has_component(entity_id, PhysicalStateComponent):
+        physical = registry.get_component(entity_id, PhysicalStateComponent)
+        result["physical_pose"] = {
+            "room_id": physical.pose.room_id,
+            "anchor": physical.pose.anchor.to_payload(),
+            "orientation": physical.pose.orientation.value,
+        }
     if registry.has_component(entity_id, PositionComponent):
         result["position"] = serialize_authoritative(
             registry.get_component(entity_id, PositionComponent)

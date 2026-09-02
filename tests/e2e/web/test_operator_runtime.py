@@ -17,13 +17,28 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _willowbrook_without_controllers() -> dict[str, object]:
+    payload = json.loads(
+        (
+            EXAMPLE_SCENARIOS / "willowbrook-saturday-morning.json"
+        ).read_text(encoding="utf-8")
+    )
+    for entity in payload["entities"]:
+        entity["components"]["controller"]["enabled"] = False
+    return {
+        "name": "willowbrook-saturday-morning.json",
+        "mimeType": "application/json",
+        "buffer": json.dumps(payload).encode(),
+    }
+
+
 def test_operator_lifecycle_is_driven_by_accessible_controls(page: Page) -> None:
     page.goto("/ui/")
     assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
     expect(page.get_by_role("heading", name="Operator Console")).to_be_visible()
     expect(page.get_by_role("button", name="Start run")).to_be_disabled()
     expect(page.get_by_role("region", name="World")).to_be_visible()
-    expect(page.get_by_role("complementary", name="Character inspector")).to_be_visible()
+    expect(page.get_by_role("complementary", name="Operator inspector")).to_be_visible()
 
     page.get_by_role("button", name="Load example scenario").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
@@ -86,7 +101,7 @@ def test_operator_lifecycle_is_driven_by_accessible_controls(page: Page) -> None
     expect(tick_value).to_have_text(str(tick_before + 1))
 
     page.get_by_role("combobox", name="Character").select_option("agent-001")
-    page.get_by_role("button", name="Inspect").click()
+    page.get_by_role("button", name="Inspect", exact=True).click()
     page.get_by_role("spinbutton", name="Satiety").fill("6")
     page.get_by_role("button", name="Apply supplied values").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
@@ -319,15 +334,15 @@ def test_data_management_is_server_rendered_and_enhanced(page: Page) -> None:
     private_warning = page.get_by_text(
         re.compile("Aggregate statistics include PRIVATE_RESEARCH-derived rows")
     )
-    expect(private_warning).to_be_visible()
+    expect(private_warning).not_to_be_visible()
     expect(page.get_by_text(re.compile("Pooled:"))).to_be_visible()
     expect(page.get_by_text(re.compile("Macro per run:"))).to_be_visible()
-    page.get_by_label("Exclude private-derived aggregates").check()
+    page.get_by_label("Include private-derived aggregates").check()
     page.get_by_role(
         "button",
         name="Apply aggregate privacy setting",
     ).click()
-    expect(private_warning).not_to_be_visible()
+    expect(private_warning).to_be_visible()
 
     with page.expect_download() as json_download:
         page.get_by_role("link", name="Download aggregate JSON").click()
@@ -384,7 +399,7 @@ def test_transaction_point_and_possessions_render_in_runtime_ui(
     page.get_by_role("button", name="Start run").click()
     page.get_by_role("button", name="Pause").click()
     inspector = page.get_by_role(
-        "complementary", name="Character inspector"
+        "complementary", name="Operator inspector"
     )
     inspector.get_by_role("checkbox", name="Live refresh").uncheck()
     character = inspector.get_by_role("combobox", name="Character")
@@ -394,7 +409,7 @@ def test_transaction_point_and_possessions_render_in_runtime_ui(
     expect(character).to_have_value(
         "character-greyford-rivermarket-shopper"
     )
-    inspector.get_by_role("button", name="Inspect").click()
+    inspector.get_by_role("button", name="Inspect", exact=True).click()
     expect(
         inspector.get_by_role("heading", name="Possessions")
     ).to_be_visible()
@@ -406,8 +421,8 @@ def test_transaction_point_and_possessions_render_in_runtime_ui(
 
     expect(
         world.get_by_role(
-            "img",
-            name="Transaction point: Bottle Return and Checkout Counter",
+            "link",
+            name="Inspect object Bottle Return and Checkout Counter",
         )
     ).to_be_visible()
     possessions = page.get_by_role(
@@ -422,7 +437,7 @@ def test_transaction_point_and_possessions_render_in_runtime_ui(
     page.get_by_role("button", name="Single step").click()
     expect(
         world.get_by_role(
-            "link", name=re.compile(r"^Rivermarket Cashier at ")
+            "link", name="Inspect Rivermarket Cashier"
         )
     ).to_be_visible()
     expect(
@@ -434,7 +449,7 @@ def test_transaction_point_and_possessions_render_in_runtime_ui(
         "Greyford cent: 500 minor currency unit"
     )
     world.get_by_role(
-        "link", name=re.compile(r"^Rivermarket Cashier at ")
+        "link", name="Inspect Rivermarket Cashier"
     ).click()
     expect(inspector).to_contain_text(
         "Transient NPC · Rivermarket Cashier · deterministic"
@@ -494,9 +509,12 @@ def test_city_map_supports_unfocused_inspection_follow_and_semantic_zoom(
     page.get_by_label("Follow inspected character").check()
     page.get_by_role("button", name="Apply view").click()
     expect(page.get_by_label("Follow inspected character")).to_be_checked()
-
+    expect(page.locator("[data-map-zoom]")).to_have_attribute(
+        "data-follow-selected",
+        "true",
+    )
     page.get_by_role("combobox", name="Character").select_option("")
-    page.get_by_role("button", name="Inspect").click()
+    page.get_by_role("button", name="Inspect", exact=True).click()
     expect(page.get_by_role("combobox", name="Character")).to_have_value("")
     expect(page.get_by_label("Follow inspected character")).not_to_be_checked()
 
@@ -509,6 +527,110 @@ def test_city_map_supports_unfocused_inspection_follow_and_semantic_zoom(
     page.mouse.wheel(0, -500)
     expect(page.get_by_text("Detail: Room", exact=True)).to_be_visible()
     assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
+
+
+def test_operator_room_renders_physical_objects_and_accessible_selection(
+    page: Page,
+) -> None:
+    page.goto("/ui/")
+    page.get_by_label("Scenario JSON").set_input_files(
+        _willowbrook_without_controllers()
+    )
+    page.get_by_role("button", name="Validate and stage").click()
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "validated and staged"
+    )
+    page.get_by_role("button", name="Start run").click()
+    page.get_by_role("button", name="Pause").click()
+    page.get_by_role("link", name=re.compile(r"^Inspect ")).first.click()
+    page.get_by_label("Follow inspected character").check()
+    page.get_by_text("Advanced scale override", exact=True).click()
+    page.get_by_role("combobox", name="Scale").select_option("room")
+    page.get_by_role("button", name="Apply view").click()
+
+    world = page.locator("[data-map-zoom]")
+    expect(world).to_have_attribute("data-coordinate-system", "microcell")
+    expect(page.locator(".grid-guide--legacy")).to_have_count(1)
+    expect(page.locator(".grid-guide--microcell")).to_have_count(0)
+    expect(page.locator(".grid-line")).to_have_count(0)
+    expect(page.locator(".physical-object").first).to_be_visible()
+    expect(page.locator(".physical-character").first).to_be_visible()
+    expect(page.locator(".door-linked").first).to_be_visible()
+    expect(page.locator(".physical-object.state-closed").first).to_be_visible()
+
+    object_picker = page.get_by_role("combobox", name="Physical object")
+    object_value = object_picker.locator("option:not([value=''])").first.get_attribute(
+        "value"
+    )
+    assert object_value
+    object_picker.select_option(object_value)
+    page.get_by_role("button", name="Inspect object").click()
+    inspector = page.locator("#operator-object-inspector")
+    expect(inspector).to_contain_text("Object ID")
+    expect(inspector).to_contain_text("Physical pose")
+    expect(inspector).to_contain_text("Occupied cells")
+    expect(page.locator(".physical-object.selected")).to_have_count(1)
+
+    navigation_count = page.evaluate(
+        "performance.getEntriesByType('navigation').length"
+    )
+    svg_object_link = page.locator("svg a", has=page.locator(".door-linked")).first
+    svg_object_link.click()
+    expect(inspector).to_contain_text("Door links")
+    assert (
+        page.evaluate("performance.getEntriesByType('navigation').length")
+        == navigation_count
+    )
+
+    viewport = page.locator("#world-render")
+    viewport.hover(position={"x": 300, "y": 220})
+    page.mouse.wheel(0, -1000)
+    expect(page.get_by_role("status", name="Zoom level")).to_have_text("300%")
+    expect(page.locator(".grid-guide--microcell")).to_have_count(1)
+    assert page.locator(".grid-guide").count() == 2
+
+
+def test_physical_object_selection_remains_usable_without_javascript(
+    browser: Browser,
+    ui_server: str,
+) -> None:
+    context = browser.new_context(base_url=ui_server, java_script_enabled=False)
+    page = context.new_page()
+    try:
+        page.goto("/ui/")
+        page.get_by_label("Scenario JSON").set_input_files(
+            _willowbrook_without_controllers()
+        )
+        page.get_by_role("button", name="Validate and stage").click()
+        page.get_by_role("button", name="Start run").click()
+        page.get_by_role("button", name="Pause").click()
+        character_picker = page.get_by_role("combobox", name="Character")
+        character_value = character_picker.locator(
+            "option:not([value=''])"
+        ).first.get_attribute("value")
+        assert character_value
+        character_picker.select_option(character_value)
+        page.get_by_role("button", name="Inspect", exact=True).click()
+        page.get_by_label("Follow inspected character").check()
+        page.get_by_text("Advanced scale override", exact=True).click()
+        page.get_by_role("combobox", name="Scale").select_option("room")
+        page.get_by_role("button", name="Apply view").click()
+
+        object_picker = page.get_by_role("combobox", name="Physical object")
+        object_value = object_picker.locator(
+            "option:not([value=''])"
+        ).first.get_attribute("value")
+        assert object_value
+        object_picker.select_option(object_value)
+        page.get_by_role("button", name="Inspect object").click()
+
+        expect(page.locator("#operator-object-inspector")).to_contain_text(
+            object_value
+        )
+        expect(page.locator(".physical-object.selected")).to_have_count(1)
+        expect(page.locator(".grid-line")).to_have_count(0)
+    finally:
+        context.close()
 
 
 def test_dense_city_labels_do_not_overlap_at_high_zoom(page: Page) -> None:
@@ -701,26 +823,11 @@ def test_server_rendered_controls_remain_usable_without_javascript(
         expect(page.get_by_role("button", name="Start run")).to_be_enabled()
         page.goto("/ui/elements/?kind=npc_role")
         page.get_by_label("Element resource ID").fill("nojs-server")
-        page.get_by_label("Element definition JSON").fill(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "id": "nojs-server",
-                    "name": "No JavaScript Server",
-                    "description": "",
-                    "kind": "npc_role",
-                    "briefing": "Serve deterministic requests.",
-                    "tool_allowlist": [
-                        "serve_transaction",
-                        "say",
-                        "wait",
-                        "skip",
-                    ],
-                    "vision_range": 6,
-                    "recognition_range": 4,
-                    "hearing_multiplier": 1.0,
-                }
-            )
+        page.get_by_label("Name", exact=True).fill(
+            "No JavaScript Server"
+        )
+        page.get_by_label("Briefing", exact=True).fill(
+            "Serve deterministic requests."
         )
         page.get_by_role("button", name="Create element").click()
         expect(page.locator(".notice[role=status]")).to_contain_text(

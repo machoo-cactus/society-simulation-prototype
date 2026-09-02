@@ -190,8 +190,8 @@
         {% endfor %}
         <input type="hidden" name="privacy_setting" value="1">
         <label class="check">
-          <input type="checkbox" name="exclude_private_derived" value="true" {% if not include_private_derived %}checked{% endif %}>
-          Exclude private-derived aggregates
+          <input type="checkbox" name="include_private_derived" value="true" {% if include_private_derived %}checked{% endif %}>
+          Include private-derived aggregates
         </label>
         <button type="submit">Apply aggregate privacy setting</button>
       </form>

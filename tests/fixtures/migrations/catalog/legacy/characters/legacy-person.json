@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "legacy-person",
+  "template_id": "human-v1",
+  "identity": {
+    "display_name": "Legacy Person",
+    "age": 34,
+    "gender": "Woman"
+  },
+  "appearance": {
+    "summary": "A carefully preserved legacy profile.",
+    "height": "178 cm"
+  },
+  "custom_sections": [
+    {
+      "id": "notes",
+      "title": "Notes",
+      "fields": [
+        {
+          "key": "source",
+          "label": "Source",
+          "value": "legacy fixture"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "legacy-building",
+  "name": "Legacy Building",
+  "kind": "building",
+  "rooms": [
+    {
+      "key": "main",
+      "element": {
+        "kind": "room",
+        "id": "legacy-room",
+        "content_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ],
+  "entrances": [
+    {
+      "key": "front",
+      "room_key": "main",
+      "local_coordinate": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

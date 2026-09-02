@@ -1,6 +1,6 @@
 import json
 import math
-from collections.abc import Mapping, Sequence, Set
+from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import fields, is_dataclass
 from datetime import date, datetime, time
 from enum import Enum
@@ -34,6 +34,7 @@ _OPERATIONAL_RESOURCE_EXCLUSIONS = {
 _CUSTOM_RESOURCE_PROJECTORS = {
     "stage0_sim.application.information.store.InformationStore",
     "stage0_sim.application.memory.EpisodicMemoryStore",
+    "stage0_sim.domain.world.physical.SpatialIndex",
     "stage0_sim.domain.world.topology.SpaceRegistry",
 }
 _APPLICATION_AUTHORITATIVE_RESOURCES = {
@@ -71,6 +72,39 @@ def serialize_authoritative(
         return value.isoformat()
     if isinstance(value, Enum):
         return serialize_authoritative(value.value, path=path)
+    from stage0_sim.domain.components import MovementComponent
+
+    if isinstance(value, MovementComponent):
+        return {
+            "destination": (
+                value.destination.to_payload()
+                if value.destination is not None
+                else None
+            ),
+            "remaining_path": compact_coordinate_path(value.path),
+            "retry_after_tick": value.retry_after_tick,
+            "path_correlation_id": value.path_correlation_id,
+            "action_instance": serialize_authoritative(
+                value.action_instance,
+                path=f"{path}.action_instance",
+            ),
+            "speed_legacy_cells_per_second": (
+                value.speed_legacy_cells_per_second
+            ),
+            "distance_remainder": value.distance_remainder,
+            "planned_spatial_revision": value.planned_spatial_revision,
+        }
+    from stage0_sim.domain.world import SpatialIndex
+
+    if isinstance(value, SpatialIndex):
+        return {
+            "revision": value.revision,
+            "topology_revision": value.topology_revision,
+            "entries": serialize_authoritative(
+                value.entries(),
+                path=f"{path}.entries",
+            ),
+        }
     if is_dataclass(value) and not isinstance(value, type):
         return {
             field.name: serialize_authoritative(
@@ -200,6 +234,774 @@ def capture_registry_state(registry: Registry) -> dict[str, JsonValue]:
         "resources": resources,
         "coverage": manifest,
     }
+
+
+def compact_coordinate_path(
+    coordinates: Iterable[object],
+) -> dict[str, JsonValue]:
+    """Encode a coordinate path as deterministic straight-line segments."""
+    from stage0_sim.domain.world import Coordinate
+
+    points = tuple(
+        coordinate
+        for coordinate in coordinates
+        if isinstance(coordinate, Coordinate)
+    )
+    if not points:
+        return {
+            "encoding": "delta_segments.v1",
+            "point_count": 0,
+            "start": None,
+            "segments": [],
+        }
+    segments: list[JsonValue] = []
+    segment_start = points[0]
+    previous = points[0]
+    delta: tuple[int, int] | None = None
+    steps = 0
+    for point in points[1:]:
+        next_delta = (point.x - previous.x, point.y - previous.y)
+        if delta is not None and next_delta != delta:
+            segments.append(
+                _path_segment_payload(segment_start, previous, delta, steps)
+            )
+            segment_start = previous
+            steps = 0
+        delta = next_delta
+        steps += 1
+        previous = point
+    if delta is not None:
+        segments.append(
+            _path_segment_payload(segment_start, previous, delta, steps)
+        )
+    return {
+        "encoding": "delta_segments.v1",
+        "point_count": len(points),
+        "start": points[0].to_payload(),
+        "segments": segments,
+    }
+
+
+def character_physical_state(
+    registry: Registry,
+    entity_id: str,
+) -> dict[str, JsonValue] | None:
+    """Project a self-contained, compact character physical observation."""
+    from stage0_sim.domain.components import (
+        CarriedLoadComponent,
+        CharacterEmbodimentComponent,
+        CharacterHandStateComponent,
+        CharacterPostureComponent,
+        EffectiveSensesComponent,
+        EquipmentStateComponent,
+        InteractionExecutionComponent,
+        InteractionRequestComponent,
+        MovementComponent,
+        NavigationComponent,
+        PhysicalObjectIdentityComponent,
+        PhysicalStateComponent,
+        PossessionsComponent,
+        SensesComponent,
+        SpatialIndex,
+        SpatialParentRelationComponent,
+    )
+    from stage0_sim.domain.lineage import action_lineage_payload
+
+    if (
+        registry.has_component(entity_id, PhysicalObjectIdentityComponent)
+        or not registry.has_component(entity_id, PhysicalStateComponent)
+    ):
+        return None
+    physical = registry.get_component(entity_id, PhysicalStateComponent)
+    posture = (
+        registry.get_component(entity_id, CharacterPostureComponent)
+        if registry.has_component(entity_id, CharacterPostureComponent)
+        else None
+    )
+    hands = (
+        registry.get_component(entity_id, CharacterHandStateComponent)
+        if registry.has_component(entity_id, CharacterHandStateComponent)
+        else None
+    )
+    relation = (
+        registry.get_component(entity_id, SpatialParentRelationComponent)
+        if registry.has_component(entity_id, SpatialParentRelationComponent)
+        else None
+    )
+    movement = (
+        registry.get_component(entity_id, MovementComponent)
+        if registry.has_component(entity_id, MovementComponent)
+        else None
+    )
+    navigation = (
+        registry.get_component(entity_id, NavigationComponent)
+        if registry.has_component(entity_id, NavigationComponent)
+        else None
+    )
+    request = (
+        registry.get_component(entity_id, InteractionRequestComponent)
+        if registry.has_component(entity_id, InteractionRequestComponent)
+        else None
+    )
+    execution = (
+        registry.get_component(entity_id, InteractionExecutionComponent)
+        if registry.has_component(entity_id, InteractionExecutionComponent)
+        else None
+    )
+    possessions = (
+        registry.get_component(entity_id, PossessionsComponent)
+        if registry.has_component(entity_id, PossessionsComponent)
+        else None
+    )
+    effective_senses = (
+        registry.get_component(entity_id, EffectiveSensesComponent)
+        if registry.has_component(entity_id, EffectiveSensesComponent)
+        else None
+    )
+    base_senses = (
+        registry.get_component(entity_id, SensesComponent)
+        if registry.has_component(entity_id, SensesComponent)
+        else None
+    )
+    equipment = (
+        registry.get_component(entity_id, EquipmentStateComponent)
+        if registry.has_component(entity_id, EquipmentStateComponent)
+        else None
+    )
+    load = (
+        registry.get_component(entity_id, CarriedLoadComponent)
+        if registry.has_component(entity_id, CarriedLoadComponent)
+        else None
+    )
+    embodiment = (
+        registry.get_component(entity_id, CharacterEmbodimentComponent)
+        if registry.has_component(entity_id, CharacterEmbodimentComponent)
+        else None
+    )
+    index = (
+        registry.get_resource(SpatialIndex)
+        if registry.has_resource(SpatialIndex)
+        else None
+    )
+    physically_custodied = tuple(
+        object_id
+        for object_id, custody in _physical_custody_entries(registry)
+        if custody == entity_id
+    )
+    return {
+        "feature_schema": "stage0.feature.character_physical_state.v2",
+        "character_id": entity_id,
+        "coordinate_system": "microcell",
+        "pose": _pose_payload(physical),
+        "footprint": {
+            "coordinate_system": "local_microcell_offset",
+            "cells": _coordinate_payloads(physical.footprint.cells),
+        },
+        "occupied_cells": _coordinate_payloads(physical.occupied_cells),
+        "posture": (
+            {
+                "value": posture.posture.value,
+                "support_id": posture.support_id,
+            }
+            if posture is not None
+            else None
+        ),
+        "hands": (
+            {
+                "left_object_id": hands.left_hand_object_id,
+                "right_object_id": hands.right_hand_object_id,
+                "held_object_ids": list(sorted(hands.held_object_ids)),
+            }
+            if hands is not None
+            else None
+        ),
+        "parent_relation": (
+            {
+                "parent_id": relation.parent_id,
+                "relation_kind": relation.kind.value,
+                "slot_id": relation.slot_id,
+            }
+            if relation is not None
+            else None
+        ),
+        "interaction": {
+            "request": (
+                {
+                    **_interaction_specification_payload(
+                        request.specification
+                    ),
+                    "source": request.source,
+                    "status": request.status,
+                    "failure_reason": request.failure_reason,
+                    "action_lineage": action_lineage_payload(
+                        request.action_instance
+                    ),
+                }
+                if request is not None
+                else None
+            ),
+            "execution": (
+                {
+                    **_interaction_specification_payload(
+                        execution.specification
+                    ),
+                    "source": execution.source,
+                    "status": "running",
+                    "elapsed": execution.elapsed,
+                    "duration": execution.duration,
+                    "correlation_id": execution.correlation_id,
+                    "action_lineage": action_lineage_payload(
+                        execution.action_instance
+                    ),
+                }
+                if execution is not None
+                else None
+            ),
+        },
+        "movement": (
+            {
+                "destination": (
+                    movement.destination.to_payload()
+                    if movement.destination is not None
+                    else None
+                ),
+                "remaining_path": compact_coordinate_path(movement.path),
+                "retry_after_tick": movement.retry_after_tick,
+                "path_correlation_id": movement.path_correlation_id,
+                "speed_legacy_cells_per_second": (
+                    movement.speed_legacy_cells_per_second
+                ),
+                "distance_remainder": movement.distance_remainder,
+                "planned_spatial_revision": (
+                    movement.planned_spatial_revision
+                ),
+                "action_lineage": action_lineage_payload(
+                    movement.action_instance
+                ),
+            }
+            if movement is not None
+            else None
+        ),
+        "navigation": (
+            {
+                "target_id": navigation.target_id,
+                "status": navigation.status.value,
+                "current_primitive_index": (
+                    navigation.current_primitive_index
+                ),
+                "completed_route_legs": navigation.completed_route_legs,
+                "primitives": [
+                    serialize_authoritative(primitive)
+                    for primitive in navigation.primitives
+                ],
+                "action_lineage": action_lineage_payload(
+                    navigation.action_instance
+                ),
+            }
+            if navigation is not None
+            else None
+        ),
+        "hybrid_possession": {
+            "abstract_holdings": (
+                dict(sorted(possessions.holdings.items()))
+                if possessions is not None
+                else {}
+            ),
+            "physically_held_object_ids": (
+                list(sorted(hands.held_object_ids))
+                if hands is not None
+                else []
+            ),
+            "physically_custodied_object_ids": list(physically_custodied),
+            "representations_are_independent": True,
+        },
+        "effective_senses": (
+            {
+                "vision_range": effective_senses.vision_range,
+                "recognition_range": effective_senses.recognition_range,
+                "hearing_range": effective_senses.hearing_range,
+                "smell_range": effective_senses.smell_range,
+            }
+            if effective_senses is not None
+            else None
+        ),
+        "base_senses": (
+            {
+                "vision_range": base_senses.vision_range,
+                "recognition_range": base_senses.recognition_range,
+                "hearing_range": base_senses.hearing_range,
+                "smell_range": base_senses.smell_range,
+            }
+            if base_senses is not None
+            else None
+        ),
+        "equipment": (
+            {
+                slot.value: list(object_ids)
+                for slot, object_ids in sorted(
+                    equipment.equipped_object_ids.items(),
+                    key=lambda item: item[0].value,
+                )
+            }
+            if equipment is not None
+            else None
+        ),
+        "carried_load": (
+            {
+                "known_mass_kg": load.known_mass_kg,
+                "unknown_mass_object_ids": list(
+                    load.unknown_mass_object_ids
+                ),
+                "max_single_object_mass_kg": (
+                    embodiment.max_single_object_mass_kg
+                    if embodiment is not None
+                    else None
+                ),
+                "max_carried_mass_kg": (
+                    embodiment.max_carried_mass_kg
+                    if embodiment is not None
+                    else None
+                ),
+            }
+            if load is not None
+            else None
+        ),
+        "spatial_index": {
+            "indexed": index.contains(entity_id) if index is not None else False,
+            "revision": index.revision if index is not None else None,
+            "topology_revision": (
+                index.topology_revision if index is not None else None
+            ),
+        },
+    }
+
+
+def physical_object_states(
+    registry: Registry,
+) -> tuple[dict[str, JsonValue], ...]:
+    """Return deterministic authoritative physical-object observations."""
+    from stage0_sim.domain.components import (
+        ConsumableComponent,
+        ContainerComponent,
+        CustodyComponent,
+        ObjectIntrinsicComponent,
+        OccupancySlotsComponent,
+        OpenableComponent,
+        OwnershipComponent,
+        PhysicalInteractionRegistry,
+        PhysicalObjectIdentityComponent,
+        PhysicalRelationKind,
+        PhysicalStateComponent,
+        PortableComponent,
+        ReadableComponent,
+        ScentSourceComponent,
+        SpatialIndex,
+        SpatialParentRelationComponent,
+        SupportComponent,
+        UsableComponent,
+        WearableComponent,
+    )
+
+    index = (
+        registry.get_resource(SpatialIndex)
+        if registry.has_resource(SpatialIndex)
+        else None
+    )
+    interaction_targets = (
+        registry.get_resource(PhysicalInteractionRegistry)
+        if registry.has_resource(PhysicalInteractionRegistry)
+        else None
+    )
+    relations = tuple(registry.query(SpatialParentRelationComponent))
+    observations: list[dict[str, JsonValue]] = []
+    for object_id in registry.query_entities(
+        PhysicalObjectIdentityComponent,
+        PhysicalStateComponent,
+    ):
+        identity = registry.get_component(
+            object_id, PhysicalObjectIdentityComponent
+        )
+        physical = registry.get_component(object_id, PhysicalStateComponent)
+        relation = (
+            registry.get_component(object_id, SpatialParentRelationComponent)
+            if registry.has_component(
+                object_id, SpatialParentRelationComponent
+            )
+            else None
+        )
+        openable = (
+            registry.get_component(object_id, OpenableComponent)
+            if registry.has_component(object_id, OpenableComponent)
+            else None
+        )
+        slots = (
+            registry.get_component(object_id, OccupancySlotsComponent).slots
+            if registry.has_component(object_id, OccupancySlotsComponent)
+            else ()
+        )
+        slot_payloads: list[JsonValue] = []
+        for slot in sorted(slots, key=lambda item: item.id):
+            occupants = sorted(
+                entity_id
+                for entity_id, candidate in relations
+                if candidate.parent_id == object_id
+                and candidate.slot_id == slot.id
+            )
+            accepted_relations = _string_values(
+                kind.value for kind in slot.accepted_relations
+            )
+            occupant_ids = _string_values(occupants)
+            slot_payloads.append(
+                {
+                    "slot_id": slot.id,
+                    "accepted_relations": accepted_relations,
+                    "capacity": slot.capacity,
+                    "occupant_ids": occupant_ids,
+                    "occupancy": len(occupants),
+                    "remaining_capacity": slot.capacity - len(occupants),
+                }
+            )
+        portable = (
+            registry.get_component(object_id, PortableComponent)
+            if registry.has_component(object_id, PortableComponent)
+            else None
+        )
+        consumable = (
+            registry.get_component(object_id, ConsumableComponent)
+            if registry.has_component(object_id, ConsumableComponent)
+            else None
+        )
+        usable = (
+            registry.get_component(object_id, UsableComponent)
+            if registry.has_component(object_id, UsableComponent)
+            else None
+        )
+        intrinsic = (
+            registry.get_component(object_id, ObjectIntrinsicComponent)
+            if registry.has_component(object_id, ObjectIntrinsicComponent)
+            else None
+        )
+        wearable = (
+            registry.get_component(object_id, WearableComponent)
+            if registry.has_component(object_id, WearableComponent)
+            else None
+        )
+        scent = (
+            registry.get_component(object_id, ScentSourceComponent)
+            if registry.has_component(object_id, ScentSourceComponent)
+            else None
+        )
+        target = (
+            interaction_targets.targets.get(object_id)
+            if interaction_targets is not None
+            else None
+        )
+        indexed = index is not None and index.contains(object_id)
+        observations.append(
+            {
+                "feature_schema": "stage0.feature.physical_object_state.v2",
+                "object_id": object_id,
+                "definition_id": identity.definition_id,
+                "name": identity.name,
+                "coordinate_system": "microcell",
+                "pose": _pose_payload(physical),
+                "footprint": {
+                    "coordinate_system": "local_microcell_offset",
+                    "cells": _coordinate_payloads(
+                        physical.footprint.cells
+                    ),
+                },
+                "occupied_cells": _coordinate_payloads(
+                    physical.occupied_cells
+                ),
+                "obstruction": {
+                    "movement": physical.movement_obstruction.value,
+                    "vision": physical.vision_obstruction.value,
+                    "hearing": physical.hearing_transmission.value,
+                    "smell": physical.smell_transmission.value,
+                    "blocks_movement": (
+                        physical.movement_obstruction.blocks_movement
+                    ),
+                    "blocks_vision": (
+                        physical.vision_obstruction.blocks_vision
+                    ),
+                    "blocks_hearing": physical.hearing_transmission.blocks,
+                    "blocks_smell": physical.smell_transmission.blocks,
+                },
+                "intrinsics": (
+                    {
+                        "mass_kg": intrinsic.mass_kg,
+                        "dimensions_cm": (
+                            {
+                                "length_cm": intrinsic.dimensions.length_cm,
+                                "width_cm": intrinsic.dimensions.width_cm,
+                                "height_cm": intrinsic.dimensions.height_cm,
+                            }
+                            if intrinsic.dimensions is not None
+                            else None
+                        ),
+                        "size_class": (
+                            intrinsic.size_class.value
+                            if intrinsic.size_class is not None
+                            else None
+                        ),
+                    }
+                    if intrinsic is not None
+                    else None
+                ),
+                "openable": (
+                    {
+                        "is_open": openable.is_open,
+                        "is_locked": openable.is_locked,
+                        "closed_movement_obstruction": (
+                            openable.closed_movement_obstruction.value
+                        ),
+                        "closed_vision_obstruction": (
+                            openable.closed_vision_obstruction.value
+                        ),
+                        "closed_hearing_transmission": (
+                            openable.closed_hearing_transmission.value
+                        ),
+                        "closed_smell_transmission": (
+                            openable.closed_smell_transmission.value
+                        ),
+                    }
+                    if openable is not None
+                    else None
+                ),
+                "capabilities": {
+                    "portable": (
+                        {"two_handed": portable.two_handed}
+                        if portable is not None
+                        else None
+                    ),
+                    "support_slot_ids": (
+                        _string_values(
+                            registry.get_component(
+                                object_id, SupportComponent
+                            ).slot_ids
+                        )
+                        if registry.has_component(
+                            object_id, SupportComponent
+                        )
+                        else []
+                    ),
+                    "container_slot_ids": (
+                        _string_values(
+                            registry.get_component(
+                                object_id, ContainerComponent
+                            ).slot_ids
+                        )
+                        if registry.has_component(
+                            object_id, ContainerComponent
+                        )
+                        else []
+                    ),
+                    "openable": openable is not None,
+                    "readable": (
+                        {
+                            "document_id": registry.get_component(
+                                object_id, ReadableComponent
+                            ).document_id
+                        }
+                        if registry.has_component(
+                            object_id, ReadableComponent
+                        )
+                        else None
+                    ),
+                    "consumable": (
+                        {
+                            "item_id": consumable.item_id,
+                            "remaining_servings": consumable.servings,
+                        }
+                        if consumable is not None
+                        else None
+                    ),
+                    "usable": (
+                        {"use_kind": usable.use_kind}
+                        if usable is not None
+                        else None
+                    ),
+                    "wearable": (
+                        {
+                            "compatible_slots": [
+                                slot.value
+                                for slot in sorted(
+                                    wearable.compatible_slots,
+                                    key=lambda item: item.value,
+                                )
+                            ],
+                            "effects": [
+                                {
+                                    "id": effect.id,
+                                    "target": effect.target.value,
+                                    "operation": effect.operation.value,
+                                    "value": effect.value,
+                                }
+                                for effect in wearable.effects
+                            ],
+                        }
+                        if wearable is not None
+                        else None
+                    ),
+                    "scent_source": (
+                        {
+                            "scent_id": scent.scent_id,
+                            "description": scent.description,
+                            "emission_range": scent.emission_range,
+                        }
+                        if scent is not None
+                        else None
+                    ),
+                    "interaction_target": (
+                        {
+                            "room_id": target.room_id,
+                            "approach_anchors": _coordinate_payloads(
+                                target.approach_anchors
+                            ),
+                            "occupancy_anchors": {
+                                slot_id: _coordinate_payloads(anchors)
+                                for slot_id, anchors in sorted(
+                                    target.occupancy_anchors.items()
+                                )
+                            },
+                        }
+                        if target is not None
+                        else None
+                    ),
+                },
+                "slots": slot_payloads,
+                "parent_relation": (
+                    {
+                        "parent_id": relation.parent_id,
+                        "relation_kind": relation.kind.value,
+                        "slot_id": relation.slot_id,
+                    }
+                    if relation is not None
+                    else None
+                ),
+                "custody": (
+                    {
+                        "custodian_id": registry.get_component(
+                            object_id, CustodyComponent
+                        ).custodian_id,
+                        "held": (
+                            relation is not None
+                            and relation.kind is PhysicalRelationKind.HELD_BY
+                        ),
+                        "held_by_id": (
+                            relation.parent_id
+                            if relation is not None
+                            and relation.kind
+                            is PhysicalRelationKind.HELD_BY
+                            else None
+                        ),
+                    }
+                    if registry.has_component(object_id, CustodyComponent)
+                    or (
+                        relation is not None
+                        and relation.kind is PhysicalRelationKind.HELD_BY
+                    )
+                    else None
+                ),
+                "ownership": (
+                    {
+                        "owner_id": registry.get_component(
+                            object_id, OwnershipComponent
+                        ).owner_id
+                    }
+                    if registry.has_component(object_id, OwnershipComponent)
+                    else None
+                ),
+                "spatial_index": {
+                    "indexed": indexed,
+                    "dynamic": (
+                        index.entry(object_id).dynamic
+                        if indexed and index is not None
+                        else None
+                    ),
+                    "revision": index.revision if index is not None else None,
+                    "topology_revision": (
+                        index.topology_revision
+                        if index is not None
+                        else None
+                    ),
+                },
+            }
+        )
+    return tuple(observations)
+
+
+def physical_relation_samples(
+    registry: Registry,
+) -> tuple[dict[str, JsonValue], ...]:
+    """Return live parent-relation observations in stable child order."""
+    from stage0_sim.domain.components import (
+        CustodyComponent,
+        PhysicalObjectIdentityComponent,
+        PhysicalRelationKind,
+        PhysicalStateComponent,
+        SpatialIndex,
+        SpatialParentRelationComponent,
+    )
+
+    index = (
+        registry.get_resource(SpatialIndex)
+        if registry.has_resource(SpatialIndex)
+        else None
+    )
+    result: list[dict[str, JsonValue]] = []
+    for entity_id, relation in registry.query(
+        SpatialParentRelationComponent
+    ):
+        physical = (
+            registry.get_component(entity_id, PhysicalStateComponent)
+            if registry.has_component(entity_id, PhysicalStateComponent)
+            else None
+        )
+        custodian_id = (
+            registry.get_component(entity_id, CustodyComponent).custodian_id
+            if registry.has_component(entity_id, CustodyComponent)
+            else None
+        )
+        result.append(
+            {
+                "feature_schema": "stage0.feature.physical_relation_sample.v1",
+                "object_id": entity_id,
+                "entity_kind": (
+                    "physical_object"
+                    if registry.has_component(
+                        entity_id, PhysicalObjectIdentityComponent
+                    )
+                    else "character"
+                ),
+                "room_id": (
+                    physical.pose.room_id if physical is not None else None
+                ),
+                "parent_id": relation.parent_id,
+                "parent_kind": _physical_parent_kind(
+                    registry, relation.parent_id
+                ),
+                "relation_kind": relation.kind.value,
+                "slot_id": relation.slot_id,
+                "custodian_id": custodian_id,
+                "held": relation.kind is PhysicalRelationKind.HELD_BY,
+                "held_by_id": (
+                    relation.parent_id
+                    if relation.kind is PhysicalRelationKind.HELD_BY
+                    else None
+                ),
+                "spatial_index": {
+                    "revision": index.revision if index is not None else None,
+                    "topology_revision": (
+                        index.topology_revision
+                        if index is not None
+                        else None
+                    ),
+                },
+            }
+        )
+    return tuple(result)
 
 
 def state_delta(
@@ -470,6 +1272,18 @@ def _serialize_resource(
                 for destination_id in spaces.destination_ids()
             },
         }
+    if type_name == "stage0_sim.domain.world.physical.SpatialIndex":
+        from stage0_sim.domain.world import SpatialIndex
+
+        spatial_index = cast(SpatialIndex, resource)
+        return {
+            "revision": spatial_index.revision,
+            "topology_revision": spatial_index.topology_revision,
+            "entries": serialize_authoritative(
+                spatial_index.entries(),
+                path=f"{path}.entries",
+            ),
+        }
     return serialize_authoritative(resource, path=path)
 
 
@@ -494,6 +1308,108 @@ def _canonical_json(value: JsonValue) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def _coordinate_payloads(coordinates: Iterable[object]) -> list[JsonValue]:
+    from stage0_sim.domain.world import Coordinate
+
+    return [
+        coordinate.to_payload()
+        for coordinate in sorted(
+            (
+                coordinate
+                for coordinate in coordinates
+                if isinstance(coordinate, Coordinate)
+            ),
+            key=lambda item: (item.y, item.x),
+        )
+    ]
+
+
+def _string_values(values: Iterable[str]) -> list[JsonValue]:
+    return [value for value in sorted(values)]
+
+
+def _pose_payload(physical: object) -> dict[str, JsonValue]:
+    from stage0_sim.domain.components import PhysicalStateComponent
+
+    if not isinstance(physical, PhysicalStateComponent):
+        raise TypeError("physical state projection requires PhysicalStateComponent")
+    return {
+        "room_id": physical.pose.room_id,
+        "anchor": physical.pose.anchor.to_payload(),
+        "orientation": physical.pose.orientation.value,
+    }
+
+
+def _interaction_specification_payload(
+    specification: object,
+) -> dict[str, JsonValue]:
+    from stage0_sim.domain.interactions import InteractionSpecification
+
+    if not isinstance(specification, InteractionSpecification):
+        raise TypeError("interaction projection requires InteractionSpecification")
+    return {
+        "verb": specification.verb.value,
+        "target_id": specification.target_id,
+        "destination_id": specification.destination_id,
+        "slot_id": specification.slot_id,
+    }
+
+
+def _path_segment_payload(
+    start: object,
+    end: object,
+    delta: tuple[int, int],
+    steps: int,
+) -> dict[str, JsonValue]:
+    from stage0_sim.domain.world import Coordinate
+
+    if not isinstance(start, Coordinate) or not isinstance(end, Coordinate):
+        raise TypeError("path segments require Coordinate endpoints")
+    return {
+        "start": start.to_payload(),
+        "end": end.to_payload(),
+        "delta": {"x": delta[0], "y": delta[1]},
+        "steps": steps,
+    }
+
+
+def _physical_custody_entries(
+    registry: Registry,
+) -> tuple[tuple[str, str], ...]:
+    from stage0_sim.domain.components import CustodyComponent
+
+    return tuple(
+        sorted(
+            (
+                (entity_id, custody.custodian_id)
+                for entity_id, custody in registry.query(CustodyComponent)
+            ),
+            key=lambda item: item[0],
+        )
+    )
+
+
+def _physical_parent_kind(registry: Registry, parent_id: str) -> str:
+    from stage0_sim.domain.components import (
+        CharacterProfileComponent,
+        NpcComponent,
+        PhysicalObjectIdentityComponent,
+        PhysicalStateComponent,
+    )
+
+    if parent_id not in registry.entities():
+        return "space"
+    if registry.has_component(parent_id, PhysicalObjectIdentityComponent):
+        return "physical_object"
+    if registry.has_component(parent_id, NpcComponent):
+        return "npc"
+    if registry.has_component(
+        parent_id, CharacterProfileComponent
+    ) or registry.has_component(parent_id, PhysicalStateComponent):
+        return "character"
+    return "space"
 
 
 def _collect_changes(

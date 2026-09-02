@@ -1,0 +1,18 @@
+{
+  "briefing": "Preserve this role exactly.",
+  "description": "",
+  "hearing_range": 10,
+  "id": "legacy-role",
+  "kind": "npc_role",
+  "name": "Legacy Role",
+  "recognition_range": 4,
+  "schema_version": 3,
+  "smell_range": 0,
+  "tool_allowlist": [
+    "serve_transaction",
+    "say",
+    "wait",
+    "skip"
+  ],
+  "vision_range": 6
+}

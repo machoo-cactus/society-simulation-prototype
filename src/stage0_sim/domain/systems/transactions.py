@@ -24,6 +24,7 @@ from stage0_sim.domain.lineage import (
 )
 from stage0_sim.domain.npcs import NpcPoolRegistry
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.systems.interactions import is_at_interaction_approach
 from stage0_sim.domain.systems.spatial_context import (
     local_world_for_agent,
     shares_local_map,
@@ -485,10 +486,12 @@ class TransactionExecutionSystem:
             npc = context.registry.get_component(operator_id, NpcComponent)
             if npc.staffed_point_id != point.id:
                 return "transaction_operator_mismatch"
-        position = context.registry.get_component(
-            agent_id, PositionComponent
-        )
-        if position.coordinate != point.position:
+        if not is_at_interaction_approach(
+            context.registry,
+            agent_id,
+            point.id,
+            fallback=point.position,
+        ):
             return "character_not_at_transaction_point"
         if check_capacity:
             active_count = sum(

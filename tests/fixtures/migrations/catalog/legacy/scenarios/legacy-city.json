@@ -1,0 +1,57 @@
+{
+  "schema_version": 4,
+  "name": "Legacy city",
+  "world": {
+    "type": "city",
+    "city": {
+      "id": "city",
+      "name": "City",
+      "bounds_meters": {
+        "min_x": 0,
+        "min_y": 0,
+        "max_x": 10,
+        "max_y": 10
+      }
+    },
+    "city_zones": [
+      {
+        "id": "center",
+        "name": "Center",
+        "center": {
+          "x": 5,
+          "y": 5
+        },
+        "buildings": [
+          {
+            "id": "building",
+            "element": {
+              "kind": "building",
+              "id": "legacy-building",
+              "content_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "city_position": {
+              "x": 5,
+              "y": 5
+            },
+            "entrance_node_ids": {
+              "front": "front-node"
+            }
+          }
+        ]
+      }
+    ],
+    "transport": {
+      "nodes": [
+        {
+          "id": "front-node",
+          "kind": "BUILDING_ENTRANCE",
+          "position": {
+            "x": 5,
+            "y": 5
+          },
+          "place_id": "building"
+        }
+      ]
+    }
+  }
+}

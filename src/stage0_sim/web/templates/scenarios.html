@@ -123,6 +123,21 @@
           </div>
         </header>
 
+        {% if editor_world.decode_issues or editor_world.preview_issues %}
+          <section class="scenario-preview-issues" role="alert" aria-labelledby="scenario-preview-issues-heading">
+            <h4 id="scenario-preview-issues-heading">Preview limitations</h4>
+            <p>Malformed values remain in the draft. Records that cannot be projected are listed as not shown on the map.</p>
+            <ul>
+              {% for node_id, issue in editor_world.decode_issues %}
+                <li><a href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ node_id }}#scenario-object-inspector">{{ issue }}</a></li>
+              {% endfor %}
+              {% for issue in editor_world.preview_issues %}
+                <li>{{ issue }}</li>
+              {% endfor %}
+            </ul>
+          </section>
+        {% endif %}
+
         {% if active_world %}
           <details class="scenario-world-properties">
             <summary>World dimensions and transport defaults</summary>
@@ -207,12 +222,12 @@
                 <rect class="map-background" x="0" y="0" width="{{ world_view.width }}" height="{{ world_view.height }}"/>
                 {% for zone in world_view.zones %}
                   <a href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ zone.node_id }}#scenario-object-inspector" aria-label="Edit zone {{ zone.name }}" data-ui-link-targets="#scenario-world-workspace">
-                    {% for tile in zone.tiles %}
-                      <rect class="zone zone--{{ zone.type|lower }} {% if zone.selected %}map-object-selected{% endif %}" x="{{ tile.x }}" y="{{ tile.y }}" width="1" height="1"><title>{{ zone.name }}</title></rect>
+                    {% for rectangle in zone.rectangles %}
+                      <rect class="zone zone--{{ zone.type|lower }} {% if zone.selected %}map-object-selected{% endif %}" x="{{ rectangle.x }}" y="{{ rectangle.y }}" width="{{ rectangle.width }}" height="{{ rectangle.height }}"><title>{{ zone.name }}</title></rect>
                     {% endfor %}
                   </a>
                 {% endfor %}
-                {% for point in world_view.blocked %}
+                {% for point in world_view.blocked_items %}
                   <a href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ point.node_id }}#scenario-object-inspector" aria-label="Edit blocked cell {{ loop.index }}" data-ui-link-targets="#scenario-world-workspace">
                     <rect class="blocked {% if point.selected %}map-object-selected{% endif %}" x="{{ point.x }}" y="{{ point.y }}" width="1" height="1"><title>Blocked {{ point.x }}, {{ point.y }}</title></rect>
                   </a>
@@ -232,7 +247,7 @@
                 {% endfor %}
                 {% for agent in world_view.agents %}
                   <a href="?{{ editor_query }}&scope={{ draft.view.scope_node_id }}&focus={{ agent.node_id }}#scenario-object-inspector" aria-label="Edit entity {{ agent.name }}" data-ui-link-targets="#scenario-world-workspace">
-                    <circle class="character-marker {% if agent.selected %}selected{% endif %}" cx="{{ agent.x + 0.5 }}" cy="{{ agent.y + 0.5 }}" r=".25"><title>{{ agent.name }}</title></circle>
+                    <circle class="character-marker {% if agent.selected %}selected{% endif %}" cx="{{ agent.x }}" cy="{{ agent.y }}" r=".25"><title>{{ agent.name }}</title></circle>
                   </a>
                 {% endfor %}
                 {% for x in range(world_view.width + 1) %}<line class="grid-line" x1="{{ x }}" y1="0" x2="{{ x }}" y2="{{ world_view.height }}"/>{% endfor %}
@@ -280,15 +295,23 @@
               {% endif %}
             </svg>
           {% else %}
-            <p class="empty-state">Choose a world type and apply it to create a visual world.</p>
+            {% if editor_world.preview_issues %}
+              <p class="empty-state">This interior cannot be projected. Its source records remain unchanged; review the preview limitations above.</p>
+            {% else %}
+              <p class="empty-state">Choose a world type and apply it to create a visual world.</p>
+            {% endif %}
           {% endif %}
         </div>
 
         <aside id="scenario-object-inspector" class="scenario-object-inspector" aria-labelledby="scenario-inspector-heading">
           <h3 id="scenario-inspector-heading">Selected object</h3>
-          {% if editor_world.selected_node %}
-            <p class="selected-path">{{ editor_world.selected_node.path|join(" › ") }}</p>
-            {% if editor_world.selected_node.path|length == 3 and editor_world.selected_node.path[1] == "city_zones" %}
+          {% if editor_world.selected_node or editor_world.selected_item %}
+            {% if editor_world.selected_node %}
+              <p class="selected-path">{{ editor_world.selected_node.path|join(" › ") }}</p>
+            {% else %}
+              <p class="selected-path">{{ editor_world.selected_item.group }} › {{ editor_world.selected_item.kind }}</p>
+            {% endif %}
+            {% if editor_world.selected_node and editor_world.selected_node.path|length == 3 and editor_world.selected_node.path[1] == "city_zones" %}
               <section class="building-archetype-picker" aria-labelledby="building-archetype-heading">
                 <h4 id="building-archetype-heading">Add building from library</h4>
                 <p>Each instance stores only the selected element ID and content hash. Entrance transport nodes are created with the instance.</p>
@@ -320,7 +343,7 @@
                 <button class="danger" type="submit" name="collection_action" value="remove:{{ collection.id }}:{{ editor_world.selected_node.id }}" formnovalidate>Remove</button>
               </div>
             {% endif %}
-            {% if editor_world.view and editor_world.view.kind == "city" %}
+            {% if editor_world.selected_node and editor_world.view and editor_world.view.kind == "city" %}
               {% for building in editor_world.view.buildings if building.node_id == editor_world.selected_node.id and building.interior_node_id %}
                 <a class="button-link" href="?{{ editor_query }}&scope={{ building.interior_node_id }}&focus={{ building.interior_node_id }}" data-ui-link-targets="#scenario-world-workspace">Open {{ building.name }} interior</a>
               {% endfor %}
@@ -373,8 +396,76 @@
                 >Reset building overrides</button>
               </section>
             {% endif %}
-            {{ render_focused_node(editor_world.selected_node) }}
-            <button type="submit" name="intent" value="refresh" formnovalidate>Apply selected changes</button>
+            {% if editor_world.read_only_inspector %}
+              {% set summary = editor_world.read_only_inspector %}
+              <section class="physical-inspector-summary" aria-labelledby="physical-inspector-summary-heading">
+                <h4 id="physical-inspector-summary-heading">{{ summary.title }}</h4>
+                <p><strong>{{ summary.kind|replace("_", " ")|title }}</strong>{% if summary.object_kind %} · {{ summary.object_kind|replace("_", " ") }}{% endif %}</p>
+                <dl>
+                  {% if summary.object_id %}<dt>Object</dt><dd><code>{{ summary.object_id }}</code></dd>{% endif %}
+                  {% if summary.definition_id %}<dt>Definition</dt><dd><code>{{ summary.definition_id }}</code></dd>{% endif %}
+                  {% if summary.room_id %}<dt>Room</dt><dd><code>{{ summary.room_id }}</code></dd>{% endif %}
+                  {% if summary.room_key %}<dt>Room key</dt><dd><code>{{ summary.room_key }}</code></dd>{% endif %}
+                  {% if summary.room_type %}<dt>Room type</dt><dd>{{ summary.room_type }}</dd>{% endif %}
+                  {% if summary.width %}<dt>Dimensions</dt><dd>{{ summary.width }} × {{ summary.height }}</dd>{% endif %}
+                  {% if summary.spatial_metric %}<dt>Spatial metric</dt><dd>{{ summary.spatial_metric.microcells_per_legacy_cell }} microcells per legacy cell</dd>{% endif %}
+                  {% if summary.legacy_position %}<dt>Legacy position</dt><dd>{{ summary.legacy_position.x }}, {{ summary.legacy_position.y }}</dd>{% endif %}
+                </dl>
+                {% if summary.unplaced %}
+                  <p class="field-errors">The anchor or footprint cannot be projected. The object remains in the draft and is shown as unplaced.</p>
+                {% endif %}
+                {% if summary.placement %}
+                  <h5>Physical placement</h5>
+                  <dl>
+                    <dt>Anchor</dt><dd>{{ summary.placement.anchor.x }}, {{ summary.placement.anchor.y }}</dd>
+                    <dt>Orientation</dt><dd>{{ summary.placement.orientation }}</dd>
+                    <dt>Parent relation</dt><dd>{{ summary.placement.parent_relation.kind|replace("_", " ") }}</dd>
+                    <dt>Parent ID</dt><dd>{{ summary.placement.parent_relation.parent_id or "room" }}</dd>
+                    <dt>Slot ID</dt><dd>{{ summary.placement.parent_relation.slot_id or "not set" }}</dd>
+                  </dl>
+                {% endif %}
+                {% if summary.physical %}
+                  <h5>Physical definition</h5>
+                  <dl>
+                    <dt>Footprint</dt>
+                    <dd>
+                      {% for cell in summary.physical.footprint.cells %}
+                        ({{ cell.x }}, {{ cell.y }}){% if not loop.last %}, {% endif %}
+                      {% endfor %}
+                    </dd>
+                    <dt>Movement obstruction</dt><dd>{{ summary.physical.obstruction.movement }}</dd>
+                    <dt>Vision obstruction</dt><dd>{{ summary.physical.obstruction.vision }}</dd>
+                    <dt>Initial open</dt><dd>{{ summary.physical.initial_open if summary.physical.initial_open is not none else "not set" }}</dd>
+                    <dt>Owner source</dt><dd>{{ summary.physical.owner_id or "not set" }}</dd>
+                    <dt>Custodian source</dt><dd>{{ summary.physical.custodian_id or "not set" }}</dd>
+                  </dl>
+                  <h5>Capabilities and slots</h5>
+                  <ul>
+                    {% for name in ("support", "container", "portable", "readable", "consumable", "usable", "openable") %}
+                      {% set capability = summary.physical.capabilities[name] %}
+                      {% if capability %}<li><strong>{{ name|title }}</strong>: {{ capability }}</li>{% endif %}
+                    {% endfor %}
+                    {% for slot in summary.physical.capabilities.slots %}
+                      <li><strong>Slot {{ slot.id }}</strong>: {{ slot.accepted_relations|join(", ") }} · capacity {{ slot.capacity }}</li>
+                    {% endfor %}
+                    {% if not summary.physical.capabilities.slots and not summary.physical.capabilities.support and not summary.physical.capabilities.container and not summary.physical.capabilities.portable and not summary.physical.capabilities.readable and not summary.physical.capabilities.consumable and not summary.physical.capabilities.usable and not summary.physical.capabilities.openable %}
+                      <li>No public physical capabilities.</li>
+                    {% endif %}
+                  </ul>
+                {% endif %}
+                <h5>Door linkage</h5>
+                {% if summary.door_links %}
+                  <ul>{% for link in summary.door_links %}<li>{{ link }}</li>{% endfor %}</ul>
+                {% else %}
+                  <p>No entrance or portal links this object as a door.</p>
+                {% endif %}
+                <p>This inherited element detail is read-only. Edit its reusable element to change the definition.</p>
+              </section>
+            {% endif %}
+            {% if editor_world.selected_node %}
+              {{ render_focused_node(editor_world.selected_node) }}
+              <button type="submit" name="intent" value="refresh" formnovalidate>Apply selected changes</button>
+            {% endif %}
           {% else %}
             <p class="empty-state">Select an object on the map or in the explorer.</p>
           {% endif %}

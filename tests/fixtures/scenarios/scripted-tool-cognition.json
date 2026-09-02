@@ -42,6 +42,62 @@
             "skip"
           ]
         },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "criteria": [],
+              "description": "Complete focused work at the office",
+              "id": "agent-001-complete-focused-work-at-the-office",
+              "priority": 50
+            }
+          ]
+        },
         "homeostasis": {
           "energy": 80,
           "satiety": 80,
@@ -66,16 +122,6 @@
         "position": {
           "x": 0,
           "y": 0
-        },
-        "goals": {
-          "goals": [
-            {
-              "id": "agent-001-complete-focused-work-at-the-office",
-              "description": "Complete focused work at the office",
-              "priority": 50,
-              "criteria": []
-            }
-          ]
         }
       },
       "id": "agent-001"
@@ -95,15 +141,15 @@
   "perception": {
     "blocked_tiles_are_opaque": true,
     "fact_max_age_seconds": 300.0,
-    "hearing_range": 10,
     "inbox_limit": 100,
     "recognition_range": 5,
     "renderer": "deterministic",
     "vision_range": 8,
+    "voice_range": 10,
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 4,
+  "schema_version": 6,
   "seed": 20260824,
   "speed": 1.0,
   "system1": {
@@ -118,6 +164,9 @@
   "world": {
     "blocked": [],
     "height": 2,
+    "spatial_metric": {
+      "microcells_per_legacy_cell": 9
+    },
     "stations": [
       {
         "actions": null,

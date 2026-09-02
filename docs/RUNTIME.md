@@ -7,7 +7,7 @@ action execution, perception, and determinism.
 
 Scenario authoring, staging, and execution are separate:
 
-1. A schema-version-4 source is validated.
+1. A schema-version-6 source is validated.
 2. Character assignments and element references are resolved and frozen.
 3. Optional character-situation synthesis completes transactionally.
 4. A prepared scenario is staged without starting or advancing time.
@@ -50,6 +50,8 @@ orders are:
 | 85 | `navigation_planning` |
 | 90 | `plan_execution` |
 | 100 | `pathfinding` |
+| 145 | `interaction_execution` |
+| 147 | `character_effect_resolution` |
 | 150 | `movement_activity` |
 | 160 | `homeostasis` |
 | 165 | `timed_plan_action` |
@@ -116,6 +118,44 @@ recheck volatile preconditions immediately before an atomic transfer. Staffed
 points require a run-scoped NPC authorization through the same tool, intent,
 plan, and validation boundary.
 
+Physical interactions follow the same rule. A committed `INTERACT` action
+retains its immutable verb, target, destination, slot, action, decision, and
+tool lineage. `InteractionExecutionSystem` emits
+`interaction.requested`, revalidates current observability, reachability,
+capability, hands, posture, slot capacity, relation acyclicity, open/locked
+state, and collision constraints, then emits `interaction.started`. Completion
+performs one deterministic state transition across the relevant ECS
+components and `SpatialIndex`; changed preconditions or preemption produce
+`interaction.failed` or `interaction.cancelled` rather than partial success.
+
+`PICK_UP`, `PUT_DOWN`, `PLACE_ON`, and `PLACE_IN` update live parent relations,
+hands, custody, slots, pose, and index membership. `OPEN` and `CLOSE` update
+effective movement/vision/hearing/smell obstruction; a locked object cannot be opened, and
+closing fails if restoring its obstruction would collide. `SIT`, `STAND`,
+`LIE_DOWN`, and `GET_UP` update posture and occupancy relations only when a
+valid occupancy or exit pose exists. `USE` requires an explicit usable
+capability.
+
+`EQUIP` moves a held wearable into a compatible character equipment slot using
+a live slotted `ATTACHED_TO` relation. `UNEQUIP` requires enough free hands and
+returns it to `HELD_BY`. The order-147 resolver derives equipment state,
+carried mass, and effective vision, recognition, hearing, and smell ranges from
+live relations. Known mass can reject pickup when single-object or total-load
+limits would be exceeded; unknown migrated mass preserves legacy eligibility.
+
+Entrances and portals may link to a door object. Navigation compiles an
+`OPEN` interaction before the linked traversal. A closed unlocked door must
+open successfully; a locked door blocks the route. Traversal still revalidates
+the live topology and availability instead of trusting immutable `CityWorld`
+metadata.
+
+Local physical room grids use 9 microcells per legacy cell. Anchors, paths,
+footprints, and occupied cells are microcells; compatibility positions may be
+reported in legacy cells. Characters use a fixed 5×5-microcell body footprint
+and cardinal orientation. Semantic mass and dimensions do not alter the rendered footprint. The model is
+discrete and does not implement continuous rigid-body dynamics, torque,
+arbitrary rotation, or weight-driven movement/physiology.
+
 ## Perception and privacy
 
 Three representations remain distinct:
@@ -129,6 +169,14 @@ execution evidence—movement, visible activity, delivered speech, public time o
 weather—but not private destinations, reasons, plans, vitals, drives, prompts,
 profiles, memories, or model content. Speech communicates literal words only
 through `say`; intended recipients are not guaranteed to hear them.
+
+Vision, speech hearing, and object scent use stable footprint-aware supercover
+sweeps. Blocked room cells block all three modalities. Physical structures may
+independently pass or block each modality: for example, a window may pass
+vision while blocking hearing and smell. Mirrors are opaque recognizable
+surfaces and do not create reflected observations. Scent sources are
+room-local, range-bounded, and blocked structurally; diffusion, airflow,
+attenuation, and lingering fields are not modeled.
 
 ## Determinism
 

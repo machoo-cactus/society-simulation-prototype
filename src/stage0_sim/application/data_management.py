@@ -437,7 +437,7 @@ class DatasetManagementService:
         self,
         selection: RunSelection,
         *,
-        include_private_derived: bool = True,
+        include_private_derived: bool = False,
     ) -> AggregateDatasetSummary:
         self._repository.reconcile_incomplete_runs()
         _validate_selection(selection)
@@ -673,13 +673,57 @@ class DatasetManagementService:
             ),
             (
                 "interactions",
-                ("interaction_type", "status"),
+                ("interaction_type", "interaction_verb", "status"),
                 (),
             ),
             (
                 "interaction_episodes",
-                ("interaction_type", "status", "content_visibility"),
+                (
+                    "interaction_type",
+                    "interaction_verb",
+                    "status",
+                    "content_visibility",
+                ),
                 (("duration", "interactions.duration", "simulation seconds"),),
+            ),
+            (
+                "physical_object_states",
+                (
+                    "room_id",
+                    "phase",
+                    "relation_kind",
+                    "movement_obstruction",
+                    "vision_obstruction",
+                    "is_open",
+                    "is_locked",
+                    "custodian_id",
+                    "held_by_id",
+                ),
+                (
+                    (
+                        "spatial_index_revision",
+                        "physical.spatial_index_revision",
+                        "revision",
+                    ),
+                    (
+                        "topology_revision",
+                        "physical.topology_revision",
+                        "revision",
+                    ),
+                ),
+            ),
+            (
+                "physical_relation_samples",
+                (
+                    "entity_kind",
+                    "room_id",
+                    "parent_kind",
+                    "relation_kind",
+                    "phase",
+                    "custodian_id",
+                    "held_by_id",
+                ),
+                (),
             ),
             (
                 "model_requests",
@@ -722,13 +766,21 @@ class DatasetManagementService:
             family = {
                 "action_instances": "actions",
                 "transition_samples": "transitions",
+                "physical_object_states": "physical.state",
+                "physical_relation_samples": "physical.relation",
             }.get(table, table)
             for row in self._iter_table(run_id, table, include_private):
                 distributions["feature.family"][family] += 1
                 for dimension in dimensions:
                     value = row.get(dimension)
-                    if value is not None:
-                        distributions[f"{family}.{dimension}"][str(value)] += 1
+                    if value is not None or family.startswith("physical."):
+                        if value is None:
+                            label = "none"
+                        elif dimension in {"is_open", "is_locked"}:
+                            label = str(bool(value)).lower()
+                        else:
+                            label = str(value)
+                        distributions[f"{family}.{dimension}"][label] += 1
                 for column, name, unit in numeric:
                     value = _number(row.get(column))
                     if value is not None:
@@ -765,6 +817,22 @@ class DatasetManagementService:
                                 progress,
                                 "ratio",
                             )
+                if (
+                    table in {"interactions", "interaction_episodes"}
+                    and row.get("interaction_type") == "physical_object"
+                ):
+                    verb = row.get("interaction_verb")
+                    if verb is not None and table == "interaction_episodes":
+                        distributions["physical_interactions.verb"][
+                            str(verb)
+                        ] += 1
+                    status = row.get("status")
+                    if status is not None:
+                        distributions[
+                            "physical_interactions.terminal_status"
+                            if table == "interaction_episodes"
+                            else "physical_interactions.status"
+                        ][str(status)] += 1
 
         participant_counts: Counter[str] = Counter()
         for row in self._iter_table(
@@ -871,6 +939,53 @@ class DatasetManagementService:
                 float(count),
                 unit,
             )
+
+        physical_states = tuple(
+            self._iter_table(
+                run_id,
+                "physical_object_states",
+                include_private,
+            )
+        )
+        physical_relations = tuple(
+            self._iter_table(
+                run_id,
+                "physical_relation_samples",
+                include_private,
+            )
+        )
+        _add_metric(
+            metric_values,
+            metric_units,
+            "physical.distinct_objects",
+            run_id,
+            float(
+                len(
+                    {
+                        str(row["object_id"])
+                        for row in physical_states
+                        if row.get("object_id") is not None
+                    }
+                )
+            ),
+            "objects",
+        )
+        _add_metric(
+            metric_values,
+            metric_units,
+            "physical.state_sample_count",
+            run_id,
+            float(len(physical_states)),
+            "samples",
+        )
+        _add_metric(
+            metric_values,
+            metric_units,
+            "physical.relation_sample_count",
+            run_id,
+            float(len(physical_relations)),
+            "samples",
+        )
 
     def _iter_table(
         self,

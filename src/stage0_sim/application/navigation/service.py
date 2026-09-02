@@ -8,10 +8,19 @@ from stage0_sim.application.navigation.knowledge import (
 from stage0_sim.domain.components import (
     NavigationPrimitive,
     NavigationPrimitiveKind,
+    OpenableComponent,
+    PhysicalInteractionRegistry,
+    PhysicalRelationKind,
+    PhysicalStateComponent,
     SpatialLocationComponent,
+    SpatialParentRelationComponent,
 )
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.environment import EnvironmentAvailabilityRegistry
+from stage0_sim.domain.interactions import (
+    InteractionSpecification,
+    InteractionVerb,
+)
 from stage0_sim.domain.world import (
     CityWorld,
     Locator,
@@ -89,6 +98,20 @@ class NavigationService:
                     else TravelMode.WALK.value
                 ),
                 occupied_locators=self._occupied_locators(character_id),
+                actor_footprint=(
+                    self.registry.get_component(
+                        character_id,
+                        PhysicalStateComponent,
+                    ).footprint
+                    if self.registry.has_component(
+                        character_id,
+                        PhysicalStateComponent,
+                    )
+                    else None
+                ),
+                authorized_overlap_ids=self._authorized_overlap_ids(
+                    character_id
+                ),
             ),
             allowed_transition_ids=allowed_transition_ids,
         )
@@ -120,6 +143,8 @@ class NavigationService:
                         "station"
                         if item.station is not None
                         else "transaction_point"
+                        if item.transaction_point is not None
+                        else "physical_object"
                     ),
                     name=item.name,
                     locators=locators,
@@ -197,6 +222,21 @@ class NavigationService:
                 if leg.transition_id is None:
                     raise NavigationPlanningError(
                         "portal_transition_missing_id"
+                    )
+                door_id = leg.metadata.get("door_object_id")
+                if isinstance(door_id, str) and door_id:
+                    primitives.append(
+                        NavigationPrimitive(
+                            kind=NavigationPrimitiveKind.INTERACT,
+                            origin=leg.origin,
+                            destination=leg.origin,
+                            route_leg_start=index,
+                            route_leg_end=index + 1,
+                            interaction=InteractionSpecification(
+                                InteractionVerb.OPEN,
+                                door_id,
+                            ),
+                        )
                     )
                 primitives.append(
                     NavigationPrimitive(
@@ -282,6 +322,16 @@ class NavigationService:
                 ),
                 None,
             )
+            inbound_leg = next(
+                (
+                    candidate
+                    for candidate in reversed(segment)
+                    if candidate.transition_id is not None
+                    and candidate.origin.space_id == city.id
+                    and candidate.destination.space_id != city.id
+                ),
+                None,
+            )
             origin_network_node_id = self._network_node_id(
                 outbound_leg.destination
                 if outbound_leg is not None
@@ -298,6 +348,24 @@ class NavigationService:
                     and candidate.destination.space_id == city.id
                 )
             )
+            if outbound_leg is not None:
+                outbound_door_id = outbound_leg.metadata.get(
+                    "door_object_id"
+                )
+                if isinstance(outbound_door_id, str) and outbound_door_id:
+                    primitives.append(
+                        NavigationPrimitive(
+                            kind=NavigationPrimitiveKind.INTERACT,
+                            origin=outbound_leg.origin,
+                            destination=outbound_leg.origin,
+                            route_leg_start=index,
+                            route_leg_end=end,
+                            interaction=InteractionSpecification(
+                                InteractionVerb.OPEN,
+                                outbound_door_id,
+                            ),
+                        )
+                    )
             primitives.append(
                 NavigationPrimitive(
                     kind=NavigationPrimitiveKind.TRAVEL,
@@ -317,6 +385,24 @@ class NavigationService:
                     route_edge_ids=route_edge_ids,
                 )
             )
+            if inbound_leg is not None:
+                inbound_door_id = inbound_leg.metadata.get(
+                    "door_object_id"
+                )
+                if isinstance(inbound_door_id, str) and inbound_door_id:
+                    primitives.append(
+                        NavigationPrimitive(
+                            kind=NavigationPrimitiveKind.INTERACT,
+                            origin=inbound_leg.destination,
+                            destination=inbound_leg.destination,
+                            route_leg_start=index,
+                            route_leg_end=end,
+                            interaction=InteractionSpecification(
+                                InteractionVerb.OPEN,
+                                inbound_door_id,
+                            ),
+                        )
+                    )
             index = end
         return tuple(primitives)
 
@@ -340,7 +426,8 @@ class NavigationService:
             base_available = transition.metadata.get("available", True)
             if not isinstance(base_available, bool):
                 base_available = True
-            if (
+            door_available = self._door_available(base_id)
+            if door_available and (
                 availability is None
                 or availability.state(
                     base_id,
@@ -349,6 +436,36 @@ class NavigationService:
             ):
                 allowed.add(transition_id)
         return frozenset(allowed)
+
+    def _door_available(self, transition_id: str) -> bool:
+        if not self.registry.has_resource(PhysicalInteractionRegistry):
+            return True
+        door_id = self.registry.get_resource(
+            PhysicalInteractionRegistry
+        ).door_for_transition(transition_id)
+        if door_id is None or not self.registry.has_component(
+            door_id,
+            OpenableComponent,
+        ):
+            return True
+        return True
+
+    def _authorized_overlap_ids(
+        self,
+        character_id: str,
+    ) -> frozenset[str]:
+        if not self.registry.has_component(
+            character_id,
+            SpatialParentRelationComponent,
+        ):
+            return frozenset()
+        relation = self.registry.get_component(
+            character_id,
+            SpatialParentRelationComponent,
+        )
+        if relation.kind is not PhysicalRelationKind.OCCUPIES_SLOT:
+            return frozenset()
+        return frozenset({relation.parent_id})
 
     @staticmethod
     def _network_node_id(locator: Locator | None) -> str | None:

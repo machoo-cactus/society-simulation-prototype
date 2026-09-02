@@ -40,6 +40,68 @@
           "default_character_id": "bundled-demo-character",
           "label": "Office worker"
         },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "criteria": [],
+              "description": "Respond to urgent physical needs before returning to work",
+              "id": "agent-001-respond-to-urgent-physical-needs-before-returnin",
+              "priority": 100
+            },
+            {
+              "criteria": [],
+              "description": "Finish the current work session safely",
+              "id": "agent-001-finish-the-current-work-session-safely",
+              "priority": 50
+            }
+          ]
+        },
         "homeostasis": {
           "energy": 80,
           "satiety": 10,
@@ -57,22 +119,6 @@
         "position": {
           "x": 6,
           "y": 1
-        },
-        "goals": {
-          "goals": [
-            {
-              "id": "agent-001-respond-to-urgent-physical-needs-before-returnin",
-              "description": "Respond to urgent physical needs before returning to work",
-              "priority": 100,
-              "criteria": []
-            },
-            {
-              "id": "agent-001-finish-the-current-work-session-safely",
-              "description": "Finish the current work session safely",
-              "priority": 50,
-              "criteria": []
-            }
-          ]
         }
       },
       "id": "agent-001"
@@ -92,15 +138,15 @@
   "perception": {
     "blocked_tiles_are_opaque": true,
     "fact_max_age_seconds": 300.0,
-    "hearing_range": 10,
     "inbox_limit": 100,
     "recognition_range": 5,
     "renderer": "deterministic",
     "vision_range": 8,
+    "voice_range": 10,
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 4,
+  "schema_version": 6,
   "seed": 20260824,
   "speed": 1.0,
   "system1": {
@@ -128,6 +174,9 @@
       }
     ],
     "height": 5,
+    "spatial_metric": {
+      "microcells_per_legacy_cell": 9
+    },
     "stations": [
       {
         "actions": [

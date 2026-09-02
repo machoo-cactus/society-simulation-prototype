@@ -1,12 +1,13 @@
 {
   "briefing": "Serve valid assigned purchases at a Quayside commercial counter in request order.",
   "description": "",
-  "hearing_multiplier": 1.0,
+  "hearing_range": 10,
   "id": "quayside-cashier",
   "kind": "npc_role",
   "name": "Quayside Cashier",
   "recognition_range": 4,
-  "schema_version": 1,
+  "schema_version": 3,
+  "smell_range": 0,
   "tool_allowlist": [
     "serve_transaction",
     "say",

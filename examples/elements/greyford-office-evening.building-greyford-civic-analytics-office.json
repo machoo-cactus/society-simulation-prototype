@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-office-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "c36d080385d665fe444483153108d26a8d9373da74804c2ec4780bd09584e795",
+        "content_hash": "4524362fb3ed32e34cbaf61d389d17edf5af3f71979062fb1ad319a052747156",
         "id": "greyford-office-evening.map-greyford-civic-analytics-office",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

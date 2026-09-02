@@ -30,7 +30,7 @@ def test_critical_satiety_preempts_plan_and_targets_fridge_on_next_tick() -> Non
     drive = runner.registry.get_component("agent-001", DriveComponent)
     assert plan.current is None
     assert plan.queue == []
-    assert movement.destination == Coordinate(1, 1)
+    assert movement.destination == Coordinate(13, 13)
     assert movement.path == ()
     assert activity.current is ActivityType.IDLE
     assert drive.active_drive is DriveType.SATIETY

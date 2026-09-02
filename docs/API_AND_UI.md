@@ -10,7 +10,7 @@ provider routes in the simulation process.
 
 1. Manage reusable source resources through `/characters`, `/scenarios`, and
    `/elements`.
-2. `POST /simulation/scenarios` with a schema-version-4 source plus assignment
+2. `POST /simulation/scenarios` with a schema-version-6 source plus assignment
    choices as applicable. References are validated, resolved, and frozen.
 3. `POST /simulation/runs` with the prepared scenario ID.
 4. Inspect `/simulation/runs/{run_id}` or `/snapshot`.
@@ -20,6 +20,27 @@ provider routes in the simulation process.
 
 Prepared scenarios and live runners are process-local. Persisted datasets
 survive restart but do not restore those objects.
+
+## Physical snapshot contract
+
+Run, room, object, and agent snapshots project current ECS and `SpatialIndex`
+state in stable ID order. Physical room payloads state the fixed
+`microcells_per_legacy_cell: 9`, microcell dimensions, and compatibility
+legacy-cell dimensions. Physical objects expose live microcell pose and
+cardinal orientation, local footprint offsets, occupied cells, effective
+movement/vision obstruction, open/locked state, capabilities, visible slot
+occupancy, visible parent/custody/held relations, interaction anchors, and
+index membership. Agents expose their body footprint, posture/support, hands,
+held objects, and current interaction request/execution; operator projections
+also expose compact microcell movement/path state.
+
+The ordinary API projection omits descriptive private ownership and
+controller-private reasons. It excludes an object, relation, or slot occupant
+hidden inside a closed opaque container. The operator UI calls the same
+builders under explicit operator conventions and may inspect authoritative
+hidden physical state; that does not make the state character-visible.
+`CityWorld` and element hierarchy payloads remain construction/display
+metadata, not mutable physical authority.
 
 ## Source-library routes
 
@@ -78,6 +99,14 @@ The authoring pages use content hashes for optimistic concurrency. Scenario and
 element drafts are server-side and tab-scoped; malformed or incomplete values
 survive validation redirects without becoming global state.
 
+The descriptor-driven scenario-version-6 and element-version-3 forms cover
+physical footprints, semantic intrinsics, movement and per-sense obstruction,
+wearable/scent capabilities and slots, initial
+open/locked/ownership/custody state, room metric, placement
+anchor/orientation/relation/slot, and entrance/portal door links. Physical
+objects are presented separately from compatibility station and transaction
+views.
+
 ## UI architecture
 
 Python routes own orchestration and Jinja templates under
@@ -90,5 +119,13 @@ regions, preserve browser interaction state, use clipboard APIs, and provide
 pointer map controls. It must not own lifecycle state, interpret events,
 calculate outcomes, advance time, or maintain telemetry state. All workflows
 retain a no-JavaScript form/link fallback.
+
+At room scale the operator SVG renders authoritative physical footprints,
+5×5 character bodies, posture/held state, door state and links, movement paths,
+and selected approach/occupancy anchors. Legacy-cell guides remain the coarse
+overview; the microcell pattern appears only at close zoom. Pattern fills and
+compact merged footprint rectangles keep markup bounded by rendered content,
+not by the number of room microcells. Labels and classes expose non-color
+state, and ordinary selection forms/links remain the no-JavaScript path.
 
 See [UI architecture and testing](UI_TESTING.md).

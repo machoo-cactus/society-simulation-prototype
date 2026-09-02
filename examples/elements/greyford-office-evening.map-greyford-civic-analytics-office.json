@@ -89,12 +89,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "373a764f424ce6328b09bcd443d5c056f3a044c4b9d5b0e953607cf5e1b61a73",
+        "content_hash": "4396489d9ff4d9aeb3c7a62b06fd7a1d8da92e11ee836c68a7205c4f1a5c04ab",
         "id": "greyford-office-evening.station-greyford-office-mara-workstation",
         "kind": "object"
       },
       "id": "station-greyford-office-mara-workstation",
       "key": "station-greyford-office-mara-workstation",
+      "placement": {
+        "anchor": {
+          "x": 130,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 14,
         "y": 3
@@ -103,12 +115,24 @@
     },
     {
       "element": {
-        "content_hash": "9027165f35c166aaddc40e325436a636883ea07b0b5c7328c2ff1bb2dfbd9593",
+        "content_hash": "37297441c07d441365d95372c8a97d28f5c97b706c40abf1eebfa2fa30099876",
         "id": "greyford-office-evening.station-greyford-office-break-table",
         "kind": "object"
       },
       "id": "station-greyford-office-break-table",
       "key": "station-greyford-office-break-table",
+      "placement": {
+        "anchor": {
+          "x": 22,
+          "y": 94
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 2,
         "y": 10
@@ -117,12 +141,24 @@
     },
     {
       "element": {
-        "content_hash": "90c2d6c3837124f436094aca40afb716ce2b41df9238bc4454012cbe76629b36",
+        "content_hash": "6168e61c833d8e16a1eb6d3fd90d89065ea77e1ee59a92748c88f7c0d9b75f8f",
         "id": "greyford-office-evening.station-greyford-office-quiet-chair",
         "kind": "object"
       },
       "id": "station-greyford-office-quiet-chair",
       "key": "station-greyford-office-quiet-chair",
+      "placement": {
+        "anchor": {
+          "x": 103,
+          "y": 85
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 11,
         "y": 9
@@ -131,7 +167,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 18,
   "zones": [
     {

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "scenario_fields.html" import field_errors, render_node %}
 {% block title %}Elements · Stage 0{% endblock %}
 {% block eyebrow %}Reusable world construction library{% endblock %}
 {% block heading %}Element Library{% endblock %}
@@ -18,7 +19,7 @@
     </nav>
     <nav aria-label="Elements">
       {% for element in elements %}
-        <a href="/ui/elements/?selected={{ element.id|urlencode }}" {% if original_id == element.id %}aria-current="page"{% endif %}>
+        <a href="/ui/elements/?selected={{ element.id|urlencode }}" {% if draft.original_id == element.id %}aria-current="page"{% endif %}>
           <strong>{{ element.name }}</strong>
           <span>{{ element.kind.value|replace("_", " ") }} · {{ element.id }}</span>
           {% if element.dependency_ids %}
@@ -34,54 +35,96 @@
   <section class="panel element-editor" aria-labelledby="element-editor-heading">
     <header class="panel__header">
       <div>
-        <h2 id="element-editor-heading">{{ original_id or "New " ~ selected_kind.value|replace("_", " ") }}</h2>
-        <p>References are hash-pinned. Saving a dependency creates a new hash that dependent scenarios must explicitly adopt.</p>
+        <h2 id="element-editor-heading">{{ draft.original_id or "New " ~ draft.kind.value|replace("_", " ") }}</h2>
+        <p>Use the structured version 2 form for authoritative authoring. References remain hash-pinned.</p>
       </div>
     </header>
 
-    {% if form_error %}
+    {% if form_error or draft.errors %}
       <div class="editor-error-summary" role="alert">
         <strong>Element could not be saved.</strong>
-        <p>{{ form_error }}</p>
+        {% if form_error %}<p>{{ form_error }}</p>{% endif %}
+        {% if draft.errors %}
+          <p>Correct the following fields. Your submitted values are retained.</p>
+          <ul>
+            {% for problem in draft.errors %}
+              <li><a href="#{{ problem.control_id }}">{{ problem.message }}</a></li>
+            {% endfor %}
+          </ul>
+        {% endif %}
       </div>
     {% endif %}
 
     <form method="post" action="/ui/elements/save" class="element-editor-form">
-      <input type="hidden" name="original_id" value="{{ original_id }}">
-      <input type="hidden" name="expected_hash" value="{{ expected_hash }}">
-      <input type="hidden" name="selected_kind" value="{{ selected_kind.value }}">
+      <input type="hidden" name="draft_token" value="{{ draft.token }}">
       <label for="element-resource-id">
         Element resource ID
-        <input id="element-resource-id" name="resource_id" value="{{ resource_id }}" pattern="[a-z0-9][a-z0-9._\-]*" required>
+        <input
+          id="element-resource-id"
+          name="resource_id"
+          value="{{ draft.resource_id }}"
+          pattern="[a-z0-9][a-z0-9._\-]*"
+          required
+          aria-invalid="{{ 'true' if draft.errors|selectattr('control_id', 'equalto', 'element-resource-id')|list else 'false' }}"
+        >
       </label>
-      <label for="element-json">
-        Element definition JSON
-        <textarea id="element-json" name="element_json" rows="30" spellcheck="false" required>{{ raw_json }}</textarea>
-      </label>
+
+      <fieldset id="{{ draft.root.control_id }}" class="scenario-group element-structured-editor" tabindex="-1">
+        <legend>{{ draft.kind.value|replace("_", " ")|title }} definition · schema version 2</legend>
+        {{ field_errors(draft.root) }}
+        <div class="scenario-fields">
+          {% for child in draft.root.children if child.schema.field_name not in ("schema_version", "id", "kind") and child.schema.kind == "scalar" %}
+            {{ render_node(child, 1) }}
+          {% endfor %}
+        </div>
+        {% for child in draft.root.children if child.schema.field_name not in ("schema_version", "id", "kind") and child.schema.kind != "scalar" %}
+          <details {% if child.errors or child.schema.field_name == "physical" %}open{% endif %}>
+            <summary>{{ child.schema.label }}{% if child.errors %} · needs attention{% endif %}</summary>
+            {{ render_node(child, 1) }}
+          </details>
+        {% endfor %}
+      </fieldset>
+
+      <details class="element-json-fallback">
+        <summary>Advanced JSON import/export fallback</summary>
+        <p>The structured controls and server-side draft are authoritative. Import validates strict version 2 JSON before replacing them.</p>
+        <label for="element-json">
+          Current element definition JSON
+          <textarea
+            id="element-json"
+            name="element_json"
+            rows="24"
+            spellcheck="false"
+            aria-invalid="{{ 'true' if draft.errors|selectattr('control_id', 'equalto', 'element-json')|list else 'false' }}"
+          >{{ raw_json }}</textarea>
+        </label>
+        <button type="submit" name="intent" value="import_json" formnovalidate>Import JSON into structured editor</button>
+      </details>
       <div class="form-actions">
-        <button type="submit">{{ "Save element" if original_id else "Create element" }}</button>
-        {% if original_id %}
-          <a class="button-link" href="/elements/{{ original_id }}">View API resource</a>
+        <button type="submit" name="intent" value="refresh" formnovalidate>Apply field choices</button>
+        <button type="submit" name="intent" value="save">{{ "Save element" if draft.original_id else "Create element" }}</button>
+        {% if draft.original_id %}
+          <a class="button-link" href="/elements/{{ draft.original_id }}">View API resource</a>
         {% endif %}
       </div>
     </form>
 
-    {% if original_id %}
+    {% if draft.original_id %}
       <div class="element-secondary-actions">
         <details>
-          <summary>Duplicate {{ original_id }}</summary>
-          <form method="post" action="/ui/elements/{{ original_id }}/duplicate">
+          <summary>Duplicate {{ draft.original_id }}</summary>
+          <form method="post" action="/ui/elements/{{ draft.original_id }}/duplicate">
             <label for="duplicate-element-id">
               New element resource ID
-              <input id="duplicate-element-id" name="new_id" value="{{ original_id }}-copy" required>
+              <input id="duplicate-element-id" name="new_id" value="{{ draft.original_id }}-copy" required>
             </label>
             <button type="submit">Duplicate element</button>
           </form>
         </details>
         <details>
-          <summary>Delete {{ original_id }}</summary>
-          <form method="post" action="/ui/elements/{{ original_id }}/delete">
-            <input type="hidden" name="expected_hash" value="{{ expected_hash }}">
+          <summary>Delete {{ draft.original_id }}</summary>
+          <form method="post" action="/ui/elements/{{ draft.original_id }}/delete">
+            <input type="hidden" name="expected_hash" value="{{ draft.original_hash }}">
             <label>
               <input type="checkbox" name="confirm" value="yes" required>
               I understand deletion is blocked while another element references this resource.

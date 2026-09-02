@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-river-library-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "3d8c5835b0fa2df78c649afca250d43c694e067a7737edc02abf66db7afde35b",
+        "content_hash": "b80ebea51408564620e67bbed111c1bf46f3f5715a7b50a7e7a072736c323610",
         "id": "greyford-office-evening.map-greyford-river-library",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

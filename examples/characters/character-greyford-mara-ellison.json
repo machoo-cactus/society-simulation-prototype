@@ -1,114 +1,37 @@
 {
-  "template_id": "human-v1",
-  "identity": {
-    "display_name": "Mara Ellison",
-    "birth_date": "1988-05-22",
-    "gender": "Woman",
-    "pronouns": "she/her",
-    "occupation": "Senior municipal infrastructure analyst",
-    "civic_identity": {
-      "resident_since": 2012,
-      "professional_registration": "Provincial planning institute member",
-      "languages": [
-        "English",
-        "conversational French"
-      ]
-    }
-  },
-  "body_measurements": {
-    "measured_on": "2026-08-03",
-    "height_cm": 168.0,
-    "weight_kg": 62.5,
-    "chest_cm": 89.0,
-    "waist_cm": 70.0,
-    "hips_cm": 94.0,
-    "inseam_cm": 77.0,
-    "shoe_size_system": "EU",
-    "shoe_size_value": 39.0
-  },
   "appearance": {
-    "summary": "A composed office professional with an outdoorsy, practical style.",
     "build": "Lean and athletic",
-    "hair": "Dark auburn, shoulder length, usually tied back at work",
-    "eyes": "Grey-green",
     "clothing": "",
     "distinguishing_features": [
       "Thin silver-framed glasses",
       "Small enamel river-map pin on her satchel"
-    ]
-  },
-  "health": {
-    "as_of_date": "2026-08-03",
-    "blood_type": "A-",
-    "conditions": [
-      {
-        "name": "Mild myopia",
-        "status": "managed",
-        "diagnosed_on": "2000-09-01",
-        "notes": "Corrected with glasses."
-      }
     ],
-    "allergies": [],
-    "medications": [],
-    "disabilities": [],
-    "vision": "Myopia corrected with prescription glasses",
-    "hearing": "No known impairment",
-    "mobility": "Unrestricted",
-    "past_procedures": [],
-    "dietary_restrictions": []
-  },
-  "personality": {
-    "summary": "Methodical, observant, public-spirited, and quietly warm.",
-    "traits": [
-      "conscientious",
-      "pragmatic",
-      "patient",
-      "dryly humorous",
-      "systems-minded"
-    ],
-    "temperament": "Steady under routine pressure; becomes terse when plans lack evidence.",
-    "social_style": "Attentive in small groups and reserved in large receptions.",
-    "speech_style": "Clear, concrete sentences with occasional understated humor.",
-    "strengths": [
-      "turns ambiguous civic problems into tractable decisions",
-      "remembers spatial relationships and service dependencies",
-      "listens carefully before disagreeing"
-    ],
-    "flaws": [
-      "can over-check work after the decision is already sound",
-      "sometimes postpones meals when concentrating"
-    ],
-    "decision_patterns": {
-      "under_time_pressure": [
-        "identify the binding constraint",
-        "choose a reversible next step",
-        "record assumptions"
-      ],
-      "uncertainty_tolerance": "moderate when consequences are observable"
-    }
+    "eyes": "Grey-green",
+    "hair": "Dark auburn, shoulder length, usually tied back at work",
+    "height": "",
+    "summary": "A composed office professional with an outdoorsy, practical style."
   },
   "background": {
     "birthplace": "Larkhaven, a smaller inland rail city",
-    "residence": "Unit 5B, Rowan Terrace Apartments, Westborough, Greyford",
-    "education": "Master of Urban and Regional Planning; undergraduate degree in civil systems",
-    "history": "Moved to Greyford for graduate school, worked in regional transport consulting, then joined the city-provincial infrastructure partnership.",
     "career_timeline": [
       {
+        "focus": "winter pedestrian access and station catchments",
         "period": "2012-2015",
-        "role": "Graduate researcher",
-        "focus": "winter pedestrian access and station catchments"
+        "role": "Graduate researcher"
       },
       {
+        "focus": "capital program appraisal",
         "period": "2015-2021",
-        "role": "Transport planning consultant",
-        "focus": "capital program appraisal"
+        "role": "Transport planning consultant"
       },
       {
+        "focus": "cross-agency investment sequencing",
         "period": "2021-present",
-        "role": "Senior infrastructure analyst",
-        "focus": "cross-agency investment sequencing"
+        "role": "Senior infrastructure analyst"
       }
     ],
+    "education": "Master of Urban and Regional Planning; undergraduate degree in civil systems",
+    "history": "Moved to Greyford for graduate school, worked in regional transport consulting, then joined the city-provincial infrastructure partnership.",
     "neighborhood_attachment": {
       "home_area": "Westborough",
       "reasons": [
@@ -116,46 +39,21 @@
         "walkable daily shops",
         "access to the western greenway"
       ]
-    }
+    },
+    "residence": "Unit 5B, Rowan Terrace Apartments, Westborough, Greyford"
   },
-  "financial_situation": {
-    "as_of_date": "2026-08-31",
-    "currency": "CAD",
-    "annual_gross_income": 118000,
-    "income_band": "Upper-middle individual income",
-    "liquid_assets": 54000,
-    "total_assets": 198000,
-    "total_debt": 12000,
-    "monthly_fixed_expenses": 3400,
-    "housing_tenure": "Long-term rental shared with partner",
-    "financial_dependents": 0
-  },
-  "motivations": {
-    "values": [
-      "public usefulness",
-      "evidence before certainty",
-      "reliability",
-      "walkable neighborhoods",
-      "time with family and friends"
-    ],
-    "fears": [
-      "avoidable infrastructure failures hidden by optimistic reporting",
-      "letting work crowd out close relationships"
-    ],
-    "needs": [
-      "predictable decompression after concentrated work",
-      "regular food rather than late-night snacking"
-    ]
+  "body_measurements": {
+    "chest_cm": 89.0,
+    "height_cm": 168.0,
+    "hips_cm": 94.0,
+    "inseam_cm": 77.0,
+    "measured_on": "2026-08-03",
+    "shoe_size_system": "EU",
+    "shoe_size_value": 39.0,
+    "waist_cm": 70.0,
+    "weight_kg": 62.5
   },
   "capabilities": {
-    "skills": [
-      "transport network analysis",
-      "capital budgeting",
-      "facilitation",
-      "technical writing",
-      "spreadsheet and GIS modeling",
-      "urban cycling"
-    ],
     "knowledge_areas": [
       "Greyford metro and rail network",
       "municipal utilities",
@@ -166,6 +64,14 @@
       "not a clinician or emergency responder",
       "less familiar with new subdivisions beyond Northgate",
       "needs reading glasses for dense print after a long day"
+    ],
+    "skills": [
+      "transport network analysis",
+      "capital budgeting",
+      "facilitation",
+      "technical writing",
+      "spreadsheet and GIS modeling",
+      "urban cycling"
     ],
     "working_methods": {
       "analysis": {
@@ -182,139 +88,85 @@
       }
     }
   },
-  "preferences": {
-    "likes": [
-      "savory grain bowls",
-      "quiet window seats",
-      "river walks",
-      "frequent transit",
-      "strong tea"
-    ],
-    "dislikes": [
-      "needlessly idling cars",
-      "overly sweet sauces",
-      "meetings without decisions",
-      "crowded loud dining rooms"
-    ],
-    "habits": [
-      "checks the next metro departure while packing her desk",
-      "keeps a compact umbrella in her work satchel",
-      "writes tomorrow's first task before leaving"
-    ],
-    "routines": [
-      "walks from the office through Exchange Plaza",
-      "uses Quayside Station for the westbound metro",
-      "gets off at Westborough and walks via the market"
-    ],
-    "food_preferences": {
-      "usual_quick_dinner": "roasted vegetable and chicken grain bowl",
-      "dietary_notes": [
-        "prefers moderate spice",
-        "no known food allergy"
-      ]
-    }
-  },
-  "presentation": {
-    "aesthetic_identity": "Composed, outdoors-aware, understated professional style with subtle references to landscape and civic place.",
-    "wardrobe_palette": [
-      "navy",
-      "charcoal",
-      "moss green",
-      "river blue",
-      "cream"
-    ],
-    "preferred_silhouettes": [
-      "lightly structured jackets",
-      "clean practical trousers",
-      "simple layered tops"
-    ],
-    "preferred_fabrics": [
-      "washable wool",
-      "cotton",
-      "weather-resistant technical fabrics"
-    ],
-    "formality_range": "Practical business casual through restrained professional formalwear.",
-    "comfort_priorities": [
-      "walking and transit comfort",
-      "weather adaptability",
-      "layers suitable for offices and outdoor transfers"
-    ],
-    "grooming_norms": [
-      "hair tied back for concentrated work",
-      "minimal makeup",
-      "clean functional presentation"
-    ],
-    "usual_accessories": [
-      "thin silver-framed glasses",
-      "river-map pin",
-      "durable satchel"
-    ],
-    "practical_constraints": [
-      "needs shoes suitable for long station walks",
-      "avoids garments that perform poorly in rain"
-    ],
-    "purchase_habits": [
-      "buys durable multipurpose pieces",
-      "keeps outdoor gear in regular urban rotation",
-      "prefers local or traceable manufacturing"
-    ],
-    "context_variations": [
-      "uses relaxed technical layers while travelling or hiking",
-      "adds a structured jacket for civic meetings",
-      "chooses reflective and waterproof details for cycling or wet commutes"
-    ]
-  },
-  "dispositions": {
-    "summary": "Usually methodical, observant, public-spirited, quietly warm, and constraint-aware.",
-    "emotional_baseline": "Steady and attentive, with understated humor emerging after trust is established.",
-    "sociability": "Comfortable in small working groups and reserved at large receptions.",
-    "assertiveness": "Calmly firm when evidence, public value, or dependencies are being overlooked.",
-    "patience": "High for complex systems and sincere disagreement, lower for unsupported precision.",
-    "conscientiousness": "Very high; tracks dependencies, assumptions, and downstream effects.",
-    "openness": "Interested in new approaches when their impacts can be observed and revised.",
-    "adaptability": "Strong when constraints are legible; frustrated by hidden ownership or unexplained changes.",
-    "risk_tolerance": "Moderate for reversible decisions with observable consequences.",
-    "ambiguity_tolerance": "Accepts uncertainty but insists that it be recorded rather than disguised.",
-    "impulse_control": "High; tends to pause, check, and choose a reversible next step.",
-    "conflict_style": "Returns discussion to evidence, distributional impacts, and the binding constraint.",
-    "cooperation_style": "Connects specialties, records assumptions, and protects shared decision quality.",
-    "trust_formation": "Builds trust through professional reliability, candor, and careful listening.",
-    "boundary_setting": "Usually reasonable and explicit, though concentrated work can delay personal needs.",
-    "help_seeking": "Consults trusted counterparts when another domain materially affects the decision.",
-    "pressure_response": "Narrows to the binding constraint and becomes terse but organized.",
-    "fatigue_response": "Over-checks, delays meals, and becomes less socially expressive.",
-    "novelty_response": "Maps the system, identifies service dependencies, and then explores.",
-    "authority_response": "Respects mandates but asks how claims are measured and who bears the consequences.",
-    "crowd_response": "Observes from the edge and prefers purposeful smaller conversations."
-  },
   "communication": {
-    "cadence": "Clear, concrete sentences with pauses around assumptions and uncertainty.",
-    "vocabulary": "Systems-oriented but translated into accessible civic consequences.",
-    "directness": "Direct about constraints and evidence, tactful about status and ownership.",
-    "politeness": "Professional and attentive without excessive ceremony.",
-    "humor": "Dry and understated.",
-    "gesture": "Small precise gestures, often using a notebook or map as a shared reference.",
-    "posture": "Composed and upright, leaning forward when tracing a dependency.",
-    "facial_expressiveness": "Subtle; concern appears before disagreement is verbalized.",
-    "listening_style": "Lets others complete the causal story and checks whether she understood the dependency correctly.",
-    "disagreement_style": "Identifies the disputed assumption, evidence standard, and reversible next step.",
     "apology_style": "Names the missed impact and updates the process that allowed it.",
-    "with_intimates": "Warmer, more playful, and more candid about fatigue.",
+    "cadence": "Clear, concrete sentences with pauses around assumptions and uncertainty.",
+    "directness": "Direct about constraints and evidence, tactful about status and ownership.",
+    "disagreement_style": "Identifies the disputed assumption, evidence standard, and reversible next step.",
+    "facial_expressiveness": "Subtle; concern appears before disagreement is verbalized.",
+    "gesture": "Small precise gestures, often using a notebook or map as a shared reference.",
+    "humor": "Dry and understated.",
+    "listening_style": "Lets others complete the causal story and checks whether she understood the dependency correctly.",
+    "politeness": "Professional and attentive without excessive ceremony.",
+    "posture": "Composed and upright, leaning forward when tracing a dependency.",
+    "vocabulary": "Systems-oriented but translated into accessible civic consequences.",
+    "with_authority": "Prepared, evidence-based, and calm under challenge.",
     "with_colleagues": "Precise, collaborative, and reliable.",
-    "with_strangers": "Reserved but helpful when she understands the request.",
-    "with_authority": "Prepared, evidence-based, and calm under challenge."
+    "with_intimates": "Warmer, more playful, and more candid about fatigue.",
+    "with_strangers": "Reserved but helpful when she understands the request."
   },
+  "custom_sections": [
+    {
+      "fields": [
+        {
+          "key": "stakeholder_map",
+          "label": "Stakeholder map",
+          "prompt_visible": true,
+          "ui_visible": true,
+          "value": {
+            "community": [
+              "riverfront businesses",
+              "tenant groups"
+            ],
+            "municipal": [
+              "transport",
+              "water",
+              "planning"
+            ],
+            "provincial": [
+              "treasury",
+              "health",
+              "infrastructure"
+            ]
+          }
+        },
+        {
+          "key": "evidence_preferences",
+          "label": "Evidence preferences",
+          "prompt_visible": true,
+          "ui_visible": true,
+          "value": {
+            "avoid": "unsupported precision",
+            "ranked": [
+              "measured operations data",
+              "audited financial data",
+              "structured field observation",
+              "clearly sourced testimony"
+            ]
+          }
+        }
+      ],
+      "id": "professional-operating-model",
+      "prompt_visible": true,
+      "title": "Professional Operating Model",
+      "ui_visible": true
+    }
+  ],
   "decision_coping": {
-    "information_seeking": "Triangulates operations data, financial evidence, field observation, and sourced testimony.",
-    "planning_horizon": "Links the next reversible action to service dependencies and long-term capital effects.",
     "default_heuristics": [
       "identify the binding constraint",
       "choose a reversible next step",
       "record assumptions",
       "check distributional effects"
     ],
+    "disposition_shifts": [
+      "becomes more decisive when a service failure is imminent",
+      "becomes more openly warm after concentrated work is safely closed"
+    ],
     "error_sensitivity": "High for hidden dependencies, unit errors, and optimistic reporting.",
+    "information_seeking": "Triangulates operations data, financial evidence, field observation, and sourced testimony.",
     "persistence": "Sustained and disciplined, with a tendency to verify after the decision is already sound.",
+    "planning_horizon": "Links the next reversible action to service dependencies and long-term capital effects.",
     "recovery_habits": [
       "walk outdoors",
       "strong tea",
@@ -330,34 +182,111 @@
       "terser speech",
       "postponed meals",
       "repeated evidence checks"
-    ],
-    "disposition_shifts": [
-      "becomes more decisive when a service failure is imminent",
-      "becomes more openly warm after concentrated work is safely closed"
     ]
   },
+  "dispositions": {
+    "adaptability": "Strong when constraints are legible; frustrated by hidden ownership or unexplained changes.",
+    "ambiguity_tolerance": "Accepts uncertainty but insists that it be recorded rather than disguised.",
+    "assertiveness": "Calmly firm when evidence, public value, or dependencies are being overlooked.",
+    "authority_response": "Respects mandates but asks how claims are measured and who bears the consequences.",
+    "boundary_setting": "Usually reasonable and explicit, though concentrated work can delay personal needs.",
+    "conflict_style": "Returns discussion to evidence, distributional impacts, and the binding constraint.",
+    "conscientiousness": "Very high; tracks dependencies, assumptions, and downstream effects.",
+    "cooperation_style": "Connects specialties, records assumptions, and protects shared decision quality.",
+    "crowd_response": "Observes from the edge and prefers purposeful smaller conversations.",
+    "emotional_baseline": "Steady and attentive, with understated humor emerging after trust is established.",
+    "fatigue_response": "Over-checks, delays meals, and becomes less socially expressive.",
+    "help_seeking": "Consults trusted counterparts when another domain materially affects the decision.",
+    "impulse_control": "High; tends to pause, check, and choose a reversible next step.",
+    "novelty_response": "Maps the system, identifies service dependencies, and then explores.",
+    "openness": "Interested in new approaches when their impacts can be observed and revised.",
+    "patience": "High for complex systems and sincere disagreement, lower for unsupported precision.",
+    "pressure_response": "Narrows to the binding constraint and becomes terse but organized.",
+    "risk_tolerance": "Moderate for reversible decisions with observable consequences.",
+    "sociability": "Comfortable in small working groups and reserved at large receptions.",
+    "summary": "Usually methodical, observant, public-spirited, quietly warm, and constraint-aware.",
+    "trust_formation": "Builds trust through professional reliability, candor, and careful listening."
+  },
+  "family": {
+    "members": [
+      {
+        "birth_date": "1987-11-14",
+        "display_name": "Theo Mercer",
+        "financial_dependent": false,
+        "household_member": true,
+        "linked_character_id": "theo-mercer",
+        "living_status": "alive",
+        "member_id": "theo-mercer",
+        "relationship": "Partner",
+        "residence": "Westborough, Greyford"
+      },
+      {
+        "birth_date": "1992-02-06",
+        "display_name": "Elin Ellison",
+        "financial_dependent": false,
+        "household_member": false,
+        "linked_character_id": "elin-ellison",
+        "living_status": "alive",
+        "member_id": "elin-ellison",
+        "relationship": "Younger sister",
+        "residence": "Larkhaven"
+      }
+    ]
+  },
+  "financial_situation": {
+    "annual_gross_income": 118000,
+    "as_of_date": "2026-08-31",
+    "currency": "CAD",
+    "financial_dependents": 0,
+    "housing_tenure": "Long-term rental shared with partner",
+    "income_band": "Upper-middle individual income",
+    "liquid_assets": 54000,
+    "monthly_fixed_expenses": 3400,
+    "total_assets": 198000,
+    "total_debt": 12000
+  },
+  "health": {
+    "allergies": [],
+    "as_of_date": "2026-08-03",
+    "blood_type": "A-",
+    "conditions": [
+      {
+        "diagnosed_on": "2000-09-01",
+        "name": "Mild myopia",
+        "notes": "Corrected with glasses.",
+        "status": "managed"
+      }
+    ],
+    "dietary_restrictions": [],
+    "disabilities": [],
+    "hearing": "No known impairment",
+    "medications": [],
+    "mobility": "Unrestricted",
+    "past_procedures": [],
+    "vision": "Myopia corrected with prescription glasses"
+  },
+  "id": "character-greyford-mara-ellison",
+  "identity": {
+    "age": null,
+    "birth_date": "1988-05-22",
+    "civic_identity": {
+      "languages": [
+        "English",
+        "conversational French"
+      ],
+      "professional_registration": "Provincial planning institute member",
+      "resident_since": 2012
+    },
+    "display_name": "Mara Ellison",
+    "gender": "Woman",
+    "occupation": "Senior municipal infrastructure analyst",
+    "pronouns": "she/her"
+  },
   "life_structure": {
-    "household": "Shares a long-term Westborough apartment with her partner Theo Mercer.",
-    "recurring_obligations": [
-      "family contact with her sister",
-      "coordination around Theo's irregular shifts",
-      "professional committee preparation",
-      "regular outdoor recreation"
-    ],
-    "material_habits": [
-      "keeps an umbrella and notebook ready",
-      "maintains cycling and transit equipment",
-      "records next actions before stopping work"
-    ],
-    "typical_possessions": [
-      "durable satchel",
-      "paper notebook",
-      "work tablet",
-      "folding umbrella"
-    ],
     "cultural_practices": [
       "uses shared meals and walks to protect time with close relationships"
     ],
+    "household": "Shares a long-term Westborough apartment with her partner Theo Mercer.",
     "interests": [
       "urban systems",
       "cycling",
@@ -365,136 +294,56 @@
       "river walks",
       "neighborhood markets"
     ],
+    "material_habits": [
+      "keeps an umbrella and notebook ready",
+      "maintains cycling and transit equipment",
+      "records next actions before stopping work"
+    ],
+    "recurring_obligations": [
+      "family contact with her sister",
+      "coordination around Theo's irregular shifts",
+      "professional committee preparation",
+      "regular outdoor recreation"
+    ],
     "social_patterns": [
       "maintains a small trusted professional network",
       "balances civic work with partner and family routines"
+    ],
+    "typical_possessions": [
+      "durable satchel",
+      "paper notebook",
+      "work tablet",
+      "folding umbrella"
     ]
   },
-  "family": {
-    "members": [
-      {
-        "member_id": "theo-mercer",
-        "linked_character_id": "theo-mercer",
-        "display_name": "Theo Mercer",
-        "relationship": "Partner",
-        "birth_date": "1987-11-14",
-        "living_status": "alive",
-        "residence": "Westborough, Greyford",
-        "household_member": true,
-        "financial_dependent": false
-      },
-      {
-        "member_id": "elin-ellison",
-        "linked_character_id": "elin-ellison",
-        "display_name": "Elin Ellison",
-        "relationship": "Younger sister",
-        "birth_date": "1992-02-06",
-        "living_status": "alive",
-        "residence": "Larkhaven",
-        "household_member": false,
-        "financial_dependent": false
-      }
+  "motivations": {
+    "fears": [
+      "avoidable infrastructure failures hidden by optimistic reporting",
+      "letting work crowd out close relationships"
+    ],
+    "needs": [
+      "predictable decompression after concentrated work",
+      "regular food rather than late-night snacking"
+    ],
+    "values": [
+      "public usefulness",
+      "evidence before certainty",
+      "reliability",
+      "walkable neighborhoods",
+      "time with family and friends"
     ]
   },
-  "relationships": [
-    {
-      "target_id": "theo-mercer",
-      "relationship": "Partner",
-      "sentiment": "Affectionate and mutually supportive",
-      "notes": "Theo works irregular museum installation shifts; they coordinate dinner by message.",
-      "shared_routines": [
-        "Sunday market",
-        "evening walks by Westborough Common"
-      ]
-    },
-    {
-      "target_id": "priya-nair",
-      "relationship": "Close colleague and project counterpart",
-      "sentiment": "High professional trust",
-      "notes": "Priya leads the housing-demand side of the river corridor briefing."
-    },
-    {
-      "target_id": "elin-ellison",
-      "relationship": "Younger sister",
-      "sentiment": "Protective, warm, occasionally teasing",
-      "notes": "Elin lives in Larkhaven and calls most Wednesday evenings."
-    }
-  ],
-  "custom_sections": [
-    {
-      "id": "professional-operating-model",
-      "title": "Professional Operating Model",
-      "prompt_visible": true,
-      "ui_visible": true,
-      "fields": [
-        {
-          "key": "stakeholder_map",
-          "label": "Stakeholder map",
-          "value": {
-            "municipal": [
-              "transport",
-              "water",
-              "planning"
-            ],
-            "provincial": [
-              "treasury",
-              "health",
-              "infrastructure"
-            ],
-            "community": [
-              "riverfront businesses",
-              "tenant groups"
-            ]
-          },
-          "prompt_visible": true,
-          "ui_visible": true
-        },
-        {
-          "key": "evidence_preferences",
-          "label": "Evidence preferences",
-          "value": {
-            "ranked": [
-              "measured operations data",
-              "audited financial data",
-              "structured field observation",
-              "clearly sourced testimony"
-            ],
-            "avoid": "unsupported precision"
-          },
-          "prompt_visible": true,
-          "ui_visible": true
-        }
-      ]
-    }
-  ],
-  "schema_version": 2,
-  "id": "character-greyford-mara-ellison",
   "personal_dossier": {
     "household": {
+      "home": {
+        "building": "Rowan Terrace Apartments",
+        "tenure": "long-term rental",
+        "unit": "5B"
+      },
       "members": [
         "Mara Ellison",
         "Theo Mercer"
-      ],
-      "home": {
-        "building": "Rowan Terrace Apartments",
-        "unit": "5B",
-        "tenure": "long-term rental"
-      }
-    },
-    "weekly_rhythm": {
-      "office_days": [
-        "Monday",
-        "Tuesday",
-        "Thursday"
-      ],
-      "remote_days": [
-        "Wednesday",
-        "Friday"
-      ],
-      "recreation": {
-        "Saturday": "Highland trail or neighborhood cycle",
-        "Sunday": "Westborough market and meal preparation"
-      }
+      ]
     },
     "research_annotations": {
       "decision_style_tags": [
@@ -505,23 +354,176 @@
       "nested_extension_demo": {
         "observations": [
           {
-            "domain": "mobility",
-            "confidence": 0.9,
             "basis": [
               "routine",
               "professional knowledge"
-            ]
+            ],
+            "confidence": 0.9,
+            "domain": "mobility"
           },
           {
-            "domain": "food choice",
-            "confidence": 0.75,
             "basis": [
               "habit",
               "time budget"
-            ]
+            ],
+            "confidence": 0.75,
+            "domain": "food choice"
           }
         ]
       }
+    },
+    "weekly_rhythm": {
+      "office_days": [
+        "Monday",
+        "Tuesday",
+        "Thursday"
+      ],
+      "recreation": {
+        "Saturday": "Highland trail or neighborhood cycle",
+        "Sunday": "Westborough market and meal preparation"
+      },
+      "remote_days": [
+        "Wednesday",
+        "Friday"
+      ]
     }
-  }
+  },
+  "personality": {
+    "decision_patterns": {
+      "uncertainty_tolerance": "moderate when consequences are observable",
+      "under_time_pressure": [
+        "identify the binding constraint",
+        "choose a reversible next step",
+        "record assumptions"
+      ]
+    },
+    "flaws": [
+      "can over-check work after the decision is already sound",
+      "sometimes postpones meals when concentrating"
+    ],
+    "social_style": "Attentive in small groups and reserved in large receptions.",
+    "speech_style": "Clear, concrete sentences with occasional understated humor.",
+    "strengths": [
+      "turns ambiguous civic problems into tractable decisions",
+      "remembers spatial relationships and service dependencies",
+      "listens carefully before disagreeing"
+    ],
+    "summary": "Methodical, observant, public-spirited, and quietly warm.",
+    "temperament": "Steady under routine pressure; becomes terse when plans lack evidence.",
+    "traits": [
+      "conscientious",
+      "pragmatic",
+      "patient",
+      "dryly humorous",
+      "systems-minded"
+    ]
+  },
+  "preferences": {
+    "dislikes": [
+      "needlessly idling cars",
+      "overly sweet sauces",
+      "meetings without decisions",
+      "crowded loud dining rooms"
+    ],
+    "food_preferences": {
+      "dietary_notes": [
+        "prefers moderate spice",
+        "no known food allergy"
+      ],
+      "usual_quick_dinner": "roasted vegetable and chicken grain bowl"
+    },
+    "habits": [
+      "checks the next metro departure while packing her desk",
+      "keeps a compact umbrella in her work satchel",
+      "writes tomorrow's first task before leaving"
+    ],
+    "likes": [
+      "savory grain bowls",
+      "quiet window seats",
+      "river walks",
+      "frequent transit",
+      "strong tea"
+    ],
+    "routines": [
+      "walks from the office through Exchange Plaza",
+      "uses Quayside Station for the westbound metro",
+      "gets off at Westborough and walks via the market"
+    ]
+  },
+  "presentation": {
+    "aesthetic_identity": "Composed, outdoors-aware, understated professional style with subtle references to landscape and civic place.",
+    "comfort_priorities": [
+      "walking and transit comfort",
+      "weather adaptability",
+      "layers suitable for offices and outdoor transfers"
+    ],
+    "context_variations": [
+      "uses relaxed technical layers while travelling or hiking",
+      "adds a structured jacket for civic meetings",
+      "chooses reflective and waterproof details for cycling or wet commutes"
+    ],
+    "formality_range": "Practical business casual through restrained professional formalwear.",
+    "grooming_norms": [
+      "hair tied back for concentrated work",
+      "minimal makeup",
+      "clean functional presentation"
+    ],
+    "practical_constraints": [
+      "needs shoes suitable for long station walks",
+      "avoids garments that perform poorly in rain"
+    ],
+    "preferred_fabrics": [
+      "washable wool",
+      "cotton",
+      "weather-resistant technical fabrics"
+    ],
+    "preferred_silhouettes": [
+      "lightly structured jackets",
+      "clean practical trousers",
+      "simple layered tops"
+    ],
+    "purchase_habits": [
+      "buys durable multipurpose pieces",
+      "keeps outdoor gear in regular urban rotation",
+      "prefers local or traceable manufacturing"
+    ],
+    "usual_accessories": [
+      "thin silver-framed glasses",
+      "river-map pin",
+      "durable satchel"
+    ],
+    "wardrobe_palette": [
+      "navy",
+      "charcoal",
+      "moss green",
+      "river blue",
+      "cream"
+    ]
+  },
+  "relationships": [
+    {
+      "notes": "Theo works irregular museum installation shifts; they coordinate dinner by message.",
+      "relationship": "Partner",
+      "sentiment": "Affectionate and mutually supportive",
+      "shared_routines": [
+        "Sunday market",
+        "evening walks by Westborough Common"
+      ],
+      "target_id": "theo-mercer"
+    },
+    {
+      "notes": "Priya leads the housing-demand side of the river corridor briefing.",
+      "relationship": "Close colleague and project counterpart",
+      "sentiment": "High professional trust",
+      "target_id": "priya-nair"
+    },
+    {
+      "notes": "Elin lives in Larkhaven and calls most Wednesday evenings.",
+      "relationship": "Younger sister",
+      "sentiment": "Protective, warm, occasionally teasing",
+      "target_id": "elin-ellison"
+    }
+  ],
+  "schema_version": 2,
+  "template_id": "human-v1"
 }

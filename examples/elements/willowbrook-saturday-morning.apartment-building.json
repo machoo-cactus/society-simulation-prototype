@@ -1,0 +1,39 @@
+{
+  "available": true,
+  "description": "A modest apartment building represented by one furnished resident unit.",
+  "entrances": [
+    {
+      "door_object_id": "willowbrook-saturday-morning.exterior-door",
+      "id": "entrance-willowbrook-cedar-court-front",
+      "key": "front",
+      "local_coordinate": {
+        "x": 0,
+        "y": 4
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "willowbrook-saturday-morning.apartment-building",
+  "kind": "building",
+  "name": "Cedar Court Apartments",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "7e02a378e1be0550d1b47ae7df02fb5ede842baddb4bd94c34736581a65ce054",
+        "id": "willowbrook-saturday-morning.apartment-room",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 3
+}

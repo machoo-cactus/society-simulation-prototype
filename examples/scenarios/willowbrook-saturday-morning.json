@@ -1,0 +1,1339 @@
+{
+  "calendar": {
+    "start_datetime": "2026-09-05T08:30:00-07:00",
+    "update_interval_seconds": 900.0
+  },
+  "character_situation_synthesis": {
+    "enabled": false
+  },
+  "cognition": {
+    "decision_timeout_seconds": 30.0,
+    "max_concurrency": 3,
+    "max_input_tokens": null,
+    "max_output_tokens": 512,
+    "max_read_tool_rounds": 1,
+    "max_requests": null,
+    "max_state_changing_tools": 1,
+    "max_total_output_tokens": null,
+    "model_profile": "default",
+    "npc_control_mode": "auto",
+    "tool_allowlist": [
+      "navigate_to",
+      "perform",
+      "interact_with",
+      "say",
+      "wait",
+      "skip",
+      "transact",
+      "check_environment"
+    ]
+  },
+  "dt": 1.0,
+  "entities": [
+    {
+      "components": {
+        "character_slot": {
+          "briefing": "It is an unhurried Saturday morning. You agreed to meet Jordan and Maya at Corner Cup Cafe around 09:00, without a fixed agenda. You are currently at home and can decide how to handle the plan and the rest of your morning.",
+          "constraints": {
+            "allowed_genders": [],
+            "allowed_template_ids": [
+              "human-v1"
+            ],
+            "maximum_age": null,
+            "minimum_age": 18
+          },
+          "default_character_id": "alex-chen",
+          "label": "Willowbrook resident",
+          "synthesis_guidance": ""
+        },
+        "controller": {
+          "enabled": true,
+          "tool_allowlist": [
+            "navigate_to",
+            "perform",
+            "interact_with",
+            "say",
+            "wait",
+            "skip",
+            "transact",
+            "check_environment"
+          ]
+        },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "activation_time": 0.0,
+              "completion_policy": "all",
+              "criteria": [
+                {
+                  "effect": "success",
+                  "location_id": "building-willowbrook-corner-cup",
+                  "location_kind": "place",
+                  "type": "location_match"
+                },
+                {
+                  "effect": "success",
+                  "interaction_type": "speech",
+                  "minimum_count": 1,
+                  "target_id": "resident-jordan",
+                  "type": "interaction_count"
+                },
+                {
+                  "effect": "success",
+                  "interaction_type": "speech",
+                  "minimum_count": 1,
+                  "target_id": "resident-maya",
+                  "type": "interaction_count"
+                }
+              ],
+              "deadline_time": null,
+              "description": "Keep the ordinary Saturday meetup with Jordan and Maya.",
+              "id": "resident-alex-keep-saturday-meetup",
+              "priority": 45,
+              "tags": [
+                "social",
+                "commitment"
+              ]
+            }
+          ]
+        },
+        "homeostasis": {
+          "energy": 86.0,
+          "satiety": 76.0,
+          "stress": 12.0
+        },
+        "information": {
+          "documents": [
+            {
+              "content": {
+                "destination_id": "building-willowbrook-corner-cup",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-willowbrook-corner-cup.interior"
+                  }
+                ],
+                "name": "Corner Cup Cafe",
+                "transition_ids": [
+                  "edge-willowbrook-cedar-court-north",
+                  "edge-willowbrook-central-cafe",
+                  "edge-willowbrook-north-central",
+                  "entrance-willowbrook-cafe-front",
+                  "entrance-willowbrook-cedar-court-front"
+                ]
+              },
+              "id": "info-resident-alex-corner-cup-route",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-willowbrook-corner-cup"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-alex",
+                "building-willowbrook-corner-cup"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-alex"
+                ],
+                "reader_ids": []
+              }
+            }
+          ]
+        },
+        "memory": {
+          "initial_episodes": [
+            {
+              "importance": 0.55,
+              "simulation_time": 0.0,
+              "text": "Earlier in the week, Jordan, Maya, and you agreed to meet at Corner Cup Cafe around 09:00 on Saturday. Nobody set a special agenda."
+            }
+          ],
+          "top_k": 5
+        },
+        "possessions": {
+          "holdings": {
+            "willowbrook-dollar": 20
+          }
+        },
+        "senses": {
+          "hearing_range": 10,
+          "recognition_range": 6,
+          "smell_range": 0,
+          "vision_range": 8
+        },
+        "spatial_location": {
+          "edge_id": null,
+          "edge_progress": null,
+          "local_coordinate": {
+            "x": 1,
+            "y": 4
+          },
+          "network_node_id": null,
+          "place_id": "building-willowbrook-cedar-court.interior",
+          "scale": "BUILDING"
+        }
+      },
+      "id": "resident-alex"
+    },
+    {
+      "components": {
+        "character_slot": {
+          "briefing": "It is an unhurried Saturday morning. You agreed to meet Alex and Maya at Corner Cup Cafe around 09:00, without a fixed agenda. You are currently at home and can decide how to handle the plan and the rest of your morning.",
+          "constraints": {
+            "allowed_genders": [],
+            "allowed_template_ids": [
+              "human-v1"
+            ],
+            "maximum_age": null,
+            "minimum_age": 18
+          },
+          "default_character_id": "jordan-lee",
+          "label": "Willowbrook resident",
+          "synthesis_guidance": ""
+        },
+        "controller": {
+          "enabled": true,
+          "tool_allowlist": [
+            "navigate_to",
+            "perform",
+            "interact_with",
+            "say",
+            "wait",
+            "skip",
+            "transact",
+            "check_environment"
+          ]
+        },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "activation_time": 0.0,
+              "completion_policy": "all",
+              "criteria": [
+                {
+                  "effect": "success",
+                  "location_id": "building-willowbrook-corner-cup",
+                  "location_kind": "place",
+                  "type": "location_match"
+                },
+                {
+                  "effect": "success",
+                  "interaction_type": "speech",
+                  "minimum_count": 1,
+                  "target_id": "resident-alex",
+                  "type": "interaction_count"
+                },
+                {
+                  "effect": "success",
+                  "interaction_type": "speech",
+                  "minimum_count": 1,
+                  "target_id": "resident-maya",
+                  "type": "interaction_count"
+                }
+              ],
+              "deadline_time": null,
+              "description": "Keep the ordinary Saturday meetup with Alex and Maya.",
+              "id": "resident-jordan-keep-saturday-meetup",
+              "priority": 45,
+              "tags": [
+                "social",
+                "commitment"
+              ]
+            }
+          ]
+        },
+        "homeostasis": {
+          "energy": 89.0,
+          "satiety": 72.0,
+          "stress": 10.0
+        },
+        "information": {
+          "documents": [
+            {
+              "content": {
+                "destination_id": "building-willowbrook-corner-cup",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-willowbrook-corner-cup.interior"
+                  }
+                ],
+                "name": "Corner Cup Cafe",
+                "transition_ids": [
+                  "building-willowbrook-maple-row-12.front",
+                  "edge-willowbrook-central-cafe",
+                  "edge-willowbrook-maple-12-south",
+                  "edge-willowbrook-south-central",
+                  "entrance-willowbrook-cafe-front"
+                ]
+              },
+              "id": "info-resident-jordan-corner-cup-route",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-willowbrook-corner-cup"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-jordan",
+                "building-willowbrook-corner-cup"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-jordan"
+                ],
+                "reader_ids": []
+              }
+            }
+          ]
+        },
+        "memory": {
+          "initial_episodes": [
+            {
+              "importance": 0.55,
+              "simulation_time": 0.0,
+              "text": "Earlier in the week, Alex, Maya, and you agreed to meet at Corner Cup Cafe around 09:00 on Saturday. Nobody set a special agenda."
+            }
+          ],
+          "top_k": 5
+        },
+        "possessions": {
+          "holdings": {
+            "willowbrook-dollar": 24
+          }
+        },
+        "senses": {
+          "hearing_range": 10,
+          "recognition_range": 6,
+          "smell_range": 0,
+          "vision_range": 8
+        },
+        "spatial_location": {
+          "edge_id": null,
+          "edge_progress": null,
+          "local_coordinate": {
+            "x": 1,
+            "y": 6
+          },
+          "network_node_id": null,
+          "place_id": "building-willowbrook-maple-row-12.interior",
+          "scale": "BUILDING"
+        }
+      },
+      "id": "resident-jordan"
+    },
+    {
+      "components": {
+        "character_slot": {
+          "briefing": "It is an unhurried Saturday morning. You agreed to meet Alex and Jordan at Corner Cup Cafe around 09:00, without a fixed agenda. You are currently at home and can decide how to handle the plan and the rest of your morning.",
+          "constraints": {
+            "allowed_genders": [],
+            "allowed_template_ids": [
+              "human-v1"
+            ],
+            "maximum_age": null,
+            "minimum_age": 18
+          },
+          "default_character_id": "maya-thompson",
+          "label": "Willowbrook resident",
+          "synthesis_guidance": ""
+        },
+        "controller": {
+          "enabled": true,
+          "tool_allowlist": [
+            "navigate_to",
+            "perform",
+            "interact_with",
+            "say",
+            "wait",
+            "skip",
+            "transact",
+            "check_environment"
+          ]
+        },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "activation_time": 0.0,
+              "completion_policy": "all",
+              "criteria": [
+                {
+                  "effect": "success",
+                  "location_id": "building-willowbrook-corner-cup",
+                  "location_kind": "place",
+                  "type": "location_match"
+                },
+                {
+                  "effect": "success",
+                  "interaction_type": "speech",
+                  "minimum_count": 1,
+                  "target_id": "resident-alex",
+                  "type": "interaction_count"
+                },
+                {
+                  "effect": "success",
+                  "interaction_type": "speech",
+                  "minimum_count": 1,
+                  "target_id": "resident-jordan",
+                  "type": "interaction_count"
+                }
+              ],
+              "deadline_time": null,
+              "description": "Keep the ordinary Saturday meetup with Alex and Jordan.",
+              "id": "resident-maya-keep-saturday-meetup",
+              "priority": 45,
+              "tags": [
+                "social",
+                "commitment"
+              ]
+            }
+          ]
+        },
+        "homeostasis": {
+          "energy": 84.0,
+          "satiety": 79.0,
+          "stress": 14.0
+        },
+        "information": {
+          "documents": [
+            {
+              "content": {
+                "destination_id": "building-willowbrook-corner-cup",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-willowbrook-corner-cup.interior"
+                  }
+                ],
+                "name": "Corner Cup Cafe",
+                "transition_ids": [
+                  "building-willowbrook-maple-row-18.front",
+                  "edge-willowbrook-central-cafe",
+                  "edge-willowbrook-maple-18-south",
+                  "edge-willowbrook-south-central",
+                  "entrance-willowbrook-cafe-front"
+                ]
+              },
+              "id": "info-resident-maya-corner-cup-route",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-willowbrook-corner-cup"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-maya",
+                "building-willowbrook-corner-cup"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-maya"
+                ],
+                "reader_ids": []
+              }
+            }
+          ]
+        },
+        "memory": {
+          "initial_episodes": [
+            {
+              "importance": 0.55,
+              "simulation_time": 0.0,
+              "text": "Earlier in the week, Alex, Jordan, and you agreed to meet at Corner Cup Cafe around 09:00 on Saturday. Nobody set a special agenda."
+            }
+          ],
+          "top_k": 5
+        },
+        "possessions": {
+          "holdings": {
+            "willowbrook-dollar": 18
+          }
+        },
+        "senses": {
+          "hearing_range": 10,
+          "recognition_range": 6,
+          "smell_range": 0,
+          "vision_range": 8
+        },
+        "spatial_location": {
+          "edge_id": null,
+          "edge_progress": null,
+          "local_coordinate": {
+            "x": 1,
+            "y": 6
+          },
+          "network_node_id": null,
+          "place_id": "building-willowbrook-maple-row-18.interior",
+          "scale": "BUILDING"
+        }
+      },
+      "id": "resident-maya"
+    }
+  ],
+  "homeostasis": {
+    "activity_coefficients": {}
+  },
+  "items": [
+    {
+      "id": "willowbrook-dollar",
+      "name": "Willowbrook dollar",
+      "unit": "dollar"
+    },
+    {
+      "id": "filter-coffee",
+      "name": "Filter coffee",
+      "unit": "cup"
+    },
+    {
+      "id": "hot-tea",
+      "name": "Hot tea",
+      "unit": "cup"
+    },
+    {
+      "id": "morning-bun",
+      "name": "Morning bun",
+      "unit": "item"
+    },
+    {
+      "id": "local-apples",
+      "name": "Bag of local apples",
+      "unit": "bag"
+    },
+    {
+      "id": "bread-loaf",
+      "name": "Loaf of bread",
+      "unit": "loaf"
+    },
+    {
+      "id": "spring-water",
+      "name": "Spring water",
+      "unit": "serving"
+    }
+  ],
+  "memory": {
+    "importance_weight": 0.15,
+    "recency_half_life": 3600.0,
+    "recency_weight": 0.25,
+    "semantic_weight": 0.6
+  },
+  "name": "willowbrook-saturday-morning",
+  "perception": {
+    "blocked_tiles_are_opaque": true,
+    "fact_max_age_seconds": 300.0,
+    "inbox_limit": 100,
+    "recognition_range": 6,
+    "renderer": "deterministic",
+    "vision_range": 8,
+    "voice_range": 10,
+    "whisper_range": 2
+  },
+  "run_id": null,
+  "schema_version": 6,
+  "seed": 20260905,
+  "speed": 20.0,
+  "system1": {
+    "thresholds": {},
+    "tie_break_order": [
+      "SATIETY",
+      "ENERGY",
+      "STRESS"
+    ]
+  },
+  "weather": {
+    "effects": {},
+    "initial": {
+      "condition": "CLEAR",
+      "precipitation_mm_per_hour": 0.0,
+      "temperature_c": 16.5,
+      "visibility_meters": 12000.0,
+      "wind_direction_degrees": 240.0,
+      "wind_speed_mps": 1.8
+    },
+    "transitions": [
+      {
+        "at_seconds": 5400.0,
+        "state": {
+          "condition": "CLOUDY",
+          "precipitation_mm_per_hour": 0.0,
+          "temperature_c": 18.0,
+          "visibility_meters": 10000.0,
+          "wind_direction_degrees": 250.0,
+          "wind_speed_mps": 2.6
+        }
+      }
+    ]
+  },
+  "world": {
+    "building_order": [
+      "building-willowbrook-cedar-court",
+      "building-willowbrook-maple-row-12",
+      "building-willowbrook-maple-row-18",
+      "building-willowbrook-corner-cup",
+      "building-willowbrook-market",
+      "building-willowbrook-library-annex"
+    ],
+    "city": {
+      "bounds_meters": {
+        "max_x": 900.0,
+        "max_y": 800.0,
+        "min_x": 0.0,
+        "min_y": 0.0
+      },
+      "id": "city-willowbrook",
+      "name": "Willowbrook"
+    },
+    "city_zones": [
+      {
+        "buildings": [
+          {
+            "city_position": {
+              "x": 150.0,
+              "y": 550.0
+            },
+            "element": {
+              "content_hash": "ea6edb8dc0193a17efa22173e5273e9b11393ba432b01e1f53d354d8ecf28121",
+              "id": "willowbrook-saturday-morning.apartment-building",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-willowbrook-cedar-court"
+            },
+            "id": "building-willowbrook-cedar-court",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Cedar Court Apartment 204",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 150.0,
+              "y": 250.0
+            },
+            "element": {
+              "content_hash": "8ef97bdcd56633548381f1c58dcddb572aaa0f5833c4fe33dcea0bf4eb16a8f1",
+              "id": "willowbrook-saturday-morning.townhouse-building",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-willowbrook-maple-row-12"
+            },
+            "id": "building-willowbrook-maple-row-12",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Maple Row Townhouse 12",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 350.0,
+              "y": 150.0
+            },
+            "element": {
+              "content_hash": "6b86fc13d578cef0800552e8c120e12700f01960ab0f225f3a18c6c8a5887cf7",
+              "id": "willowbrook-saturday-morning.townhouse-18-building",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-willowbrook-maple-row-18"
+            },
+            "id": "building-willowbrook-maple-row-18",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Maple Row Townhouse 18",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 500.0,
+              "y": 400.0
+            },
+            "element": {
+              "content_hash": "a7d2facc6827466805841898181ce67bff9d93cc0f8e586156789e62ebef85f3",
+              "id": "willowbrook-saturday-morning.cafe-building",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-willowbrook-corner-cup"
+            },
+            "id": "building-willowbrook-corner-cup",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": null,
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 700.0,
+              "y": 450.0
+            },
+            "element": {
+              "content_hash": "57a3b9a40c7b60cbc026c95ad2b00e9875d722b039d37657f94fde50e2369a26",
+              "id": "willowbrook-saturday-morning.market-building",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-willowbrook-market"
+            },
+            "id": "building-willowbrook-market",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": null,
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 700.0,
+              "y": 200.0
+            },
+            "element": {
+              "content_hash": "9283b456f9911e93fbace072e7166d4ba152db23bebbd6d816118ab4d7d9ed18",
+              "id": "willowbrook-saturday-morning.library-building",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-willowbrook-library-annex"
+            },
+            "id": "building-willowbrook-library-annex",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": null,
+              "room_overrides": {}
+            }
+          }
+        ],
+        "center": {
+          "x": 450.0,
+          "y": 400.0
+        },
+        "id": "neighborhood-willowbrook",
+        "name": "Willowbrook Neighborhood",
+        "outdoor_places": [
+          {
+            "available": true,
+            "city_position": {
+              "x": 500.0,
+              "y": 680.0
+            },
+            "environment": {
+              "closed_weather": [
+                "STORM"
+              ],
+              "schedule": null
+            },
+            "id": "place-willowbrook-brookside-park",
+            "name": "Brookside Park",
+            "network_node_id": "node-willowbrook-brookside-park"
+          },
+          {
+            "available": true,
+            "city_position": {
+              "x": 500.0,
+              "y": 550.0
+            },
+            "environment": {
+              "closed_weather": [
+                "STORM"
+              ],
+              "schedule": null
+            },
+            "id": "place-willowbrook-playground-plaza",
+            "name": "Willowbrook Playground and Plaza",
+            "network_node_id": "node-willowbrook-playground-plaza"
+          }
+        ]
+      }
+    ],
+    "npc_role_order": [
+      "willowbrook-saturday-morning.cafe-barista"
+    ],
+    "outdoor_place_order": [
+      "place-willowbrook-brookside-park",
+      "place-willowbrook-playground-plaza"
+    ],
+    "transport": {
+      "car_speed_mps": 13.9,
+      "cycling_speed_mps": 4.5,
+      "edges": [
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 250.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-cedar-court",
+          "geometry": [
+            {
+              "x": 150.0,
+              "y": 550.0
+            },
+            {
+              "x": 400.0,
+              "y": 550.0
+            }
+          ],
+          "id": "edge-willowbrook-cedar-court-north",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-north-junction"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 250.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-maple-row-12",
+          "geometry": [
+            {
+              "x": 150.0,
+              "y": 250.0
+            },
+            {
+              "x": 400.0,
+              "y": 250.0
+            }
+          ],
+          "id": "edge-willowbrook-maple-12-south",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-south-junction"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 112.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-maple-row-18",
+          "geometry": [
+            {
+              "x": 350.0,
+              "y": 150.0
+            },
+            {
+              "x": 400.0,
+              "y": 250.0
+            }
+          ],
+          "id": "edge-willowbrook-maple-18-south",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-south-junction"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 150.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-north-junction",
+          "geometry": [
+            {
+              "x": 400.0,
+              "y": 550.0
+            },
+            {
+              "x": 400.0,
+              "y": 400.0
+            }
+          ],
+          "id": "edge-willowbrook-north-central",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-central-junction"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 150.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-south-junction",
+          "geometry": [
+            {
+              "x": 400.0,
+              "y": 250.0
+            },
+            {
+              "x": 400.0,
+              "y": 400.0
+            }
+          ],
+          "id": "edge-willowbrook-south-central",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-central-junction"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 100.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-central-junction",
+          "geometry": [
+            {
+              "x": 400.0,
+              "y": 400.0
+            },
+            {
+              "x": 500.0,
+              "y": 400.0
+            }
+          ],
+          "id": "edge-willowbrook-central-cafe",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-corner-cup"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 206.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-corner-cup",
+          "geometry": [
+            {
+              "x": 500.0,
+              "y": 400.0
+            },
+            {
+              "x": 700.0,
+              "y": 450.0
+            }
+          ],
+          "id": "edge-willowbrook-cafe-market",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-market"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 304.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-south-junction",
+          "geometry": [
+            {
+              "x": 400.0,
+              "y": 250.0
+            },
+            {
+              "x": 700.0,
+              "y": 200.0
+            }
+          ],
+          "id": "edge-willowbrook-south-library",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-library-annex"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 100.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-north-junction",
+          "geometry": [
+            {
+              "x": 400.0,
+              "y": 550.0
+            },
+            {
+              "x": 500.0,
+              "y": 550.0
+            }
+          ],
+          "id": "edge-willowbrook-north-playground",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-playground-plaza"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 130.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-willowbrook-playground-plaza",
+          "geometry": [
+            {
+              "x": 500.0,
+              "y": 550.0
+            },
+            {
+              "x": 500.0,
+              "y": 680.0
+            }
+          ],
+          "id": "edge-willowbrook-playground-park",
+          "speed_limit_mps": null,
+          "to_node_id": "node-willowbrook-brookside-park"
+        }
+      ],
+      "metro_lines": [],
+      "metro_speed_mps": 16.0,
+      "nodes": [
+        {
+          "id": "node-willowbrook-cedar-court",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-willowbrook-cedar-court",
+          "position": {
+            "x": 150.0,
+            "y": 550.0
+          }
+        },
+        {
+          "id": "node-willowbrook-maple-row-12",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-willowbrook-maple-row-12",
+          "position": {
+            "x": 150.0,
+            "y": 250.0
+          }
+        },
+        {
+          "id": "node-willowbrook-maple-row-18",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-willowbrook-maple-row-18",
+          "position": {
+            "x": 350.0,
+            "y": 150.0
+          }
+        },
+        {
+          "id": "node-willowbrook-corner-cup",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-willowbrook-corner-cup",
+          "position": {
+            "x": 500.0,
+            "y": 400.0
+          }
+        },
+        {
+          "id": "node-willowbrook-market",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-willowbrook-market",
+          "position": {
+            "x": 700.0,
+            "y": 450.0
+          }
+        },
+        {
+          "id": "node-willowbrook-library-annex",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-willowbrook-library-annex",
+          "position": {
+            "x": 700.0,
+            "y": 200.0
+          }
+        },
+        {
+          "id": "node-willowbrook-brookside-park",
+          "kind": "PEDESTRIAN_JUNCTION",
+          "place_id": "place-willowbrook-brookside-park",
+          "position": {
+            "x": 500.0,
+            "y": 680.0
+          }
+        },
+        {
+          "id": "node-willowbrook-playground-plaza",
+          "kind": "PEDESTRIAN_JUNCTION",
+          "place_id": "place-willowbrook-playground-plaza",
+          "position": {
+            "x": 500.0,
+            "y": 550.0
+          }
+        },
+        {
+          "id": "node-willowbrook-north-junction",
+          "kind": "PEDESTRIAN_JUNCTION",
+          "place_id": null,
+          "position": {
+            "x": 400.0,
+            "y": 550.0
+          }
+        },
+        {
+          "id": "node-willowbrook-central-junction",
+          "kind": "PEDESTRIAN_JUNCTION",
+          "place_id": null,
+          "position": {
+            "x": 400.0,
+            "y": 400.0
+          }
+        },
+        {
+          "id": "node-willowbrook-south-junction",
+          "kind": "PEDESTRIAN_JUNCTION",
+          "place_id": null,
+          "position": {
+            "x": 400.0,
+            "y": 250.0
+          }
+        }
+      ],
+      "vehicles": [],
+      "walking_speed_mps": 1.4
+    },
+    "type": "city"
+  }
+}

@@ -17,7 +17,25 @@ def local_world_for_agent(
         if location.local_coordinate is not None:
             return registry.get_resource(CityWorld).room_world(location.place_id)
         return None
-    return registry.get_resource(WorldMap)
+    return (
+        registry.get_resource(WorldMap)
+        if registry.has_resource(WorldMap)
+        else None
+    )
+
+
+def local_world_for_space(
+    registry: Registry,
+    space_id: str,
+) -> WorldMap | None:
+    if registry.has_resource(CityWorld):
+        try:
+            return registry.get_resource(CityWorld).room_world(space_id)
+        except KeyError:
+            return None
+    if registry.has_resource(WorldMap) and space_id == "implicit-building":
+        return registry.get_resource(WorldMap)
+    return None
 
 
 def shares_local_map(

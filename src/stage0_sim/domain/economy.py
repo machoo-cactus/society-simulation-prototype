@@ -87,6 +87,7 @@ class TransactionPoint:
     capacity: int = 1
     operation: TransactionOperation = TransactionOperation.AUTOMATED
     staffing: TransactionStaffing | None = None
+    coordinate_scale: int = 1
 
     def __post_init__(self) -> None:
         if not self.id or not self.name:
@@ -97,6 +98,8 @@ class TransactionPoint:
             )
         if self.capacity <= 0:
             raise ValueError("transaction point capacity must be greater than zero")
+        if self.coordinate_scale <= 0:
+            raise ValueError("transaction coordinate scale must be greater than zero")
         if self.operation is TransactionOperation.STAFFED:
             if self.staffing is None:
                 raise ValueError(
@@ -106,7 +109,7 @@ class TransactionPoint:
                 abs(self.position.x - self.staffing.staff_position.x)
                 + abs(self.position.y - self.staffing.staff_position.y)
             )
-            if distance != 1:
+            if distance != self.coordinate_scale:
                 raise ValueError(
                     f"staffed transaction point {self.id} staff position "
                     "must be adjacent to the customer position"

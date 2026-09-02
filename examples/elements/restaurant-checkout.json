@@ -14,7 +14,7 @@
   "kind": "object",
   "name": "Restaurant Checkout",
   "npc_role": {
-    "content_hash": "a5273d562a06c8df042cf7f4490a5f630cfa0c51c2acfd7f5007d56de24f86af",
+    "content_hash": "b2d7d9a88ae30e8bbf34e81e12b5569a19870022460f04e3e0aac6702496745b",
     "id": "restaurant-server",
     "kind": "npc_role"
   },
@@ -39,7 +39,43 @@
     }
   ],
   "operation": "STAFFED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "openable": null,
+      "portable": null,
+      "readable": null,
+      "scent_source": null,
+      "slots": [],
+      "support": null,
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": 0,
+          "y": 0
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "NONE",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
   "request_timeout": 60.0,
-  "schema_version": 1,
+  "schema_version": 3,
   "supported_actions": null
 }

@@ -55,6 +55,7 @@ from stage0_sim.application.elements import (
     ScenarioSourceDefinition,
     element_content_hash,
 )
+from stage0_sim.application.migrations.constants import SCENARIO_SCHEMA_VERSION
 from stage0_sim.application.scenario_resolution import (
     ScenarioResolutionError,
     resolve_scenario,
@@ -381,7 +382,12 @@ async def update_scenario_editor_view(token: str, request: Request) -> Response:
 def _apply_editor_query(draft: ScenarioEditorDraft, request: Request) -> None:
     if "focus" in request.query_params:
         focus = request.query_params.get("focus", "")
-        draft.view.selected_node_id = focus if find_node(draft.root, focus) else ""
+        draft.view.selected_node_id = (
+            focus
+            if find_node(draft.root, focus)
+            or focus.startswith("inherited:")
+            else ""
+        )
     if "scope" in request.query_params:
         scope = request.query_params.get("scope", "")
         draft.view.scope_node_id = scope if find_node(draft.root, scope) else ""
@@ -480,9 +486,13 @@ async def import_scenario(request: Request) -> Response:
         scenario_id = Path(upload.filename).stem
         validate_scenario_id(scenario_id)
         raw = json.loads(content)
-        if not isinstance(raw, dict) or raw.get("schema_version") != 4:
+        if not isinstance(raw, dict) or raw.get(
+            "schema_version"
+        ) != SCENARIO_SCHEMA_VERSION:
             raise ValueError(
-                "saved scenarios require schema version 4"
+                f"saved scenarios require schema version "
+                f"{SCENARIO_SCHEMA_VERSION}; run "
+                "'stage0-sim migrate content'"
             )
         scenario = ScenarioSourceDefinition.model_validate(raw)
         _library(request).create(scenario_id, scenario)

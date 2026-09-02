@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-harcourt-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "b6951eef238a10c1645fd80b5f43a5a2321ce3fece195289296a0c66df4fd926",
+        "content_hash": "385e56425731b4915ec7a17c57dee6b5f4a14f4b567cb8484cdf5d5ab03e87de",
         "id": "greyford-office-evening.map-greyford-harcourt-residences",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

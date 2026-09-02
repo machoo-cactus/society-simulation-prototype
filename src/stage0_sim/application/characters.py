@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal, Protocol
 from pydantic import Field, model_validator
 
 from stage0_sim.application.character_profiles import CharacterProfileDefinition
+from stage0_sim.application.migrations.constants import CHARACTER_SCHEMA_VERSION
 from stage0_sim.application.scenario import (
     CharacterSlotDefinition,
     ResolvedCharacterProfile,
@@ -63,7 +64,7 @@ class CharacterConflictError(CharacterLibraryError):
 
 
 class CharacterDefinition(CharacterProfileDefinition):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[2] = CHARACTER_SCHEMA_VERSION
     id: str = Field(min_length=1)
 
     @model_validator(mode="after")

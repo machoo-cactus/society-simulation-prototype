@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-central-interchange-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "94fbfe02c8d1dd16d51883252f7e09442203422487b42bbd7409cb527442fc93",
+        "content_hash": "0f51f6fddf064f2e8934c33448c61b291063beef48000156bffd94ed15c20007",
         "id": "greyford-office-evening.map-greyford-central-interchange",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

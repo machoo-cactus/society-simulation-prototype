@@ -131,6 +131,7 @@ function restoreInteraction(snapshot, hash = "") {
     if (element) {
       element.scrollLeft = position.left;
       element.scrollTop = position.top;
+      element.dataset.restoredScroll = "true";
     }
   }
   for (const summary of document.querySelectorAll("details summary")) {
@@ -380,8 +381,15 @@ function synchronizeZoom(zoom, viewport, map) {
         throw new Error(`Zoom synchronization failed with HTTP ${response.status}`);
       }
       const stateDocument = await fetchPage(window.location.href);
+      const refreshTargets = (
+        viewport.dataset.mapRefreshTarget ||
+        "#world-panel,#inspector-panel"
+      )
+        .split(",")
+        .map((selector) => selector.trim())
+        .filter(Boolean);
       replaceTargets(
-        [viewport.dataset.mapRefreshTarget || "#world-panel"],
+        refreshTargets,
         stateDocument,
       );
     } catch (error) {
@@ -429,7 +437,9 @@ function setupMap(viewport) {
   if (viewport.dataset.mapEnhanced === "true") return;
   viewport.dataset.mapEnhanced = "true";
   const initialMap = viewport.querySelector("[data-map-zoom]");
-  if (initialMap instanceof SVGElement) {
+  if (viewport.dataset.restoredScroll === "true") {
+    delete viewport.dataset.restoredScroll;
+  } else if (initialMap instanceof SVGElement) {
     requestAnimationFrame(() => centerFollowedCharacter(viewport, initialMap));
   }
   let startX = 0;

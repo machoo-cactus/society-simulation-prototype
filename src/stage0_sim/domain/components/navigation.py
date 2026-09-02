@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from stage0_sim.domain.components.planning import ActionInstance
+from stage0_sim.domain.interactions import InteractionSpecification
 from stage0_sim.domain.world import Locator, Route, TravelMode
 
 
@@ -17,6 +18,7 @@ class NavigationStatus(StrEnum):
 
 class NavigationPrimitiveKind(StrEnum):
     MOVE = "MOVE"
+    INTERACT = "INTERACT"
     TRANSITION = "TRANSITION"
     TRAVEL = "TRAVEL"
 
@@ -35,6 +37,7 @@ class NavigationPrimitive:
     outbound_transition_id: str | None = None
     origin_network_node_id: str | None = None
     route_edge_ids: tuple[str, ...] = ()
+    interaction: InteractionSpecification | None = None
 
     def __post_init__(self) -> None:
         if self.route_leg_start < 0:
@@ -43,7 +46,28 @@ class NavigationPrimitive:
             raise ValueError(
                 "navigation route_leg_end must exceed route_leg_start"
             )
-        if self.kind is NavigationPrimitiveKind.TRAVEL:
+        if self.kind is NavigationPrimitiveKind.INTERACT:
+            if self.interaction is None:
+                raise ValueError(
+                    "interaction navigation primitives require interaction"
+                )
+            if (
+                self.transition_id is not None
+                or self.destination_id is not None
+                or self.mode is not None
+                or self.entrance_transition_id is not None
+                or self.outbound_transition_id is not None
+                or self.origin_network_node_id is not None
+                or self.route_edge_ids
+            ):
+                raise ValueError(
+                    "interaction navigation primitives cannot contain travel fields"
+                )
+        elif self.interaction is not None:
+            raise ValueError(
+                "interaction is only valid for interaction primitives"
+            )
+        elif self.kind is NavigationPrimitiveKind.TRAVEL:
             if self.destination_id is None or self.mode is None:
                 raise ValueError(
                     "travel navigation primitives require destination and mode"

@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "6106c5d69494119e108393b8ae2ffc7cb3ef0047ed183a3c14562c9de0bacfdb",
+        "content_hash": "dfc855283eb70045fb61335f88511c373edc284fd1097c2981d79b6b0a7fff4f",
         "id": "greyford-office-evening.station-greyford-general-hospital-primary",
         "kind": "object"
       },
       "id": "station-greyford-general-hospital-primary",
       "key": "station-greyford-general-hospital-primary",
+      "placement": {
+        "anchor": {
+          "x": 76,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 8,
         "y": 4
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 10,
   "zones": [
     {

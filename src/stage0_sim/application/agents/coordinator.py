@@ -43,6 +43,7 @@ from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.intents import (
     ActivityIntent,
     CharacterIntent,
+    InteractionIntent,
     NavigationIntent,
     ServeTransactionIntent,
     SkipIntent,
@@ -747,7 +748,7 @@ class AgentWorkCoordinator:
         goal_links = active_goal_links(context, request.agent_id)
         if isinstance(intent, ActivityIntent):
             duration = intent.duration_seconds
-            if intent.action.value in {"WORK", "READ"} and duration is None:
+            if intent.action.value in {"WORK", "READ", "DRINK"} and duration is None:
                 self._reject(
                     context,
                     request,
@@ -871,6 +872,23 @@ class AgentWorkCoordinator:
                     PlanAction(
                         action=ActionType.SERVE_TRANSACTION,
                         target=intent.request_id,
+                    )
+                ],
+                origin=ActionOrigin.CONTROLLER,
+                goal_links=goal_links,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                root_correlation_id=request.decision_id,
+            )[0]
+        elif isinstance(intent, InteractionIntent):
+            action_instance = queue_plan_actions(
+                context,
+                request.agent_id,
+                plan,
+                [
+                    PlanAction(
+                        action=ActionType.INTERACT,
+                        interaction=intent.specification,
                     )
                 ],
                 origin=ActionOrigin.CONTROLLER,

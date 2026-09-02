@@ -143,7 +143,11 @@ class NavigationKnowledgeRecordingSystem:
                     "successful navigation requires a final locator"
                 )
             return planned_destination
-        if planned_destination is not None and locator != planned_destination:
+        if (
+            planned_destination is not None
+            and locator != planned_destination
+            and locator.space_id != planned_destination.space_id
+        ):
             raise RuntimeError(
                 "successful navigation final locator does not match its route"
             )
@@ -187,6 +191,13 @@ class NavigationKnowledgeRecordingSystem:
             ),
             content={
                 "destination_id": destination_id,
+                "coordinate_system": (
+                    "microcell"
+                    if isinstance(final_locator.local_reference, dict)
+                    and final_locator.local_reference.get("kind")
+                    == "coordinate"
+                    else None
+                ),
                 "locator": {
                     "space_id": final_locator.space_id,
                     "local_reference": final_locator.local_reference,

@@ -58,6 +58,18 @@ Current clothing, affect, carried items, tasks, plans, goals, location,
 physiology, memories, and completed outcomes belong to the scenario,
 synthesized situation, or live ECS state.
 
+Runtime embodiment is also not a dossier field. Materialized characters use a
+fixed 5×5-microcell body footprint, a cardinal pose, live occupied cells,
+`STANDING`/`SITTING`/`LYING` posture, left/right hands, and optional physical
+parent/custody relations. These are ECS state and can change only through
+domain execution. Descriptive ownership or possessions in a profile do not
+spawn objects, fill hands, grant custody, or alter the independent abstract
+scenario `possessions` component.
+
+Use [Content migration](CONTENT_MIGRATION.md) to upgrade version-1 characters.
+Lossy legacy fields are preserved in stable migration custom sections rather
+than silently discarded.
+
 Financial, measurement, and health values are dated snapshots. They do not
 create spendable funds, live physiology, or other entities.
 
@@ -93,7 +105,7 @@ multiple slots. Resolution freezes the complete profile, source hash, and
 assignment into the prepared scenario and dataset; later library edits do not
 alter a staged composition or active run.
 
-Scenario source version 4 rejects embedded character catalogs, inline profiles,
+Scenario source version 6 rejects embedded character catalogs, inline profiles,
 `profile_ref`, and reusable profile fields. Goals and initial memories are
 scenario-owned components, not dossier fields.
 

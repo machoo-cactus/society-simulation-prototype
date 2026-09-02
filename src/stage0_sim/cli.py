@@ -4,6 +4,7 @@ import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.adapters.elements import FileSystemElementLibrary
@@ -17,6 +18,10 @@ from stage0_sim.application.characters import (
     prepare_scenario,
 )
 from stage0_sim.application.collection import RunDataCollector
+from stage0_sim.application.migrations.catalog import (
+    CatalogMigrationOptions,
+    migrate_catalog,
+)
 from stage0_sim.application.scenario import ScenarioLoadError, create_runner
 from stage0_sim.application.scenario_resolution import (
     ScenarioResolutionError,
@@ -58,13 +63,54 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SLOT_ID=CHARACTER_ID",
         help="assign a reusable character to a scenario slot",
     )
+    migrate_parser = subparsers.add_parser(
+        "migrate",
+        help="run offline deterministic migrations",
+    )
+    migrate_subparsers = migrate_parser.add_subparsers(
+        dest="migration_command",
+        required=True,
+    )
+    content_parser = migrate_subparsers.add_parser(
+        "content",
+        help="migrate character, element, and scenario catalogs",
+    )
+    content_parser.add_argument("--characters-dir", type=Path)
+    content_parser.add_argument("--elements-dir", type=Path)
+    content_parser.add_argument("--scenarios-dir", type=Path)
+    mode = content_parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="validate and report required changes without writing (default)",
+    )
+    mode.add_argument(
+        "--output",
+        type=Path,
+        help="write a complete migrated catalog beneath this new directory",
+    )
+    mode.add_argument(
+        "--write",
+        action="store_true",
+        help="atomically migrate source catalogs in place",
+    )
+    content_parser.add_argument(
+        "--backup-dir",
+        type=Path,
+        help="required new backup directory for --write",
+    )
+    content_parser.add_argument(
+        "--report",
+        type=Path,
+        help="write the deterministic JSON migration report",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command != "run":
-        return 2
+    if args.command == "migrate":
+        return _migrate_content(args)
     if args.ticks < 0:
         print("--ticks must not be negative", file=sys.stderr)
         return 2
@@ -190,5 +236,55 @@ def _parse_character_assignments(values: Sequence[str]) -> dict[str, str]:
             raise ValueError(f"duplicate character assignment for {slot_id}")
         assignments[slot_id] = character_id
     return assignments
+
+
+def _migrate_content(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    explicit_directories = any(
+        (
+            args.characters_dir is not None,
+            args.elements_dir is not None,
+            args.scenarios_dir is not None,
+        )
+    )
+    mode: Literal["check", "output", "write"] = (
+        "write" if args.write else "output" if args.output else "check"
+    )
+    report = migrate_catalog(
+        CatalogMigrationOptions(
+            characters_dir=(
+                args.characters_dir
+                if explicit_directories
+                else settings.character_directory
+            ),
+            elements_dir=(
+                args.elements_dir
+                if explicit_directories
+                else settings.element_directory
+            ),
+            scenarios_dir=(
+                args.scenarios_dir
+                if explicit_directories
+                else settings.scenario_directory
+            ),
+            mode=mode,
+            output_dir=args.output,
+            backup_dir=args.backup_dir,
+            report_path=args.report,
+        )
+    )
+    print(
+        json.dumps(
+            report.to_payload(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
+    if not report.succeeded:
+        return 2
+    if mode == "check" and report.changed_count:
+        return 1
+    return 0
 if __name__ == "__main__":
     raise SystemExit(main())

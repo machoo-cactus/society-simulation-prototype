@@ -1,0 +1,404 @@
+{
+  "blocked": [
+    {
+      "x": 2,
+      "y": 0
+    },
+    {
+      "x": 2,
+      "y": 1
+    },
+    {
+      "x": 2,
+      "y": 4
+    },
+    {
+      "x": 2,
+      "y": 5
+    }
+  ],
+  "description": "A compact neighborhood market with clear entrance space, four aisle shelves, a produce display, stock storage, and self-checkout.",
+  "height": 6,
+  "id": "willowbrook-saturday-morning.market-room",
+  "kind": "room",
+  "name": "Willowbrook Market Interior",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "158b9da0feef531e0b2fafa517446ede3adb64ec46408b29dd68a80a05708351",
+        "id": "willowbrook-saturday-morning.exterior-door",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "front-door",
+      "placement": {
+        "anchor": {
+          "x": 1,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "279a741b5fb7487373db3740fa0bb1dcd4838ce0e7cc5cef30c376dd48917256",
+        "id": "willowbrook-saturday-morning.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "front-window",
+      "placement": {
+        "anchor": {
+          "x": 13,
+          "y": 1
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "279a741b5fb7487373db3740fa0bb1dcd4838ce0e7cc5cef30c376dd48917256",
+        "id": "willowbrook-saturday-morning.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "side-window",
+      "placement": {
+        "anchor": {
+          "x": 79,
+          "y": 14
+        },
+        "orientation": "EAST",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "6a914eb84216d7222b2c579bcee69aff33af5994209294f88a6d4510fb4a908c",
+        "id": "willowbrook-saturday-morning.market-shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-west-lower",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "6a914eb84216d7222b2c579bcee69aff33af5994209294f88a6d4510fb4a908c",
+        "id": "willowbrook-saturday-morning.market-shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-east-lower",
+      "placement": {
+        "anchor": {
+          "x": 49,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "6a914eb84216d7222b2c579bcee69aff33af5994209294f88a6d4510fb4a908c",
+        "id": "willowbrook-saturday-morning.market-shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-west-upper",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 39
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "6a914eb84216d7222b2c579bcee69aff33af5994209294f88a6d4510fb4a908c",
+        "id": "willowbrook-saturday-morning.market-shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-east-upper",
+      "placement": {
+        "anchor": {
+          "x": 49,
+          "y": 39
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "705619387f5aaf41b71c894135b6f0f0af898134e6ca23bb8ea19a0c3b44e9fb",
+        "id": "willowbrook-saturday-morning.market-display",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "produce-display",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 15
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "957c0cf62c73d00a0f421a2e740ddae62dd67e3de25fbb956f9faf6c3a33d4e0",
+        "id": "willowbrook-saturday-morning.cabinet",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "stock-cabinet",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 29
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "0489a97ee6af96a75d4bbd0b5e5429469eb47f52f790827824dad0ecab3293a1",
+        "id": "willowbrook-saturday-morning.market-checkout",
+        "kind": "object"
+      },
+      "id": "transaction-point-willowbrook-market-checkout",
+      "key": "checkout",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 43
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "80140e47827dfd0f1ef462e6445019230c9cd7035fa8fa5c351327682fe31a51",
+        "id": "willowbrook-saturday-morning.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "shelf-bottle-a",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 12
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "aisle-west-lower",
+          "slot_id": "middle-stock"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "80140e47827dfd0f1ef462e6445019230c9cd7035fa8fa5c351327682fe31a51",
+        "id": "willowbrook-saturday-morning.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "shelf-bottle-b",
+      "placement": {
+        "anchor": {
+          "x": 49,
+          "y": 12
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "aisle-east-lower",
+          "slot_id": "middle-stock"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "80140e47827dfd0f1ef462e6445019230c9cd7035fa8fa5c351327682fe31a51",
+        "id": "willowbrook-saturday-morning.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "display-bottle",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 15
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "produce-display",
+          "slot_id": "display-top"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "80140e47827dfd0f1ef462e6445019230c9cd7035fa8fa5c351327682fe31a51",
+        "id": "willowbrook-saturday-morning.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "stored-bottle",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 29
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "IN_CONTAINER",
+          "parent_id": "stock-cabinet",
+          "slot_id": "interior"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "328eb03f30f50af58912eb1cd09d727ffb8601a5e19d9a7a701e4ac2dd37eb5b",
+        "id": "willowbrook-saturday-morning.phone",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "checkout-phone",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 43
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "checkout",
+          "slot_id": "bagging-top"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    }
+  ],
+  "room_type": "MARKET",
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
+  "width": 9,
+  "zones": [
+    {
+      "bounds": {
+        "height": 2,
+        "width": 3,
+        "x": 0,
+        "y": 2
+      },
+      "id": "zone-willowbrook-market-entry",
+      "name": "Market Entry",
+      "tiles": null,
+      "type": "ENTRY"
+    },
+    {
+      "bounds": {
+        "height": 6,
+        "width": 6,
+        "x": 3,
+        "y": 0
+      },
+      "id": "zone-willowbrook-market-sales-floor",
+      "name": "Market Sales Floor",
+      "tiles": null,
+      "type": "RETAIL"
+    }
+  ]
+}

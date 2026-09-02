@@ -5,6 +5,11 @@ from stage0_sim.domain.perception.facts import (
     PerceptibleFact,
     PerceptionPacket,
 )
+from stage0_sim.domain.perception.sweep import (
+    SensorySweepResult,
+    sensory_sweep,
+    supercover_line,
+)
 
 __all__ = [
     "DisclosureClass",
@@ -12,4 +17,7 @@ __all__ = [
     "PerceivedFact",
     "PerceptibleFact",
     "PerceptionPacket",
+    "SensorySweepResult",
+    "sensory_sweep",
+    "supercover_line",
 ]

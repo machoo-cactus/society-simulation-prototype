@@ -15,7 +15,10 @@ from stage0_sim.adapters.scenarios import FileSystemScenarioLibrary
 from stage0_sim.api.characters import router as characters_router
 from stage0_sim.api.elements import router as elements_router
 from stage0_sim.api.operator_sessions import OperatorSessionStore
-from stage0_sim.api.scenario_forms import ScenarioEditorDraftStore
+from stage0_sim.api.scenario_forms import (
+    ElementEditorDraftStore,
+    ScenarioEditorDraftStore,
+)
 from stage0_sim.api.scenarios import router as scenarios_router
 from stage0_sim.api.simulation import router as simulation_router
 from stage0_sim.api.ui import router as ui_router
@@ -44,6 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.element_library = element_library
     app.state.scenario_library = scenario_library
     app.state.operator_sessions = OperatorSessionStore()
+    app.state.element_editor_drafts = ElementEditorDraftStore()
     app.state.scenario_editor_drafts = ScenarioEditorDraftStore()
     try:
         yield

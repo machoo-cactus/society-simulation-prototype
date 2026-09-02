@@ -1,0 +1,66 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A portable bottle holding two servings of water.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "willowbrook-saturday-morning.bottle",
+  "kind": "object",
+  "name": "Reusable Water Bottle",
+  "npc_role": null,
+  "object_type": null,
+  "offers": [],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": {
+        "item_id": "spring-water",
+        "servings": 2
+      },
+      "container": null,
+      "openable": null,
+      "portable": {
+        "two_handed": false
+      },
+      "readable": null,
+      "scent_source": null,
+      "slots": [],
+      "support": null,
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": 0
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "NONE",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 3,
+  "supported_actions": null
+}

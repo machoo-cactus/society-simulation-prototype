@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, cast
 
 from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.world.physical import Footprint
 
 
 def _canonical_json(value: JsonValue) -> str:
@@ -196,6 +197,8 @@ class TraversalContext:
     requested_mode: str | None = None
     occupied_locators: tuple[Locator, ...] = ()
     allowed_transition_ids: frozenset[str] | None = None
+    actor_footprint: Footprint | None = None
+    authorized_overlap_ids: frozenset[str] = frozenset()
     metadata: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -206,6 +209,8 @@ class TraversalContext:
             raise ValueError(
                 "allowed transition IDs must be a frozenset of non-empty IDs"
             )
+        if any(not entity_id for entity_id in self.authorized_overlap_ids):
+            raise ValueError("authorized overlap IDs must not be empty")
         object.__setattr__(self, "metadata", _frozen_metadata(self.metadata))
 
 

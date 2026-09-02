@@ -54,6 +54,67 @@ class DatasetCaptureRepository(MemoryPersistence, Protocol):
         delta: dict[str, JsonValue],
     ) -> None: ...
 
+    def append_physical_object_state(
+        self,
+        *,
+        run_id: str,
+        physical_state_id: str,
+        record_id: str,
+        object_id: str,
+        definition_id: str,
+        name: str,
+        room_id: str,
+        anchor_x: int,
+        anchor_y: int,
+        orientation: str,
+        phase: RunnerPhase,
+        simulation_tick: int,
+        simulation_time: float,
+        movement_obstruction: str,
+        vision_obstruction: str,
+        hearing_transmission: str,
+        smell_transmission: str,
+        blocks_movement: bool,
+        blocks_vision: bool,
+        blocks_hearing: bool,
+        blocks_smell: bool,
+        mass_kg: float | None,
+        size_class: str | None,
+        is_open: bool | None,
+        is_locked: bool | None,
+        parent_id: str | None,
+        relation_kind: str | None,
+        slot_id: str | None,
+        custodian_id: str | None,
+        held_by_id: str | None,
+        spatial_index_revision: int | None,
+        topology_revision: int | None,
+        state: dict[str, JsonValue],
+    ) -> None: ...
+
+    def append_physical_relation_sample(
+        self,
+        *,
+        run_id: str,
+        relation_sample_id: str,
+        record_id: str,
+        object_id: str,
+        entity_kind: str,
+        room_id: str | None,
+        parent_id: str,
+        parent_kind: str,
+        relation_kind: str,
+        slot_id: str | None,
+        custodian_id: str | None,
+        held_by_id: str | None,
+        phase: RunnerPhase,
+        simulation_tick: int,
+        simulation_time: float,
+        spatial_index_revision: int | None,
+        topology_revision: int | None,
+        relation: dict[str, JsonValue],
+    ) -> None: ...
+
     def append_goal(
         self,
         *,
@@ -284,6 +345,16 @@ class DatasetCaptureRepository(MemoryPersistence, Protocol):
         status: str,
         context: dict[str, JsonValue],
         outcome: dict[str, JsonValue] | None = None,
+        interaction_verb: str | None = None,
+        actor_id: str | None = None,
+        target_id: str | None = None,
+        destination_id: str | None = None,
+        slot_id: str | None = None,
+        goal_id: str | None = None,
+        action_id: str | None = None,
+        decision_id: str | None = None,
+        tool_call_id: str | None = None,
+        correlation_id: str | None = None,
     ) -> None: ...
 
     def append_interaction_participant(
@@ -328,6 +399,12 @@ class DatasetCaptureRepository(MemoryPersistence, Protocol):
         initiating_tool_call_id: str | None,
         content_visibility: str,
         episode: dict[str, JsonValue],
+        interaction_verb: str | None = None,
+        actor_id: str | None = None,
+        target_id: str | None = None,
+        destination_id: str | None = None,
+        slot_id: str | None = None,
+        correlation_id: str | None = None,
     ) -> None: ...
 
     def append_perception_fact(
@@ -492,6 +569,7 @@ class DatasetStore(
         *,
         offset: int = 0,
         limit: int = 100,
+        include_private: bool = False,
     ) -> tuple[tuple[dict[str, JsonValue], ...], int]: ...
 
     def iter_jsonl(self, run_id: str) -> Iterator[str]: ...

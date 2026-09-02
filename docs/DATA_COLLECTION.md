@@ -1,6 +1,6 @@
 # Research Data
 
-**Owner:** Dataset v3, SQLite schema 8, privacy, queries, exports, aggregation,
+**Owner:** Dataset v4, SQLite schema 10, privacy, queries, exports, aggregation,
 deletion, and capture limitations.
 
 Research data observes execution. It is never live simulation authority,
@@ -12,8 +12,8 @@ character-controller context.
 ```text
 prepared scenario + deterministic runner
   -> domain events + read-only phase hooks + private application traces
-  -> immutable stage0.dataset.v3 records
-  -> SQLite schema 8 normalized and derived projections
+  -> immutable stage0.dataset.v4 records
+  -> SQLite schema 10 normalized and derived projections
   -> REST queries, server-rendered explorer, exports, aggregation
 ```
 
@@ -22,9 +22,9 @@ of truth; relational and derived tables are query projections. Capture must not
 change system order, physical outcomes, perception, memory routing, or telemetry
 frequency.
 
-## Dataset v3 envelope
+## Dataset v4 envelope
 
-Every immutable `stage0.dataset.v3` record contains:
+Every immutable `stage0.dataset.v4` record contains:
 
 - `record_id`, `run_id`, and positive monotonic `sequence`;
 - `record_type`, per-record `schema_id` and `schema_version`;
@@ -59,14 +59,23 @@ Visibility classes are:
 - `OPERATOR`: omniscient operator/research data, not character knowledge;
 - `PRIVATE_RESEARCH`: may contain profiles, synthesized situations, prompts,
   rendered/model messages, tool calls, reasons, retrieved memories or
-  information, embeddings, and detailed authoritative state.
+  information, embeddings, hidden closed-container contents, ownership,
+  custody, held-object state, and detailed authoritative state.
+
+A domain event whose payload declares private visibility is captured and
+projected as `PRIVATE_RESEARCH`; an event cannot downgrade its private payload
+to an operator-visible projection.
 
 Filtered raw/normalized queries, the dataset explorer, filtered NDJSON, and
-analysis bundles exclude `PRIVATE_RESEARCH` by default. Explicit access requires
-`include_private=true`; asking for private visibility without the opt-in is
-rejected.
+analysis bundles exclude `PRIVATE_RESEARCH` by default. Summary/entity and
+physical distributions and observed-schema counts in the data dictionary apply
+the same default. Static table/field definitions remain visible. Explicit
+access requires `include_private=true`; asking for private visibility without
+the opt-in is rejected.
 
-The complete export is intentionally unfiltered:
+The complete export is intentionally unfiltered and identifies that fact in
+its manifest plus `X-Stage0-Private-Included` and
+`X-Stage0-Privacy-Warning` headers:
 
 ```http
 GET /simulation/runs/{run_id}/exports/complete
@@ -76,9 +85,9 @@ Treat complete/private-enabled exports and SQLite databases as restricted
 research artifacts. Visibility flags are not a substitute for authentication,
 authorization, encryption, consent, retention, or redaction policy.
 
-## SQLite schema 8
+## SQLite schema 10
 
-The configured database accepts only `PRAGMA user_version = 8`. A new empty
+The configured database accepts only `PRAGMA user_version = 10`. A new empty
 database is initialized directly. A populated database with any other version
 fails explicitly and is neither migrated nor recreated.
 
@@ -87,7 +96,7 @@ Important projection groups:
 | Group | Tables |
 | --- | --- |
 | Raw and relations | `records`, `record_relations` |
-| State | `state_samples`, `state_deltas` |
+| State | `state_samples`, `state_deltas`, `physical_object_states`, `physical_relation_samples` |
 | Goals/plans/actions | `goals`, `goal_transitions`, `plans`, `goal_action_links`, `action_instances`, `action_transitions` |
 | Cognition/tools | `decisions`, `decision_options`, `model_requests`, `model_turns`, `tool_executions` |
 | Interactions | `interactions`, `interaction_participants`, `interaction_events` |
@@ -100,7 +109,35 @@ analytical run projections.
 Derived feature contracts are independently versioned. They cover consecutive
 state transitions, choice opportunities/non-choices, terminal action/decision/
 goal/interaction episodes, population states, resource utilization, and
-resource flows.
+resource flows. Physical object feature v2 records capture stable object identity,
+microcell pose/footprint/occupied cells, effective obstruction, open/locked
+state, semantic mass/dimensions, wearable and scent capabilities,
+movement/vision/hearing/smell transmission, slots, live
+parent/custody/held/equipped relations, and `SpatialIndex` revisions. Character
+physical-state v2 additionally captures effective senses, equipment, carried
+load, compact movement, posture, hands, interaction lineage, and the
+independent abstract-possession representation. They are research
+observations, never checkpoint authority.
+
+`physical_object_states` normalizes each captured object observation: identity
+and classification; microcell pose, cardinal orientation, local footprint and
+occupied cells; effective movement/vision obstruction; open/locked state;
+capabilities and slot occupancy; live parent relation; custody/held state;
+descriptive ownership; interaction anchors; and `SpatialIndex` indexed,
+dynamic, revision, and topology-revision values.
+
+`physical_relation_samples` normalizes parent/relation/slot, room, custody, and
+held edges for stable filtering and reconstruction of analytical relations.
+Rows use deterministic object ordering. They are observations of ECS/index
+truth, not a mutable object graph or restart format.
+
+Character state samples include
+`stage0.feature.character_physical_state.v2`: 5×5 body pose/occupied cells,
+posture/support, hands, live parent relation, interaction request/execution
+lineage, microcell movement with compact path segments, navigation state, and
+index revisions. Its hybrid-possession section deliberately records abstract
+item quantities, physically held object IDs, and physically custodied object
+IDs as independent representations.
 
 ## Query API
 
@@ -117,6 +154,8 @@ All per-run research queries use:
 | `/data/records` | Immutable raw records |
 | `/data/goals`, `/decisions`, `/actions`, `/interactions` | Normalized lifecycles |
 | `/data/state?kind=sample|delta` | State samples or deltas |
+| `/data/physical-object-states` | Normalized physical object states |
+| `/data/physical-relations` | Normalized parent, slot, custody, and held relations |
 | `/data/transitions?kind=state|goal|action` | State/lifecycle transitions |
 | `/data/aggregates?family=population|resource_samples|resource_flows` | Aggregate features |
 | `/data/episodes/{family}` | `actions`, `decisions`, `goals`, or `interactions` |
@@ -126,9 +165,10 @@ All per-run research queries use:
 | `/data/opportunities` | Opportunity and non-choice samples |
 
 Common filters cover record/category/schema, primary or related entity,
-tick/time bounds, visibility, status/outcome, typed lineage IDs, cursor, and
-`limit` from 1 through 1000. Raw-record cursors are integer sequences;
-analytical cursors are stable opaque values.
+physical object/room/parent/relation/phase/open/locked state, physical
+interaction verb/type, tick/time bounds, visibility, status/outcome, typed
+lineage IDs, cursor, and `limit` from 1 through 1000. Raw-record cursors are
+integer sequences; analytical cursors are stable opaque values.
 
 ```powershell
 curl "http://127.0.0.1:8000/simulation/runs/RUN/data/actions?entity_id=agent-001&limit=50"
@@ -167,8 +207,9 @@ Data management supports filtering, cross-page selection, compatibility
 grouping, pooled observation-weighted and per-run macro aggregation, JSON/CSV
 aggregate exports, deletion preview, and atomic permanent deletion.
 
-Private-derived statistics are included by default with a warning; the operator
-may exclude them. Raw private payloads are never rendered in aggregate views.
+Private-derived statistics are excluded by default and require an explicit
+operator opt-in, which adds a warning. Raw private payloads are never rendered
+in aggregate views.
 Mixed schema/scenario/capture selections remain explicit rather than silently
 combined.
 
@@ -184,7 +225,9 @@ Canonical management routes are listed in [API and UI workflows](API_AND_UI.md).
 `SQLiteDatasetStore.rebuild_run_projections(run_id)` transactionally rebuilds
 the supported derived and selected normalized projections from ordered raw
 records. Failure rolls back without changing raw data or replacing previous
-projections. Not every directly captured lifecycle table is rebuildable yet.
+projections. Physical object states, physical relations, and physical
+interaction lifecycle rows are rebuildable and idempotent. Not every directly
+captured lifecycle table is rebuildable yet.
 
 `capture_complete` is true only when a run ended `completed` or `stopped` and
 recorded `run_final`. Summaries also report coverage-manifest presence,

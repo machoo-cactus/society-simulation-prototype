@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-_DATABASE_SCHEMA_VERSION = 8
+DATABASE_SCHEMA_VERSION = 10
 @contextmanager
 def schema_initialization_lock(path: Path) -> Iterator[None]:
     lock_path = path.with_name(f"{path.name}.schema.lock")
@@ -65,6 +65,8 @@ RUN_SCOPED_TABLES = (
     "interaction_episodes",
     "memory_operations",
     "information_retrievals",
+    "physical_relation_samples",
+    "physical_object_states",
     "state_samples",
     "state_deltas",
     "plans",
@@ -145,6 +147,99 @@ CREATE TABLE IF NOT EXISTS state_deltas (
 );
 CREATE INDEX IF NOT EXISTS state_deltas_subject_tick
 ON state_deltas(run_id, subject_id, simulation_tick);
+
+CREATE TABLE IF NOT EXISTS physical_object_states (
+    run_id TEXT NOT NULL,
+    physical_state_id TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    object_id TEXT NOT NULL,
+    definition_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    room_id TEXT NOT NULL,
+    anchor_x INTEGER NOT NULL,
+    anchor_y INTEGER NOT NULL,
+    orientation TEXT NOT NULL,
+    phase TEXT NOT NULL,
+    simulation_tick INTEGER NOT NULL,
+    simulation_time REAL NOT NULL,
+    movement_obstruction TEXT NOT NULL,
+    vision_obstruction TEXT NOT NULL,
+    hearing_transmission TEXT NOT NULL,
+    smell_transmission TEXT NOT NULL,
+    blocks_movement INTEGER NOT NULL,
+    blocks_vision INTEGER NOT NULL,
+    blocks_hearing INTEGER NOT NULL,
+    blocks_smell INTEGER NOT NULL,
+    mass_kg REAL,
+    size_class TEXT,
+    is_open INTEGER,
+    is_locked INTEGER,
+    parent_id TEXT,
+    relation_kind TEXT,
+    slot_id TEXT,
+    custodian_id TEXT,
+    held_by_id TEXT,
+    spatial_index_revision INTEGER,
+    topology_revision INTEGER,
+    state_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, physical_state_id),
+    UNIQUE (run_id, object_id, simulation_tick, phase),
+    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
+);
+CREATE INDEX IF NOT EXISTS physical_object_states_object_tick
+ON physical_object_states(run_id, object_id, simulation_tick, phase);
+CREATE INDEX IF NOT EXISTS physical_object_states_room_tick
+ON physical_object_states(run_id, room_id, simulation_tick, phase, object_id);
+CREATE INDEX IF NOT EXISTS physical_object_states_parent_relation
+ON physical_object_states(
+    run_id, parent_id, relation_kind, simulation_tick, phase
+);
+CREATE INDEX IF NOT EXISTS physical_object_states_custody
+ON physical_object_states(
+    run_id, custodian_id, held_by_id, simulation_tick, phase
+);
+CREATE INDEX IF NOT EXISTS physical_object_states_open_locked
+ON physical_object_states(
+    run_id, is_open, is_locked, simulation_tick, phase
+);
+
+CREATE TABLE IF NOT EXISTS physical_relation_samples (
+    run_id TEXT NOT NULL,
+    relation_sample_id TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    object_id TEXT NOT NULL,
+    entity_kind TEXT NOT NULL,
+    room_id TEXT,
+    parent_id TEXT NOT NULL,
+    parent_kind TEXT NOT NULL,
+    relation_kind TEXT NOT NULL,
+    slot_id TEXT,
+    custodian_id TEXT,
+    held_by_id TEXT,
+    phase TEXT NOT NULL,
+    simulation_tick INTEGER NOT NULL,
+    simulation_time REAL NOT NULL,
+    spatial_index_revision INTEGER,
+    topology_revision INTEGER,
+    relation_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, relation_sample_id),
+    UNIQUE (run_id, object_id, simulation_tick, phase),
+    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
+);
+CREATE INDEX IF NOT EXISTS physical_relation_samples_object_tick
+ON physical_relation_samples(run_id, object_id, simulation_tick, phase);
+CREATE INDEX IF NOT EXISTS physical_relation_samples_parent_kind
+ON physical_relation_samples(
+    run_id, parent_id, relation_kind, simulation_tick, phase, object_id
+);
+CREATE INDEX IF NOT EXISTS physical_relation_samples_room
+ON physical_relation_samples(
+    run_id, room_id, simulation_tick, phase, relation_kind
+);
+CREATE INDEX IF NOT EXISTS physical_relation_samples_custody
+ON physical_relation_samples(
+    run_id, custodian_id, held_by_id, simulation_tick, phase
+);
 
 CREATE TABLE IF NOT EXISTS goals (
     run_id TEXT NOT NULL,
@@ -302,6 +397,16 @@ CREATE TABLE IF NOT EXISTS interactions (
     interaction_id TEXT NOT NULL,
     record_id TEXT NOT NULL,
     interaction_type TEXT NOT NULL,
+    interaction_verb TEXT,
+    actor_id TEXT,
+    target_id TEXT,
+    destination_id TEXT,
+    slot_id TEXT,
+    goal_id TEXT,
+    action_id TEXT,
+    decision_id TEXT,
+    tool_call_id TEXT,
+    correlation_id TEXT,
     start_tick INTEGER NOT NULL,
     end_tick INTEGER,
     status TEXT NOT NULL,
@@ -311,7 +416,19 @@ CREATE TABLE IF NOT EXISTS interactions (
     FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
 );
 CREATE INDEX IF NOT EXISTS interactions_type_status
-ON interactions(run_id, interaction_type, status, start_tick);
+ON interactions(
+    run_id, interaction_type, interaction_verb, status, start_tick
+);
+CREATE INDEX IF NOT EXISTS interactions_physical_target
+ON interactions(
+    run_id, target_id, destination_id, interaction_verb, start_tick
+);
+CREATE INDEX IF NOT EXISTS interactions_actor
+ON interactions(run_id, actor_id, interaction_type, start_tick);
+CREATE INDEX IF NOT EXISTS interactions_lineage
+ON interactions(
+    run_id, action_id, decision_id, tool_call_id, correlation_id
+);
 
 CREATE TABLE IF NOT EXISTS interaction_participants (
     run_id TEXT NOT NULL,
@@ -508,6 +625,11 @@ CREATE TABLE IF NOT EXISTS interaction_episodes (
     interaction_id TEXT NOT NULL,
     record_id TEXT NOT NULL,
     interaction_type TEXT NOT NULL,
+    interaction_verb TEXT,
+    actor_id TEXT,
+    target_id TEXT,
+    destination_id TEXT,
+    slot_id TEXT,
     status TEXT NOT NULL,
     start_tick INTEGER NOT NULL,
     terminal_tick INTEGER NOT NULL,
@@ -518,13 +640,25 @@ CREATE TABLE IF NOT EXISTS interaction_episodes (
     initiating_decision_id TEXT,
     initiating_action_id TEXT,
     initiating_tool_call_id TEXT,
+    correlation_id TEXT,
     content_visibility TEXT NOT NULL,
     episode_json TEXT NOT NULL,
     PRIMARY KEY (run_id, interaction_id),
     FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
 );
 CREATE INDEX IF NOT EXISTS interaction_episodes_type_status
-ON interaction_episodes(run_id, interaction_type, status, start_tick);
+ON interaction_episodes(
+    run_id, interaction_type, interaction_verb, status, start_tick
+);
+CREATE INDEX IF NOT EXISTS interaction_episodes_physical_target
+ON interaction_episodes(
+    run_id, target_id, destination_id, interaction_verb, terminal_tick
+);
+CREATE INDEX IF NOT EXISTS interaction_episodes_lineage
+ON interaction_episodes(
+    run_id, initiating_action_id, initiating_decision_id,
+    initiating_tool_call_id, correlation_id
+);
 
 CREATE TABLE IF NOT EXISTS perception_facts (
     run_id TEXT NOT NULL,
@@ -740,19 +874,19 @@ ON dataset_store_instances(closed_at, heartbeat_at);
 {_ANALYSIS_CORE_SCHEMA}
 {_LINEAGE_SCHEMA}
 {_DERIVED_SCHEMA}
-PRAGMA user_version = {_DATABASE_SCHEMA_VERSION};
+PRAGMA user_version = {DATABASE_SCHEMA_VERSION};
 """
 
 
 def initialize_schema(connection: sqlite3.Connection) -> None:
     current = int(connection.execute("PRAGMA user_version").fetchone()[0])
-    if current == _DATABASE_SCHEMA_VERSION:
+    if current == DATABASE_SCHEMA_VERSION:
         validate_current_schema(connection)
         return
     if current != 0:
         raise RuntimeError(
             f"unsupported SQLite schema version {current}; expected "
-            f"{_DATABASE_SCHEMA_VERSION}. Existing databases are not migrated."
+            f"{DATABASE_SCHEMA_VERSION}. Existing databases are not migrated."
         )
     existing_objects = connection.execute(
         """
@@ -764,7 +898,7 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
     if existing_objects:
         raise RuntimeError(
             "unsupported SQLite schema version 0; expected "
-            f"{_DATABASE_SCHEMA_VERSION}. Existing databases are not migrated."
+            f"{DATABASE_SCHEMA_VERSION}. Existing databases are not migrated."
         )
     connection.executescript(_CURRENT_SCHEMA)
     connection.commit()
@@ -782,6 +916,6 @@ def validate_current_schema(connection: sqlite3.Connection) -> None:
     missing = sorted(required - tables)
     if missing:
         raise RuntimeError(
-            f"SQLite schema version {_DATABASE_SCHEMA_VERSION} is incomplete; "
+            f"SQLite schema version {DATABASE_SCHEMA_VERSION} is incomplete; "
             f"missing tables: {', '.join(missing)}"
         )

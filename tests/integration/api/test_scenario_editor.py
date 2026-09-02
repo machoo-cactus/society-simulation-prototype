@@ -13,15 +13,22 @@ from fastapi.testclient import TestClient
 from stage0_sim.api.scenario_editor_world import build_editor_world
 from stage0_sim.api.scenario_forms import (
     KNOWN_ENTITY_COMPONENT_MODELS,
+    ElementEditorDraft,
     ScenarioEditorDraft,
     ScenarioEditorNode,
+    element_editor_coverage_errors,
     find_node_by_path,
     scenario_editor_coverage_errors,
 )
 from stage0_sim.application.elements import (
+    BuildingElementDefinition,
     CityWorldSourceDefinition,
     ElementKind,
+    NpcRoleElementDefinition,
+    ObjectElementDefinition,
+    RoomElementDefinition,
     ScenarioSourceDefinition,
+    element_content_hash,
 )
 from stage0_sim.application.scenarios import scenario_content_hash
 from stage0_sim.config import Settings
@@ -40,7 +47,7 @@ def _nodes(node: ScenarioEditorNode) -> Iterator[ScenarioEditorNode]:
 
 
 def _node(
-    draft: ScenarioEditorDraft,
+    draft: ScenarioEditorDraft | ElementEditorDraft,
     path: tuple[str | int, ...],
     *,
     kind: str | None = None,
@@ -61,7 +68,7 @@ def scenario_ui(
     scenarios.mkdir()
     for name in ("minimal.json", "navigation.json"):
         payload = json.loads((EXAMPLE_SCENARIOS / name).read_text(encoding="utf-8"))
-        payload["schema_version"] = 4
+        payload["schema_version"] = 6
         (scenarios / name).write_text(
             json.dumps(payload),
             encoding="utf-8",
@@ -101,8 +108,26 @@ def _open_draft(
     return draft
 
 
+def _open_element_draft(
+    client: TestClient,
+    app: FastAPI,
+    path: str,
+) -> ElementEditorDraft:
+    response = client.get(path, follow_redirects=True)
+    assert response.status_code == 200
+    token = response.url.params["draft"]
+    session_id = client.cookies["stage0_operator_session"]
+    draft = cast(
+        ElementEditorDraft | None,
+        app.state.element_editor_drafts.get(session_id, token),
+    )
+    assert draft is not None
+    return draft
+
+
 def test_scenario_editor_descriptor_covers_every_typed_field() -> None:
     assert scenario_editor_coverage_errors() == ()
+    assert element_editor_coverage_errors() == ()
     assert set(KNOWN_ENTITY_COMPONENT_MODELS) == {
         "position",
         "spatial_location",
@@ -116,10 +141,585 @@ def test_scenario_editor_descriptor_covers_every_typed_field() -> None:
         "information",
         "controller",
         "senses",
+        "embodiment",
         "memory",
         "conversation",
         "metadata",
     }
+
+
+def test_structured_element_editor_round_trips_v2_physical_fields(
+    scenario_ui: tuple[TestClient, FastAPI, Path],
+) -> None:
+    client, app, _directory = scenario_ui
+
+    role = _open_element_draft(client, app, "/ui/elements/?kind=npc_role")
+    role_name = _node(role, ("name",), kind="scalar")
+    role_briefing = _node(role, ("briefing",), kind="scalar")
+    role_response = client.post(
+        "/ui/elements/save",
+        data={
+            "draft_token": role.token,
+            "resource_id": "structured-role",
+            f"value_{role_name.id}": "Structured Role",
+            f"value_{role_briefing.id}": "Serve structured requests.",
+            "intent": "save",
+        },
+        follow_redirects=True,
+    )
+    assert role_response.status_code == 200
+    assert isinstance(
+        app.state.element_library.get("structured-role"),
+        NpcRoleElementDefinition,
+    )
+
+    object_draft = _open_element_draft(
+        client,
+        app,
+        "/ui/elements/?kind=object",
+    )
+    footprint_cells = _node(
+        object_draft,
+        ("physical", "footprint", "cells"),
+        kind="list",
+    )
+    slots = _node(
+        object_draft,
+        ("physical", "capabilities", "slots"),
+        kind="list",
+    )
+    client.post(
+        "/ui/elements/save",
+        data={
+            "draft_token": object_draft.token,
+            "resource_id": "structured-cabinet",
+            "collection_action": f"add:{footprint_cells.id}",
+        },
+    )
+    client.post(
+        "/ui/elements/save",
+        data={
+            "draft_token": object_draft.token,
+            "resource_id": "structured-cabinet",
+            "collection_action": f"add:{slots.id}",
+        },
+    )
+    accepted_relations = _node(
+        object_draft,
+        (
+            "physical",
+            "capabilities",
+            "slots",
+            0,
+            "accepted_relations",
+        ),
+        kind="list",
+    )
+    for _index in range(2):
+        client.post(
+            "/ui/elements/save",
+            data={
+                "draft_token": object_draft.token,
+                "resource_id": "structured-cabinet",
+                "collection_action": f"add:{accepted_relations.id}",
+            },
+        )
+    support_slot_ids = _node(
+        object_draft,
+        ("physical", "capabilities", "support", "slot_ids"),
+        kind="list",
+    )
+    container_slot_ids = _node(
+        object_draft,
+        ("physical", "capabilities", "container", "slot_ids"),
+        kind="list",
+    )
+    for collection in (support_slot_ids, container_slot_ids):
+        client.post(
+            "/ui/elements/save",
+            data={
+                "draft_token": object_draft.token,
+                "resource_id": "structured-cabinet",
+                "collection_action": f"add:{collection.id}",
+            },
+        )
+
+    values = {
+        ("name",): "Structured Cabinet",
+        ("description",): "Exercises every physical capability.",
+        ("physical", "footprint", "cells", 0, "x"): "0",
+        ("physical", "footprint", "cells", 0, "y"): "0",
+        ("physical", "footprint", "cells", 1, "x"): "1",
+        ("physical", "footprint", "cells", 1, "y"): "0",
+        ("physical", "obstruction", "movement"): "HARD",
+        ("physical", "obstruction", "vision"): "OPAQUE",
+        ("physical", "capabilities", "slots", 0, "id"): "storage",
+        ("physical", "capabilities", "slots", 0, "capacity"): "3",
+        (
+            "physical",
+            "capabilities",
+            "slots",
+            0,
+            "accepted_relations",
+            0,
+        ): "ON_SUPPORT",
+        (
+            "physical",
+            "capabilities",
+            "slots",
+            0,
+            "accepted_relations",
+            1,
+        ): "IN_CONTAINER",
+        ("physical", "capabilities", "support", "slot_ids", 0): "storage",
+        ("physical", "capabilities", "container", "slot_ids", 0): "storage",
+        ("physical", "capabilities", "portable", "two_handed"): "true",
+        ("physical", "capabilities", "readable", "document_id"): "label",
+        ("physical", "capabilities", "consumable", "item_id"): "water",
+        ("physical", "capabilities", "consumable", "servings"): "2",
+        ("physical", "capabilities", "usable", "use_kind"): "inspect",
+        (
+            "physical",
+            "capabilities",
+            "openable",
+            "initially_locked",
+        ): "false",
+        ("physical", "initial_open"): "true",
+        ("physical", "owner_id"): "owner-source",
+        ("physical", "custodian_id"): "custodian-source",
+    }
+    choices = {
+        ("physical", "capabilities", capability): "present"
+        for capability in (
+            "support",
+            "container",
+            "portable",
+            "readable",
+            "consumable",
+            "usable",
+            "openable",
+        )
+    }
+    choices.update(
+        {
+            ("physical", "initial_open"): "present",
+            ("physical", "owner_id"): "present",
+            ("physical", "custodian_id"): "present",
+        }
+    )
+    object_form = {
+        "draft_token": object_draft.token,
+        "resource_id": "structured-cabinet",
+        "intent": "save",
+    }
+    object_form.update(
+        {
+            f"value_{_node(object_draft, path, kind='scalar').id}": value
+            for path, value in values.items()
+        }
+    )
+    object_form.update(
+        {
+            f"choice_{_node(object_draft, path, kind='optional').id}": value
+            for path, value in choices.items()
+        }
+    )
+    object_response = client.post(
+        "/ui/elements/save",
+        data=object_form,
+        follow_redirects=True,
+    )
+    assert object_response.status_code == 200
+    saved_object = app.state.element_library.get("structured-cabinet")
+    assert isinstance(saved_object, ObjectElementDefinition)
+    assert saved_object.object_type is None
+    assert saved_object.physical is not None
+    assert saved_object.physical.owner_id == "owner-source"
+    assert saved_object.physical.custodian_id == "custodian-source"
+    assert saved_object.physical.obstruction.movement.value == "HARD"
+    assert saved_object.physical.obstruction.vision.value == "OPAQUE"
+    assert saved_object.physical.capabilities.slots[0].capacity == 3
+    assert saved_object.physical.capabilities.portable is not None
+    assert saved_object.physical.capabilities.portable.two_handed is True
+    assert saved_object.physical.initial_open is True
+
+    invalid = _open_element_draft(
+        client,
+        app,
+        "/ui/elements/?selected=structured-cabinet",
+    )
+    servings = _node(
+        invalid,
+        ("physical", "capabilities", "consumable", "servings"),
+        kind="scalar",
+    )
+    movement = _node(
+        invalid,
+        ("physical", "obstruction", "movement"),
+        kind="scalar",
+    )
+    invalid_response = client.post(
+        "/ui/elements/save",
+        data={
+            "draft_token": invalid.token,
+            "resource_id": "structured-cabinet",
+            f"value_{servings.id}": "not-a-number",
+            f"value_{movement.id}": "NOT_A_MOVEMENT_MODE",
+            "intent": "save",
+        },
+        follow_redirects=True,
+    )
+    assert "Element could not be saved" in invalid_response.text
+    assert "Input should be a valid integer" in invalid_response.text
+    assert 'value="not-a-number"' in invalid_response.text
+    assert "Invalid submitted value: NOT_A_MOVEMENT_MODE" in (
+        invalid_response.text
+    )
+    assert servings.value == "not-a-number"
+    assert movement.value == "NOT_A_MOVEMENT_MODE"
+
+    fixed_response = client.post(
+        "/ui/elements/save",
+        data={
+            "draft_token": invalid.token,
+            "resource_id": "structured-cabinet",
+            f"value_{servings.id}": "4",
+            f"value_{movement.id}": "HARD",
+            "intent": "save",
+        },
+        follow_redirects=True,
+    )
+    assert "Saved Structured Cabinet." in fixed_response.text
+    assert (
+        app.state.element_library.get("structured-cabinet")
+        .physical.capabilities.consumable.servings
+        == 4
+    )
+
+    object_hash = element_content_hash(
+        app.state.element_library.get("structured-cabinet")
+    )
+    room = _open_element_draft(client, app, "/ui/elements/?kind=room")
+    room_objects = _node(room, ("objects",), kind="list")
+    client.post(
+        "/ui/elements/save",
+        data={
+            "draft_token": room.token,
+            "resource_id": "structured-room",
+            "collection_action": f"add:{room_objects.id}",
+        },
+    )
+    room_values = {
+        ("name",): "Structured Room",
+        ("room_type",): "STUDY",
+        ("width",): "4",
+        ("height",): "4",
+        ("objects", 0, "key"): "cabinet",
+        ("objects", 0, "element", "kind"): "object",
+        ("objects", 0, "element", "id"): "structured-cabinet",
+        ("objects", 0, "element", "content_hash"): object_hash,
+        ("objects", 0, "position", "x"): "1",
+        ("objects", 0, "position", "y"): "1",
+        ("objects", 0, "placement", "anchor", "x"): "10",
+        ("objects", 0, "placement", "anchor", "y"): "10",
+        ("objects", 0, "placement", "orientation"): "EAST",
+        (
+            "objects",
+            0,
+            "placement",
+            "parent_relation",
+            "kind",
+        ): "ON_FLOOR",
+    }
+    room_form = {
+        "draft_token": room.token,
+        "resource_id": "structured-room",
+        "intent": "save",
+        f"choice_{_node(room, ('objects', 0, 'position'), kind='optional').id}": "present",
+        f"choice_{_node(room, ('objects', 0, 'placement'), kind='optional').id}": "present",
+    }
+    room_form.update(
+        {
+            f"value_{_node(room, path, kind='scalar').id}": value
+            for path, value in room_values.items()
+        }
+    )
+    room_response = client.post(
+        "/ui/elements/save",
+        data=room_form,
+        follow_redirects=True,
+    )
+    assert "Saved Structured Room." in room_response.text
+    saved_room = app.state.element_library.get("structured-room")
+    assert isinstance(saved_room, RoomElementDefinition)
+    assert saved_room.spatial_metric.microcells_per_legacy_cell == 9
+    assert saved_room.objects[0].placement is not None
+    assert saved_room.objects[0].placement.orientation.value == "EAST"
+
+    room_hash = element_content_hash(saved_room)
+    building = _open_element_draft(
+        client,
+        app,
+        "/ui/elements/?kind=building",
+    )
+    for path in (("rooms",), ("entrances",), ("portals",)):
+        collection = _node(building, path, kind="list")
+        client.post(
+            "/ui/elements/save",
+            data={
+                "draft_token": building.token,
+                "resource_id": "structured-building",
+                "collection_action": f"add:{collection.id}",
+            },
+        )
+    building_values = {
+        ("name",): "Structured Building",
+        ("rooms", 0, "key"): "main",
+        ("rooms", 0, "element", "kind"): "room",
+        ("rooms", 0, "element", "id"): "structured-room",
+        ("rooms", 0, "element", "content_hash"): room_hash,
+        ("entrances", 0, "key"): "front",
+        ("entrances", 0, "room_key"): "main",
+        ("entrances", 0, "local_coordinate", "x"): "0",
+        ("entrances", 0, "local_coordinate", "y"): "1",
+        ("entrances", 0, "door_object_id"): "structured-cabinet",
+        ("portals", 0, "key"): "internal",
+        ("portals", 0, "from_room_key"): "main",
+        ("portals", 0, "from_coordinate", "x"): "1",
+        ("portals", 0, "from_coordinate", "y"): "1",
+        ("portals", 0, "to_room_key"): "main",
+        ("portals", 0, "to_coordinate", "x"): "2",
+        ("portals", 0, "to_coordinate", "y"): "1",
+        ("portals", 0, "door_object_id"): "structured-cabinet",
+    }
+    entrance_door = _node(
+        building,
+        ("entrances", 0, "door_object_id"),
+        kind="optional",
+    )
+    portal_door = _node(
+        building,
+        ("portals", 0, "door_object_id"),
+        kind="optional",
+    )
+    building_form = {
+        "draft_token": building.token,
+        "resource_id": "structured-building",
+        "intent": "save",
+        f"choice_{entrance_door.id}": "present",
+        f"choice_{portal_door.id}": "present",
+    }
+    building_form.update(
+        {
+            f"value_{_node(building, path, kind='scalar').id}": value
+            for path, value in building_values.items()
+        }
+    )
+    building_response = client.post(
+        "/ui/elements/save",
+        data=building_form,
+        follow_redirects=True,
+    )
+    assert "Saved Structured Building." in building_response.text
+    saved_building = app.state.element_library.get("structured-building")
+    assert isinstance(saved_building, BuildingElementDefinition)
+    assert saved_building.entrances[0].door_object_id == (
+        "structured-cabinet"
+    )
+    assert saved_building.portals[0].door_object_id == (
+        "structured-cabinet"
+    )
+
+
+def test_physical_only_inherited_objects_are_stable_selectable_and_unplaced(
+    scenario_ui: tuple[TestClient, FastAPI, Path],
+) -> None:
+    client, app, _directory = scenario_ui
+    object_element = app.state.element_library.create(
+        ObjectElementDefinition.model_validate(
+            {
+                "id": "physical-only-door",
+                "name": "Physical Only Door",
+                "kind": "object",
+                "physical": {
+                    "footprint": {
+                        "cells": [
+                            {"x": 0, "y": 0},
+                            {"x": 1, "y": 0},
+                        ]
+                    },
+                    "obstruction": {
+                        "movement": "HARD",
+                        "vision": "OPAQUE",
+                    },
+                    "capabilities": {
+                        "openable": {"initially_locked": True}
+                    },
+                    "owner_id": "author-owner",
+                    "custodian_id": "author-custodian",
+                },
+            }
+        )
+    )
+    room_element = app.state.element_library.create(
+        RoomElementDefinition.model_validate(
+            {
+                "id": "physical-only-room",
+                "name": "Physical Only Room",
+                "kind": "room",
+                "room_type": "ENTRY",
+                "width": 3,
+                "height": 3,
+                "objects": [
+                    {
+                        "key": "door",
+                        "element": {
+                            "kind": "object",
+                            "id": object_element.id,
+                            "content_hash": element_content_hash(
+                                object_element
+                            ),
+                        },
+                        "position": {"x": 1, "y": 1},
+                    }
+                ],
+            }
+        )
+    )
+    building_element = app.state.element_library.create(
+        BuildingElementDefinition.model_validate(
+            {
+                "id": "physical-only-building",
+                "name": "Physical Only Building",
+                "kind": "building",
+                "rooms": [
+                    {
+                        "key": "entry",
+                        "element": {
+                            "kind": "room",
+                            "id": room_element.id,
+                            "content_hash": element_content_hash(
+                                room_element
+                            ),
+                        },
+                    }
+                ],
+                "entrances": [
+                    {
+                        "key": "front",
+                        "room_key": "entry",
+                        "local_coordinate": {"x": 0, "y": 1},
+                        "door_object_id": object_element.id,
+                    }
+                ],
+            }
+        )
+    )
+    source = ScenarioSourceDefinition.model_validate(
+        {
+            "name": "Physical-only preview",
+            "world": {
+                "type": "city",
+                "city": {
+                    "id": "physical-city",
+                    "name": "Physical City",
+                    "bounds_meters": {
+                        "min_x": 0,
+                        "min_y": 0,
+                        "max_x": 10,
+                        "max_y": 10,
+                    },
+                },
+                "city_zones": [
+                    {
+                        "id": "center",
+                        "name": "Center",
+                        "center": {"x": 5, "y": 5},
+                        "buildings": [
+                            {
+                                "id": "physical-instance",
+                                "element": {
+                                    "kind": "building",
+                                    "id": building_element.id,
+                                    "content_hash": element_content_hash(
+                                        building_element
+                                    ),
+                                },
+                                "city_position": {"x": 5, "y": 5},
+                                "entrance_node_ids": {
+                                    "front": "physical-node"
+                                },
+                            }
+                        ],
+                    }
+                ],
+                "transport": {
+                    "nodes": [
+                        {
+                            "id": "physical-node",
+                            "kind": "BUILDING_ENTRANCE",
+                            "position": {"x": 5, "y": 5},
+                            "place_id": "physical-instance",
+                        }
+                    ]
+                },
+            },
+        }
+    )
+    app.state.scenario_library.create("physical-only-preview", source)
+    draft = _open_draft(
+        client,
+        app,
+        "/ui/scenarios/?selected=physical-only-preview",
+    )
+    building_node = _node(
+        draft,
+        ("world", "city_zones", 0, "buildings", 0),
+        kind="model",
+    )
+    draft.view.scope_node_id = building_node.id
+    first = build_editor_world(draft, app.state.element_library)
+    second = build_editor_world(draft, app.state.element_library)
+    physical_items = [
+        item
+        for _key, label, _collection, items in first.groups
+        if label.startswith("Physical objects")
+        for item in items
+    ]
+    assert len(physical_items) == 1
+    assert physical_items[0].node_id == next(
+        item.node_id
+        for _key, label, _collection, items in second.groups
+        if label.startswith("Physical objects")
+        for item in items
+    )
+    assert physical_items[0].unplaced is True
+    assert physical_items[0].node_id.startswith(
+        "inherited:physical-object:"
+    )
+    assert all(
+        item.label != "Physical Only Door"
+        for _key, label, _collection, items in first.groups
+        if label.startswith("Legacy")
+        for item in items
+    )
+
+    selected = client.get(
+        f"/ui/scenarios/?draft={draft.token}"
+        "&selected=physical-only-preview"
+        f"&scope={building_node.id}"
+        f"&focus={physical_items[0].node_id}",
+    )
+    assert selected.status_code == 200
+    assert "Preview limitations" in selected.text
+    assert "Physical Only Door" in selected.text
+    assert "not shown on map" in selected.text
+    assert "Movement obstruction" in selected.text
+    assert "HARD" in selected.text
+    assert "Author-owner" not in selected.text
+    assert "author-owner" in selected.text
+    assert "Entrance front" in selected.text
+    assert "This inherited element detail is read-only" in selected.text
 
 
 def test_scenario_library_page_renders_structured_grid_city_and_entity_controls(
@@ -661,11 +1261,11 @@ def test_import_search_duplicate_rename_download_and_delete(
         files={"scenario": ("legacy-scenario.json", legacy_path.read_bytes())},
         follow_redirects=True,
     )
-    assert "saved scenarios require schema version 4" in legacy.text
+    assert "saved scenarios require schema version 6" in legacy.text
     imported_path.write_text(
         json.dumps(
             {
-                "schema_version": 4,
+                "schema_version": 6,
                 "name": "Imported scenario",
                 "entities": [],
             }
@@ -750,7 +1350,7 @@ def test_simulation_page_stages_only_the_selected_saved_scenario(
         operator_session.scenario_id
     )
     assert prepared.scenario_source is not None
-    assert prepared.scenario_source["schema_version"] == 4
+    assert prepared.scenario_source["schema_version"] == 6
 
 
 def test_saved_reference_scenario_preserves_resolved_provenance(

@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "bfd5b8e6e491bc839c1806b2f39a3bf2a81a57a6ccf339bfda97e9fff818bdf5",
+        "content_hash": "663e1a81d0ad6068562d6f04727861992bed0ef6d842c4910e82d34c782afb06",
         "id": "greyford-office-evening.station-greyford-spruce-childcare-primary",
         "kind": "object"
       },
       "id": "station-greyford-spruce-childcare-primary",
       "key": "station-greyford-spruce-childcare-primary",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 6,
         "y": 3
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 8,
   "zones": [
     {

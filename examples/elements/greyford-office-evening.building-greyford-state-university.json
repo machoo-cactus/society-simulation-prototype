@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-state-university-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "c768421db06f163b90d689ef2144dd02b2e8452e03983b418dba58a9cda6a485",
+        "content_hash": "8cc82b9029978060ce30a21738428166f96199affbefac89e6a189f6412d63c7",
         "id": "greyford-office-evening.map-greyford-state-university",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

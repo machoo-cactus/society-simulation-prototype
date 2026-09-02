@@ -13,6 +13,7 @@ from typing import BinaryIO, cast
 from uuid import uuid4
 
 from stage0_sim.adapters.persistence.sqlite_schema import (
+    DATABASE_SCHEMA_VERSION,
     RUN_SCOPED_TABLES,
     initialize_schema,
     schema_initialization_lock,
@@ -57,6 +58,8 @@ _ANALYSIS_TABLES = (
     "record_relations",
     "state_samples",
     "state_deltas",
+    "physical_object_states",
+    "physical_relation_samples",
     "goals",
     "goal_transitions",
     "plans",
@@ -105,6 +108,9 @@ _FEATURE_SCHEMA_VERSIONS = {
     "stage0.feature.goal_episode": "1",
     "stage0.feature.interaction_episode": "1",
     "stage0.feature.opportunity_sample": "1",
+    "stage0.feature.character_physical_state": "2",
+    "stage0.feature.physical_object_state": "2",
+    "stage0.feature.physical_relation_sample": "1",
     "stage0.feature.population_sample": "1",
     "stage0.feature.resource_flow": "1",
     "stage0.feature.resource_sample": "1",
@@ -360,6 +366,183 @@ class SQLiteDatasetStore:
                 to_sample_id,
                 simulation_tick,
                 _json(delta),
+            ),
+        )
+
+    def append_physical_object_state(
+        self,
+        *,
+        run_id: str,
+        physical_state_id: str,
+        record_id: str,
+        object_id: str,
+        definition_id: str,
+        name: str,
+        room_id: str,
+        anchor_x: int,
+        anchor_y: int,
+        orientation: str,
+        phase: RunnerPhase,
+        simulation_tick: int,
+        simulation_time: float,
+        movement_obstruction: str,
+        vision_obstruction: str,
+        hearing_transmission: str,
+        smell_transmission: str,
+        blocks_movement: bool,
+        blocks_vision: bool,
+        blocks_hearing: bool,
+        blocks_smell: bool,
+        mass_kg: float | None,
+        size_class: str | None,
+        is_open: bool | None,
+        is_locked: bool | None,
+        parent_id: str | None,
+        relation_kind: str | None,
+        slot_id: str | None,
+        custodian_id: str | None,
+        held_by_id: str | None,
+        spatial_index_revision: int | None,
+        topology_revision: int | None,
+        state: dict[str, JsonValue],
+    ) -> None:
+        self._insert_projection(
+            "physical_object_states",
+            (
+                "run_id",
+                "physical_state_id",
+                "record_id",
+                "object_id",
+                "definition_id",
+                "name",
+                "room_id",
+                "anchor_x",
+                "anchor_y",
+                "orientation",
+                "phase",
+                "simulation_tick",
+                "simulation_time",
+                "movement_obstruction",
+                "vision_obstruction",
+                "hearing_transmission",
+                "smell_transmission",
+                "blocks_movement",
+                "blocks_vision",
+                "blocks_hearing",
+                "blocks_smell",
+                "mass_kg",
+                "size_class",
+                "is_open",
+                "is_locked",
+                "parent_id",
+                "relation_kind",
+                "slot_id",
+                "custodian_id",
+                "held_by_id",
+                "spatial_index_revision",
+                "topology_revision",
+                "state_json",
+            ),
+            (
+                run_id,
+                physical_state_id,
+                record_id,
+                object_id,
+                definition_id,
+                name,
+                room_id,
+                anchor_x,
+                anchor_y,
+                orientation,
+                phase.value,
+                simulation_tick,
+                simulation_time,
+                movement_obstruction,
+                vision_obstruction,
+                hearing_transmission,
+                smell_transmission,
+                int(blocks_movement),
+                int(blocks_vision),
+                int(blocks_hearing),
+                int(blocks_smell),
+                mass_kg,
+                size_class,
+                int(is_open) if is_open is not None else None,
+                int(is_locked) if is_locked is not None else None,
+                parent_id,
+                relation_kind,
+                slot_id,
+                custodian_id,
+                held_by_id,
+                spatial_index_revision,
+                topology_revision,
+                _json(state),
+            ),
+        )
+
+    def append_physical_relation_sample(
+        self,
+        *,
+        run_id: str,
+        relation_sample_id: str,
+        record_id: str,
+        object_id: str,
+        entity_kind: str,
+        room_id: str | None,
+        parent_id: str,
+        parent_kind: str,
+        relation_kind: str,
+        slot_id: str | None,
+        custodian_id: str | None,
+        held_by_id: str | None,
+        phase: RunnerPhase,
+        simulation_tick: int,
+        simulation_time: float,
+        spatial_index_revision: int | None,
+        topology_revision: int | None,
+        relation: dict[str, JsonValue],
+    ) -> None:
+        self._insert_projection(
+            "physical_relation_samples",
+            (
+                "run_id",
+                "relation_sample_id",
+                "record_id",
+                "object_id",
+                "entity_kind",
+                "room_id",
+                "parent_id",
+                "parent_kind",
+                "relation_kind",
+                "slot_id",
+                "custodian_id",
+                "held_by_id",
+                "phase",
+                "simulation_tick",
+                "simulation_time",
+                "spatial_index_revision",
+                "topology_revision",
+                "relation_json",
+            ),
+            (
+                run_id,
+                relation_sample_id,
+                record_id,
+                object_id,
+                entity_kind,
+                room_id,
+                parent_id,
+                parent_kind,
+                relation_kind,
+                slot_id,
+                custodian_id,
+                held_by_id,
+                phase.value,
+                simulation_tick,
+                simulation_time,
+                spatial_index_revision,
+                topology_revision,
+                _json(relation),
             ),
         )
 
@@ -990,19 +1173,44 @@ class SQLiteDatasetStore:
         status: str,
         context: dict[str, JsonValue],
         outcome: dict[str, JsonValue] | None = None,
+        interaction_verb: str | None = None,
+        actor_id: str | None = None,
+        target_id: str | None = None,
+        destination_id: str | None = None,
+        slot_id: str | None = None,
+        goal_id: str | None = None,
+        action_id: str | None = None,
+        decision_id: str | None = None,
+        tool_call_id: str | None = None,
+        correlation_id: str | None = None,
     ) -> None:
         self._connection.execute(
             """
             INSERT OR REPLACE INTO interactions (
                 run_id, interaction_id, record_id, interaction_type,
-                start_tick, end_tick, status, context_json, outcome_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                interaction_verb, actor_id, target_id, destination_id,
+                slot_id, goal_id, action_id, decision_id, tool_call_id,
+                correlation_id, start_tick, end_tick, status, context_json,
+                outcome_json
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
             """,
             (
                 run_id,
                 interaction_id,
                 record_id,
                 interaction_type,
+                interaction_verb,
+                actor_id,
+                target_id,
+                destination_id,
+                slot_id,
+                goal_id,
+                action_id,
+                decision_id,
+                tool_call_id,
+                correlation_id,
                 start_tick,
                 end_tick,
                 status,
@@ -1079,22 +1287,38 @@ class SQLiteDatasetStore:
         initiating_tool_call_id: str | None,
         content_visibility: str,
         episode: dict[str, JsonValue],
+        interaction_verb: str | None = None,
+        actor_id: str | None = None,
+        target_id: str | None = None,
+        destination_id: str | None = None,
+        slot_id: str | None = None,
+        correlation_id: str | None = None,
     ) -> None:
         self._connection.execute(
             """
             INSERT OR REPLACE INTO interaction_episodes (
-                run_id, interaction_id, record_id, interaction_type, status,
-                start_tick, terminal_tick, started_at, terminal_at, duration,
-                initiating_goal_id, initiating_decision_id,
-                initiating_action_id, initiating_tool_call_id,
-                content_visibility, episode_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                run_id, interaction_id, record_id, interaction_type,
+                interaction_verb, actor_id, target_id, destination_id,
+                slot_id, status, start_tick, terminal_tick, started_at,
+                terminal_at, duration, initiating_goal_id,
+                initiating_decision_id, initiating_action_id,
+                initiating_tool_call_id, correlation_id, content_visibility,
+                episode_json
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?
+            )
             """,
             (
                 run_id,
                 interaction_id,
                 record_id,
                 interaction_type,
+                interaction_verb,
+                actor_id,
+                target_id,
+                destination_id,
+                slot_id,
                 status,
                 start_tick,
                 terminal_tick,
@@ -1105,6 +1329,7 @@ class SQLiteDatasetStore:
                 initiating_decision_id,
                 initiating_action_id,
                 initiating_tool_call_id,
+                correlation_id,
                 content_visibility,
                 _json(episode),
             ),
@@ -1999,6 +2224,7 @@ class SQLiteDatasetStore:
             ("schema_id", query.schema_id),
             ("schema_version", query.schema_version),
             ("subject_id", query.subject_id),
+            ("phase", query.phase.value if query.phase is not None else None),
             (
                 "visibility",
                 query.visibility.value if query.visibility is not None else None,
@@ -2057,6 +2283,97 @@ class SQLiteDatasetStore:
                 """
             )
             parameters.append(query.outcome)
+        for selector_value, expression in (
+            (
+                query.object_id,
+                """
+                COALESCE(
+                    json_extract(payload_json, '$.object_id'),
+                    json_extract(payload_json, '$.target_id'),
+                    json_extract(payload_json, '$.event.payload.target_id'),
+                    subject_id
+                ) = ?
+                """,
+            ),
+            (
+                query.room_id,
+                """
+                COALESCE(
+                    json_extract(payload_json, '$.room_id'),
+                    json_extract(payload_json, '$.pose.room_id'),
+                    json_extract(payload_json, '$.context.room_id'),
+                    json_extract(payload_json, '$.event.payload.room_id')
+                ) = ?
+                """,
+            ),
+            (
+                query.parent_id,
+                """
+                COALESCE(
+                    json_extract(payload_json, '$.parent_id'),
+                    json_extract(payload_json, '$.parent_relation.parent_id')
+                ) = ?
+                """,
+            ),
+            (
+                query.relation_kind,
+                """
+                COALESCE(
+                    json_extract(payload_json, '$.relation_kind'),
+                    json_extract(
+                        payload_json, '$.parent_relation.relation_kind'
+                    ),
+                    json_extract(payload_json, '$.relation')
+                ) = ?
+                """,
+            ),
+            (
+                query.interaction_verb,
+                """
+                COALESCE(
+                    json_extract(payload_json, '$.verb'),
+                    json_extract(payload_json, '$.context.verb'),
+                    json_extract(payload_json, '$.event.payload.verb'),
+                    json_extract(payload_json, '$.payload.verb')
+                ) = ?
+                """,
+            ),
+            (
+                query.interaction_type,
+                """
+                COALESCE(
+                    json_extract(payload_json, '$.interaction_type'),
+                    json_extract(payload_json, '$.context.interaction_type')
+                ) = ?
+                """,
+            ),
+        ):
+            if selector_value is not None:
+                clauses.append(expression)
+                parameters.append(selector_value)
+        for boolean_value, expression in (
+            (
+                query.is_open,
+                """
+                COALESCE(
+                    json_extract(payload_json, '$.is_open'),
+                    json_extract(payload_json, '$.openable.is_open')
+                ) = ?
+                """,
+            ),
+            (
+                query.is_locked,
+                """
+                COALESCE(
+                    json_extract(payload_json, '$.is_locked'),
+                    json_extract(payload_json, '$.openable.is_locked')
+                ) = ?
+                """,
+            ),
+        ):
+            if boolean_value is not None:
+                clauses.append(expression)
+                parameters.append(int(boolean_value))
         if not query.include_private:
             clauses.append("visibility != ?")
             parameters.append(RecordVisibility.PRIVATE_RESEARCH.value)
@@ -2116,6 +2433,10 @@ class SQLiteDatasetStore:
                     "subject_id",
                     "observer_id",
                     "participant_id",
+                    "object_id",
+                    "actor_id",
+                    "target_id",
+                    "destination_id",
                 )
                 if column in columns
             ]
@@ -2177,6 +2498,10 @@ class SQLiteDatasetStore:
         if query.visibility is not None:
             clauses.append("r.visibility = ?")
             parameters.append(query.visibility.value)
+        if query.phase is not None:
+            phase_source = "p" if "phase" in columns else "r"
+            clauses.append(f"{phase_source}.phase = ?")
+            parameters.append(query.phase.value)
         if not query.include_private:
             clauses.append("r.visibility != ?")
             parameters.append(RecordVisibility.PRIVATE_RESEARCH.value)
@@ -2235,6 +2560,36 @@ class SQLiteDatasetStore:
                     """
                 )
                 parameters.append(query.outcome)
+        for column, value in (
+            ("object_id", query.object_id),
+            ("room_id", query.room_id),
+            ("parent_id", query.parent_id),
+            ("relation_kind", query.relation_kind),
+            ("interaction_verb", query.interaction_verb),
+            ("interaction_type", query.interaction_type),
+        ):
+            if value is None:
+                continue
+            if column in columns:
+                clauses.append(f"p.{column} = ?")
+            else:
+                clauses.append(
+                    _record_payload_filter_expression(column)
+                )
+            parameters.append(value)
+        for column, boolean_value in (
+            ("is_open", query.is_open),
+            ("is_locked", query.is_locked),
+        ):
+            if boolean_value is None:
+                continue
+            if column in columns:
+                clauses.append(f"p.{column} = ?")
+            else:
+                clauses.append(
+                    _record_payload_filter_expression(column)
+                )
+            parameters.append(int(boolean_value))
         order_columns = ("r.sequence",) + tuple(
             f"p.{column}" for column in primary_key if column != "run_id"
         )
@@ -2294,21 +2649,29 @@ class SQLiteDatasetStore:
         *,
         offset: int = 0,
         limit: int = 100,
+        include_private: bool = False,
     ) -> tuple[tuple[dict[str, JsonValue], ...], int]:
         self._require_run(run_id)
+        privacy_clause = (
+            ""
+            if include_private
+            else "AND visibility != 'PRIVATE_RESEARCH'"
+        )
         total = int(
             self._connection.execute(
-                """
+                f"""
                 SELECT COUNT(*) FROM records
                 WHERE run_id = ? AND record_type = 'event'
+                {privacy_clause}
                 """,
                 (run_id,),
             ).fetchone()[0]
         )
         rows = self._connection.execute(
-            """
+            f"""
             SELECT * FROM records
             WHERE run_id = ? AND record_type = 'event'
+              {privacy_clause}
             ORDER BY sequence
             LIMIT ? OFFSET ?
             """,
@@ -2335,10 +2698,20 @@ class SQLiteDatasetStore:
             )
         return tuple(events), total
 
-    def data_dictionary(self, run_id: str | None = None) -> dict[str, JsonValue]:
+    def data_dictionary(
+        self,
+        run_id: str | None = None,
+        *,
+        include_private: bool = False,
+    ) -> dict[str, JsonValue]:
         observed_schemas: list[JsonValue] = []
         if run_id is not None:
             self._require_run(run_id)
+            privacy_clause = (
+                ""
+                if include_private
+                else "AND visibility != 'PRIVATE_RESEARCH'"
+            )
             observed_schemas = [
                 {
                     "schema_id": str(row["schema_id"]),
@@ -2349,10 +2722,11 @@ class SQLiteDatasetStore:
                     "record_count": int(row["record_count"]),
                 }
                 for row in self._connection.execute(
-                    """
+                    f"""
                     SELECT schema_id, schema_version, record_type, category,
                            visibility, COUNT(*) AS record_count
-                    FROM records WHERE run_id = ?
+                    FROM records
+                    WHERE run_id = ? {privacy_clause}
                     GROUP BY schema_id, schema_version, record_type, category,
                              visibility
                     ORDER BY schema_id, schema_version, record_type, visibility
@@ -2412,6 +2786,7 @@ class SQLiteDatasetStore:
             "schema_version": "1",
             "dataset_schema_id": "stage0.dataset",
             "dataset_schema_version": DATASET_SCHEMA_VERSION,
+            "sqlite_schema_version": DATABASE_SCHEMA_VERSION,
             "record_visibility_values": [
                 visibility.value for visibility in RecordVisibility
             ],
@@ -2449,9 +2824,18 @@ class SQLiteDatasetStore:
             "schema_id": "stage0.analysis_bundle.manifest",
             "schema_version": "1",
             "dataset_schema_version": DATASET_SCHEMA_VERSION,
+            "sqlite_schema_version": DATABASE_SCHEMA_VERSION,
             "run_id": run_id,
             "filters": applied_filters,
             "private_records_included": query.include_private,
+            "private_data_warning": (
+                "This bundle contains PRIVATE_RESEARCH records and may include "
+                "hidden physical contents, ownership, prompts, controller "
+                "reasons, model content, retrievals, and memories. Keep it "
+                "restricted."
+                if query.include_private
+                else None
+            ),
             "ordering": {
                 "records.ndjson": ["sequence"],
                 "csv": ["record_sequence", "table primary key"],
@@ -2468,7 +2852,10 @@ class SQLiteDatasetStore:
                 "records.ndjson",
                 *table_files,
             ],
-            "summary": self.summary(run_id),
+            "summary": self.summary(
+                run_id,
+                include_private=query.include_private,
+            ),
         }
         record_filter = _record_filter_from_query(query)
         with zipfile.ZipFile(
@@ -2490,7 +2877,10 @@ class SQLiteDatasetStore:
             archive.writestr(
                 _zip_info("schema.json"),
                 json.dumps(
-                    self.data_dictionary(run_id),
+                    self.data_dictionary(
+                        run_id,
+                        include_private=query.include_private,
+                    ),
                     ensure_ascii=False,
                     indent=2,
                     sort_keys=True,
@@ -2528,6 +2918,13 @@ class SQLiteDatasetStore:
                 "simulation_tick": 0,
                 "simulation_time": 0.0,
                 "payload": {
+                    "private_records_included": True,
+                    "private_data_warning": (
+                        "This complete export contains PRIVATE_RESEARCH records "
+                        "and may include hidden physical contents, ownership, "
+                        "prompts, controller reasons, model content, retrievals, "
+                        "and memories. Keep it restricted."
+                    ),
                     "seed": int(run["seed"]),
                     "dt": float(run["dt"]),
                     "initial_speed": float(run["initial_speed"]),
@@ -2596,7 +2993,12 @@ class SQLiteDatasetStore:
         finally:
             export_connection.close()
 
-    def summary(self, run_id: str) -> dict[str, JsonValue]:
+    def summary(
+        self,
+        run_id: str,
+        *,
+        include_private: bool = False,
+    ) -> dict[str, JsonValue]:
         run = self._connection.execute(
             """
             SELECT status, final_tick, final_simulation_time
@@ -2635,6 +3037,7 @@ class SQLiteDatasetStore:
         )
         return {
             "schema_version": DATASET_SCHEMA_VERSION,
+            "sqlite_schema_version": DATABASE_SCHEMA_VERSION,
             "run_id": run_id,
             "status": status,
             "final_tick": (
@@ -2645,11 +3048,31 @@ class SQLiteDatasetStore:
                 if run["final_simulation_time"] is not None
                 else None
             ),
-            "record_counts": self._counts(run_id, "record_type"),
-            "category_counts": self._counts(run_id, "category"),
-            "visibility_counts": self._counts(run_id, "visibility"),
-            "schema_counts": self._counts(run_id, "schema_id"),
-            "schema_version_counts": self._counts(run_id, "schema_version"),
+            "record_counts": self._counts(
+                run_id,
+                "record_type",
+                include_private=include_private,
+            ),
+            "category_counts": self._counts(
+                run_id,
+                "category",
+                include_private=include_private,
+            ),
+            "visibility_counts": self._counts(
+                run_id,
+                "visibility",
+                include_private=include_private,
+            ),
+            "schema_counts": self._counts(
+                run_id,
+                "schema_id",
+                include_private=include_private,
+            ),
+            "schema_version_counts": self._counts(
+                run_id,
+                "schema_version",
+                include_private=include_private,
+            ),
             "capture_complete": (
                 status in {"completed", "stopped"} and run_final_count > 0
             ),
@@ -2660,41 +3083,80 @@ class SQLiteDatasetStore:
                 "record_sequence_contiguous": sequence_gap_count == 0,
                 "sequence_gap_count": sequence_gap_count,
             },
-            "entity_counts": self._entity_counts(run_id),
+            "entity_counts": self._entity_counts(
+                run_id,
+                include_private=include_private,
+            ),
             "status_counts": {
-                "goals": self._table_counts(run_id, "goals", "status"),
+                "goals": self._table_counts(
+                    run_id,
+                    "goals",
+                    "status",
+                    include_private=include_private,
+                ),
                 "decisions": self._table_counts(
-                    run_id, "decisions", "status"
+                    run_id,
+                    "decisions",
+                    "status",
+                    include_private=include_private,
                 ),
                 "actions": self._table_counts(
-                    run_id, "action_instances", "status"
+                    run_id,
+                    "action_instances",
+                    "status",
+                    include_private=include_private,
                 ),
                 "interactions": self._table_counts(
-                    run_id, "interactions", "status"
+                    run_id,
+                    "interactions",
+                    "status",
+                    include_private=include_private,
                 ),
                 "model_requests": self._table_counts(
-                    run_id, "model_requests", "status"
+                    run_id,
+                    "model_requests",
+                    "status",
+                    include_private=include_private,
                 ),
                 "tool_executions": self._table_counts(
-                    run_id, "tool_executions", "status"
+                    run_id,
+                    "tool_executions",
+                    "status",
+                    include_private=include_private,
                 ),
             },
             "terminal_outcome_counts": {
                 "actions": self._table_counts(
-                    run_id, "action_episodes", "terminal_status"
+                    run_id,
+                    "action_episodes",
+                    "terminal_status",
+                    include_private=include_private,
                 ),
                 "decisions": self._table_counts(
-                    run_id, "decision_episodes", "status"
+                    run_id,
+                    "decision_episodes",
+                    "status",
+                    include_private=include_private,
                 ),
                 "goals": self._table_counts(
-                    run_id, "goal_episodes", "terminal_status"
+                    run_id,
+                    "goal_episodes",
+                    "terminal_status",
+                    include_private=include_private,
                 ),
                 "interactions": self._table_counts(
-                    run_id, "interaction_episodes", "status"
+                    run_id,
+                    "interaction_episodes",
+                    "status",
+                    include_private=include_private,
                 ),
             },
             "derived_feature_counts": {
-                table: self._table_count(run_id, table)
+                table: self._linked_table_count(
+                    run_id,
+                    table,
+                    include_private=include_private,
+                )
                 for table in (
                     "transition_samples",
                     "action_episodes",
@@ -2705,36 +3167,92 @@ class SQLiteDatasetStore:
                     "population_samples",
                     "resource_samples",
                     "resource_flows",
+                    "physical_object_states",
+                    "physical_relation_samples",
                 )
             },
             "feature_family_counts": {
-                "actions": self._table_count(run_id, "action_episodes"),
-                "decisions": self._table_count(run_id, "decision_episodes"),
-                "goals": self._table_count(run_id, "goal_episodes"),
-                "interactions": self._table_count(
-                    run_id, "interaction_episodes"
+                "actions": self._linked_table_count(
+                    run_id,
+                    "action_episodes",
+                    include_private=include_private,
                 ),
-                "transitions": self._table_count(
-                    run_id, "transition_samples"
+                "decisions": self._linked_table_count(
+                    run_id,
+                    "decision_episodes",
+                    include_private=include_private,
                 ),
-                "opportunities": self._table_count(
-                    run_id, "opportunity_samples"
+                "goals": self._linked_table_count(
+                    run_id,
+                    "goal_episodes",
+                    include_private=include_private,
                 ),
-                "population": self._table_count(
-                    run_id, "population_samples"
+                "interactions": self._linked_table_count(
+                    run_id,
+                    "interaction_episodes",
+                    include_private=include_private,
+                ),
+                "transitions": self._linked_table_count(
+                    run_id,
+                    "transition_samples",
+                    include_private=include_private,
+                ),
+                "opportunities": self._linked_table_count(
+                    run_id,
+                    "opportunity_samples",
+                    include_private=include_private,
+                ),
+                "population": self._linked_table_count(
+                    run_id,
+                    "population_samples",
+                    include_private=include_private,
                 ),
                 "resources": (
-                    self._table_count(run_id, "resource_samples")
-                    + self._table_count(run_id, "resource_flows")
+                    self._linked_table_count(
+                        run_id,
+                        "resource_samples",
+                        include_private=include_private,
+                    )
+                    + self._linked_table_count(
+                        run_id,
+                        "resource_flows",
+                        include_private=include_private,
+                    )
+                ),
+                "physical_object_states": self._linked_table_count(
+                    run_id,
+                    "physical_object_states",
+                    include_private=include_private,
+                ),
+                "physical_relations": self._linked_table_count(
+                    run_id,
+                    "physical_relation_samples",
+                    include_private=include_private,
                 ),
             },
+            "physical": self._physical_summary(
+                run_id,
+                include_private=include_private,
+            ),
         }
 
-    def _counts(self, run_id: str, column: str) -> dict[str, JsonValue]:
+    def _counts(
+        self,
+        run_id: str,
+        column: str,
+        *,
+        include_private: bool,
+    ) -> dict[str, JsonValue]:
+        privacy = (
+            ""
+            if include_private
+            else "AND visibility != 'PRIVATE_RESEARCH'"
+        )
         rows = self._connection.execute(
             f"""
             SELECT {column} AS value, COUNT(*) AS count
             FROM records WHERE run_id = ?
+            {privacy}
             GROUP BY {column} ORDER BY {column}
             """,
             (run_id,),
@@ -2749,29 +3267,75 @@ class SQLiteDatasetStore:
             ).fetchone()[0]
         )
 
+    def _linked_table_count(
+        self,
+        run_id: str,
+        table: str,
+        *,
+        include_private: bool,
+    ) -> int:
+        privacy = (
+            ""
+            if include_private
+            else "AND r.visibility != 'PRIVATE_RESEARCH'"
+        )
+        return int(
+            self._connection.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM {table} p
+                JOIN records r
+                  ON r.run_id = p.run_id AND r.record_id = p.record_id
+                WHERE p.run_id = ? {privacy}
+                """,
+                (run_id,),
+            ).fetchone()[0]
+        )
+
     def _table_counts(
         self,
         run_id: str,
         table: str,
         column: str,
+        *,
+        include_private: bool,
     ) -> dict[str, JsonValue]:
+        privacy = (
+            ""
+            if include_private
+            else "AND r.visibility != 'PRIVATE_RESEARCH'"
+        )
         rows = self._connection.execute(
             f"""
-            SELECT {column} AS value, COUNT(*) AS count
-            FROM {table} WHERE run_id = ?
-            GROUP BY {column} ORDER BY {column}
+            SELECT p.{column} AS value, COUNT(*) AS count
+            FROM {table} p
+            JOIN records r
+              ON r.run_id = p.run_id AND r.record_id = p.record_id
+            WHERE p.run_id = ? {privacy}
+            GROUP BY p.{column} ORDER BY p.{column}
             """,
             (run_id,),
         )
         return {str(row["value"]): int(row["count"]) for row in rows}
 
-    def _entity_counts(self, run_id: str) -> dict[str, JsonValue]:
+    def _entity_counts(
+        self,
+        run_id: str,
+        *,
+        include_private: bool,
+    ) -> dict[str, JsonValue]:
+        privacy = (
+            ""
+            if include_private
+            else "AND visibility != 'PRIVATE_RESEARCH'"
+        )
         counts: dict[str, int] = {}
         for row in self._connection.execute(
-            """
+            f"""
             SELECT subject_id AS entity_id, COUNT(*) AS count
             FROM records
             WHERE run_id = ? AND subject_id IS NOT NULL
+              {privacy}
             GROUP BY subject_id
             ORDER BY entity_id
             """,
@@ -2779,10 +3343,10 @@ class SQLiteDatasetStore:
         ):
             counts[str(row["entity_id"])] = int(row["count"])
         for row in self._connection.execute(
-            """
+            f"""
             SELECT json_each.value AS entity_id, COUNT(*) AS count
             FROM records, json_each(records.related_entity_ids_json)
-            WHERE records.run_id = ?
+            WHERE records.run_id = ? {privacy}
             GROUP BY json_each.value
             ORDER BY json_each.value
             """,
@@ -2791,6 +3355,90 @@ class SQLiteDatasetStore:
             entity_id = str(row["entity_id"])
             counts[entity_id] = counts.get(entity_id, 0) + int(row["count"])
         return dict(sorted(counts.items()))
+
+    def _physical_summary(
+        self,
+        run_id: str,
+        *,
+        include_private: bool,
+    ) -> dict[str, JsonValue]:
+        privacy = (
+            ""
+            if include_private
+            else "AND r.visibility != 'PRIVATE_RESEARCH'"
+        )
+        state_row = self._connection.execute(
+            f"""
+            SELECT COUNT(*) AS sample_count,
+                   COUNT(DISTINCT p.object_id) AS object_count
+            FROM physical_object_states p
+            JOIN records r
+              ON r.run_id = p.run_id AND r.record_id = p.record_id
+            WHERE p.run_id = ? {privacy}
+            """,
+            (run_id,),
+        ).fetchone()
+        relation_count = int(
+            self._connection.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM physical_relation_samples p
+                JOIN records r
+                  ON r.run_id = p.run_id AND r.record_id = p.record_id
+                WHERE p.run_id = ? {privacy}
+                """,
+                (run_id,),
+            ).fetchone()[0]
+        )
+        distributions: dict[str, JsonValue] = {}
+        for name, column in (
+            ("room", "room_id"),
+            ("open", "is_open"),
+            ("locked", "is_locked"),
+            ("movement_obstruction", "movement_obstruction"),
+            ("vision_obstruction", "vision_obstruction"),
+            ("custody", "custodian_id"),
+            ("held", "held_by_id"),
+        ):
+            rows = self._connection.execute(
+                f"""
+                SELECT p.{column} AS value, COUNT(*) AS count
+                FROM physical_object_states p
+                JOIN records r
+                  ON r.run_id = p.run_id AND r.record_id = p.record_id
+                WHERE p.run_id = ? {privacy}
+                GROUP BY p.{column}
+                ORDER BY p.{column}
+                """,
+                (run_id,),
+            )
+            distributions[name] = {
+                _distribution_value(row["value"], column): int(row["count"])
+                for row in rows
+            }
+        relation_rows = self._connection.execute(
+            f"""
+            SELECT p.relation_kind AS value, COUNT(*) AS count
+            FROM physical_relation_samples p
+            JOIN records r
+              ON r.run_id = p.run_id AND r.record_id = p.record_id
+            WHERE p.run_id = ? {privacy}
+            GROUP BY p.relation_kind
+            ORDER BY p.relation_kind
+            """,
+            (run_id,),
+        )
+        distributions["relation_kind"] = {
+            str(row["value"]): int(row["count"])
+            for row in relation_rows
+        }
+        return {
+            "private_records_included": include_private,
+            "distinct_object_count": int(state_row["object_count"]),
+            "state_sample_count": int(state_row["sample_count"]),
+            "relation_sample_count": relation_count,
+            "distributions": distributions,
+        }
 
     def _require_run(self, run_id: str) -> sqlite3.Row:
         row = self._connection.execute(
@@ -2915,6 +3563,8 @@ class SQLiteDatasetStore:
                 "interaction_participants",
                 "interaction_episodes",
                 "interactions",
+                "physical_relation_samples",
+                "physical_object_states",
                 "perception_deliveries",
                 "perception_facts",
                 "resource_flows",
@@ -2956,6 +3606,8 @@ class SQLiteDatasetStore:
                     "population_samples",
                     "resource_samples",
                     "resource_flows",
+                    "physical_object_states",
+                    "physical_relation_samples",
                 )
             },
         }
@@ -2973,6 +3625,35 @@ class SQLiteDatasetStore:
                 end_tick=None,
                 status=_text(payload, "status"),
                 context=_object(payload, "context"),
+                interaction_verb=_optional_text(payload, "interaction_verb"),
+                actor_id=_optional_text(payload, "actor_id"),
+                target_id=_optional_text(payload, "target_id"),
+                destination_id=_optional_text(payload, "destination_id"),
+                slot_id=_optional_text(payload, "slot_id"),
+                goal_id=(
+                    str(record.joins.goal_id)
+                    if record.joins.goal_id is not None
+                    else None
+                ),
+                action_id=(
+                    str(record.joins.action_id)
+                    if record.joins.action_id is not None
+                    else None
+                ),
+                decision_id=(
+                    str(record.joins.decision_id)
+                    if record.joins.decision_id is not None
+                    else None
+                ),
+                tool_call_id=(
+                    str(record.joins.tool_call_id)
+                    if record.joins.tool_call_id is not None
+                    else None
+                ),
+                correlation_id=(
+                    _optional_text(payload, "correlation_id")
+                    or record.correlation_id
+                ),
             )
             for participant in _array(payload, "participants"):
                 if not isinstance(participant, dict):
@@ -2989,18 +3670,39 @@ class SQLiteDatasetStore:
                     )
         elif record.record_type == "interaction_event":
             event = _object(payload, "event")
+            event_type = _text(event, "event_type")
+            interaction_id = _text(payload, "interaction_id")
             self.append_interaction_event(
                 run_id=record.run_id,
-                interaction_id=_text(payload, "interaction_id"),
+                interaction_id=interaction_id,
                 event_id=_text(event, "event_id"),
                 record_id=record.record_id,
                 event_index=_integer(payload, "event_index"),
-                event_type=_text(event, "event_type"),
+                event_type=event_type,
                 simulation_tick=_integer(event, "simulation_tick"),
                 event=event,
             )
+            lifecycle_status = {
+                "interaction.requested": "requested",
+                "interaction.started": "active",
+                "interaction.completed": "completed",
+                "interaction.failed": "failed",
+                "interaction.cancelled": "cancelled",
+            }.get(event_type)
+            if lifecycle_status is not None:
+                self._connection.execute(
+                    """
+                    UPDATE interactions SET status = ?
+                    WHERE run_id = ? AND interaction_id = ?
+                    """,
+                    (lifecycle_status, record.run_id, interaction_id),
+                )
         elif record.record_type == "interaction_episode":
             _rebuild_interaction_episode(self, record, payload)
+        elif record.record_type == "physical_object_state":
+            _rebuild_physical_object_state(self, record, payload)
+        elif record.record_type == "physical_relation_sample":
+            _rebuild_physical_relation_sample(self, record, payload)
         elif record.record_type == "perception_fact":
             _rebuild_perception_fact(self, record, payload)
         elif record.record_type == "perception_delivery":
@@ -3377,6 +4079,120 @@ class SQLiteDatasetStore:
         self._connection.close()
 
 
+def _rebuild_physical_object_state(
+    store: SQLiteDatasetStore,
+    record: DatasetRecord,
+    payload: dict[str, JsonValue],
+) -> None:
+    pose = _object(payload, "pose")
+    anchor = _object(pose, "anchor")
+    obstruction = _object(payload, "obstruction")
+    intrinsics = _optional_object(payload, "intrinsics")
+    openable = _optional_object(payload, "openable")
+    parent = _optional_object(payload, "parent_relation")
+    custody = _optional_object(payload, "custody")
+    spatial_index = _object(payload, "spatial_index")
+    store.append_physical_object_state(
+        run_id=record.run_id,
+        physical_state_id=f"{record.record_id}:physical-state",
+        record_id=record.record_id,
+        object_id=_text(payload, "object_id"),
+        definition_id=_text(payload, "definition_id"),
+        name=_text(payload, "name"),
+        room_id=_text(pose, "room_id"),
+        anchor_x=_integer(anchor, "x"),
+        anchor_y=_integer(anchor, "y"),
+        orientation=_text(pose, "orientation"),
+        phase=record.phase,
+        simulation_tick=record.simulation_tick,
+        simulation_time=record.simulation_time,
+        movement_obstruction=_text(obstruction, "movement"),
+        vision_obstruction=_text(obstruction, "vision"),
+        hearing_transmission=_text(obstruction, "hearing"),
+        smell_transmission=_text(obstruction, "smell"),
+        blocks_movement=_boolean(obstruction, "blocks_movement"),
+        blocks_vision=_boolean(obstruction, "blocks_vision"),
+        blocks_hearing=_boolean(obstruction, "blocks_hearing"),
+        blocks_smell=_boolean(obstruction, "blocks_smell"),
+        mass_kg=(
+            _optional_number(intrinsics, "mass_kg")
+            if intrinsics is not None
+            else None
+        ),
+        size_class=(
+            _optional_text(intrinsics, "size_class")
+            if intrinsics is not None
+            else None
+        ),
+        is_open=(
+            _boolean(openable, "is_open") if openable is not None else None
+        ),
+        is_locked=(
+            _boolean(openable, "is_locked") if openable is not None else None
+        ),
+        parent_id=(
+            _optional_text(parent, "parent_id") if parent is not None else None
+        ),
+        relation_kind=(
+            _optional_text(parent, "relation_kind")
+            if parent is not None
+            else None
+        ),
+        slot_id=(
+            _optional_text(parent, "slot_id") if parent is not None else None
+        ),
+        custodian_id=(
+            _optional_text(custody, "custodian_id")
+            if custody is not None
+            else None
+        ),
+        held_by_id=(
+            _optional_text(custody, "held_by_id")
+            if custody is not None
+            else None
+        ),
+        spatial_index_revision=_optional_integer(
+            spatial_index, "revision"
+        ),
+        topology_revision=_optional_integer(
+            spatial_index, "topology_revision"
+        ),
+        state=payload,
+    )
+
+
+def _rebuild_physical_relation_sample(
+    store: SQLiteDatasetStore,
+    record: DatasetRecord,
+    payload: dict[str, JsonValue],
+) -> None:
+    spatial_index = _object(payload, "spatial_index")
+    store.append_physical_relation_sample(
+        run_id=record.run_id,
+        relation_sample_id=f"{record.record_id}:physical-relation",
+        record_id=record.record_id,
+        object_id=_text(payload, "object_id"),
+        entity_kind=_text(payload, "entity_kind"),
+        room_id=_optional_text(payload, "room_id"),
+        parent_id=_text(payload, "parent_id"),
+        parent_kind=_text(payload, "parent_kind"),
+        relation_kind=_text(payload, "relation_kind"),
+        slot_id=_optional_text(payload, "slot_id"),
+        custodian_id=_optional_text(payload, "custodian_id"),
+        held_by_id=_optional_text(payload, "held_by_id"),
+        phase=record.phase,
+        simulation_tick=record.simulation_tick,
+        simulation_time=record.simulation_time,
+        spatial_index_revision=_optional_integer(
+            spatial_index, "revision"
+        ),
+        topology_revision=_optional_integer(
+            spatial_index, "topology_revision"
+        ),
+        relation=payload,
+    )
+
+
 def _rebuild_interaction_episode(
     store: SQLiteDatasetStore,
     record: DatasetRecord,
@@ -3387,6 +4203,15 @@ def _rebuild_interaction_episode(
     status = _text(payload, "terminal_status")
     context = _object(payload, "context")
     outcome = _object(payload, "outcome")
+    interaction_verb = _optional_text(payload, "interaction_verb")
+    actor_id = _optional_text(payload, "actor_id")
+    target_id = _optional_text(payload, "target_id")
+    destination_id = _optional_text(payload, "destination_id")
+    slot_id = _optional_text(payload, "slot_id")
+    correlation_id = (
+        _optional_text(payload, "correlation_id")
+        or record.correlation_id
+    )
     store.append_interaction(
         run_id=record.run_id,
         interaction_id=interaction_id,
@@ -3397,6 +4222,16 @@ def _rebuild_interaction_episode(
         status=status,
         context=context,
         outcome=outcome,
+        interaction_verb=interaction_verb,
+        actor_id=actor_id,
+        target_id=target_id,
+        destination_id=destination_id,
+        slot_id=slot_id,
+        goal_id=_optional_text(payload, "initiating_goal_id"),
+        action_id=_optional_text(payload, "initiating_action_id"),
+        decision_id=_optional_text(payload, "initiating_decision_id"),
+        tool_call_id=_optional_text(payload, "initiating_tool_call_id"),
+        correlation_id=correlation_id,
     )
     participants = _array(payload, "participants")
     for participant in participants:
@@ -3413,16 +4248,25 @@ def _rebuild_interaction_episode(
     for index, item in enumerate(events):
         if not isinstance(item, dict):
             raise ValueError("interaction event must be an object")
-        store.append_interaction_event(
-            run_id=record.run_id,
-            interaction_id=interaction_id,
-            event_id=_text(item, "event_id"),
-            record_id=record.record_id,
-            event_index=index,
-            event_type=_text(item, "event_type"),
-            simulation_tick=_integer(item, "simulation_tick"),
-            event=item,
-        )
+        event_id = _text(item, "event_id")
+        existing = store._connection.execute(
+            """
+            SELECT 1 FROM interaction_events
+            WHERE run_id = ? AND interaction_id = ? AND event_id = ?
+            """,
+            (record.run_id, interaction_id, event_id),
+        ).fetchone()
+        if existing is None:
+            store.append_interaction_event(
+                run_id=record.run_id,
+                interaction_id=interaction_id,
+                event_id=event_id,
+                record_id=record.record_id,
+                event_index=index,
+                event_type=_text(item, "event_type"),
+                simulation_tick=_integer(item, "simulation_tick"),
+                event=item,
+            )
     store.append_interaction_episode(
         run_id=record.run_id,
         interaction_id=interaction_id,
@@ -3442,6 +4286,12 @@ def _rebuild_interaction_episode(
         ),
         content_visibility=_text(payload, "content_visibility"),
         episode=payload,
+        interaction_verb=interaction_verb,
+        actor_id=actor_id,
+        target_id=target_id,
+        destination_id=destination_id,
+        slot_id=slot_id,
+        correlation_id=correlation_id,
     )
 
 
@@ -3594,6 +4444,18 @@ def _object(
     return value
 
 
+def _optional_object(
+    payload: dict[str, JsonValue],
+    name: str,
+) -> dict[str, JsonValue] | None:
+    value = payload.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must be an object")
+    return value
+
+
 def _array(payload: dict[str, JsonValue], name: str) -> list[JsonValue]:
     value = payload.get(name)
     if not isinstance(value, list):
@@ -3627,8 +4489,39 @@ def _integer(payload: dict[str, JsonValue], name: str) -> int:
     return value
 
 
+def _optional_integer(
+    payload: dict[str, JsonValue],
+    name: str,
+) -> int | None:
+    value = payload.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{name} must be an integer")
+    return value
+
+
+def _boolean(payload: dict[str, JsonValue], name: str) -> bool:
+    value = payload.get(name)
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean")
+    return value
+
+
 def _number(payload: dict[str, JsonValue], name: str) -> float:
     value = payload.get(name)
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        raise ValueError(f"{name} must be numeric")
+    return float(value)
+
+
+def _optional_number(
+    payload: dict[str, JsonValue],
+    name: str,
+) -> float | None:
+    value = payload.get(name)
+    if value is None:
+        return None
     if not isinstance(value, int | float) or isinstance(value, bool):
         raise ValueError(f"{name} must be numeric")
     return float(value)
@@ -3709,6 +4602,15 @@ def _record_filter_from_query(query: DatasetQueryFilter) -> DatasetRecordFilter:
         operator_intervention_id=query.operator_intervention_id,
         status=query.status,
         outcome=query.outcome,
+        object_id=query.object_id,
+        room_id=query.room_id,
+        parent_id=query.parent_id,
+        relation_kind=query.relation_kind,
+        phase=query.phase,
+        is_open=query.is_open,
+        is_locked=query.is_locked,
+        interaction_verb=query.interaction_verb,
+        interaction_type=query.interaction_type,
         include_private=query.include_private,
         limit=query.limit,
     )
@@ -3757,6 +4659,58 @@ def _csv_value(value: JsonValue | None) -> str | int | float:
     return value
 
 
+def _record_payload_filter_expression(column: str) -> str:
+    expressions = {
+        "object_id": (
+            "COALESCE(json_extract(r.payload_json, '$.object_id'), "
+            "json_extract(r.payload_json, '$.target_id'), r.subject_id) = ?"
+        ),
+        "room_id": (
+            "COALESCE(json_extract(r.payload_json, '$.room_id'), "
+            "json_extract(r.payload_json, '$.pose.room_id'), "
+            "json_extract(r.payload_json, '$.context.room_id')) = ?"
+        ),
+        "parent_id": (
+            "COALESCE(json_extract(r.payload_json, '$.parent_id'), "
+            "json_extract(r.payload_json, '$.parent_relation.parent_id')) = ?"
+        ),
+        "relation_kind": (
+            "COALESCE(json_extract(r.payload_json, '$.relation_kind'), "
+            "json_extract(r.payload_json, "
+            "'$.parent_relation.relation_kind')) = ?"
+        ),
+        "interaction_verb": (
+            "COALESCE(json_extract(r.payload_json, '$.verb'), "
+            "json_extract(r.payload_json, '$.context.verb'), "
+            "json_extract(r.payload_json, '$.event.payload.verb')) = ?"
+        ),
+        "interaction_type": (
+            "COALESCE(json_extract(r.payload_json, '$.interaction_type'), "
+            "json_extract(r.payload_json, '$.context.interaction_type')) = ?"
+        ),
+        "is_open": (
+            "COALESCE(json_extract(r.payload_json, '$.is_open'), "
+            "json_extract(r.payload_json, '$.openable.is_open')) = ?"
+        ),
+        "is_locked": (
+            "COALESCE(json_extract(r.payload_json, '$.is_locked'), "
+            "json_extract(r.payload_json, '$.openable.is_locked')) = ?"
+        ),
+    }
+    try:
+        return expressions[column]
+    except KeyError as error:
+        raise ValueError(f"unsupported record payload filter: {column}") from error
+
+
+def _distribution_value(value: object, column: str) -> str:
+    if value is None:
+        return "none"
+    if column in {"is_open", "is_locked"}:
+        return "true" if bool(value) else "false"
+    return str(value)
+
+
 def _field_meaning(name: str) -> str:
     meanings = {
         "record_id": "stable immutable record identifier within a run",
@@ -3777,6 +4731,30 @@ def _field_meaning(name: str) -> str:
         "payload": "complete forward-compatible record content",
         "record_sequence": "sequence of the linked immutable raw record",
         "record_visibility": "visibility of the linked immutable raw record",
+        "physical_state_id": (
+            "stable physical-object state observation identifier"
+        ),
+        "relation_sample_id": (
+            "stable physical parent-relation observation identifier"
+        ),
+        "object_id": "stable physical object or related entity identifier",
+        "room_id": "authoritative room containing the observed physical entity",
+        "parent_id": "live spatial parent identifier",
+        "parent_kind": "kind of the live spatial parent",
+        "relation_kind": "live physical parent relation kind",
+        "slot_id": "support, container, hand, or occupancy slot identifier",
+        "custodian_id": "entity with authoritative custody of the object",
+        "held_by_id": "character physically holding the object",
+        "interaction_verb": "physical interaction verb when applicable",
+        "anchor_x": "physical pose anchor x coordinate in room microcells",
+        "anchor_y": "physical pose anchor y coordinate in room microcells",
+        "orientation": "cardinal physical pose orientation",
+        "spatial_index_revision": (
+            "authoritative SpatialIndex revision at observation time"
+        ),
+        "topology_revision": (
+            "authoritative static-topology revision at observation time"
+        ),
     }
     if name in meanings:
         return meanings[name]
@@ -3792,6 +4770,16 @@ def _field_meaning(name: str) -> str:
 
 
 def _table_meaning(table: str) -> str:
+    if table == "physical_object_states":
+        return (
+            "phase-boundary authoritative physical-object state observations; "
+            "research data, never checkpoint authority"
+        )
+    if table == "physical_relation_samples":
+        return (
+            "phase-boundary live physical parent, slot, custody, and held "
+            "relation observations"
+        )
     if table.endswith("_episodes"):
         return f"derived terminal {table.removesuffix('_episodes').replace('_', ' ')} episodes"
     if table.endswith("_samples"):

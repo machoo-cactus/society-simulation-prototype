@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "ac189a6c35637d4df8a65f8cec0101573366bb5634cdfd47d6a2d0bfb6f64425",
+        "content_hash": "8ad507b29d220e12b2b231d46c7028ec2f6b42a0e9a79a1369ada4e1f2496211",
         "id": "greyford-office-evening.station-greyford-highland-boathouse-primary",
         "kind": "object"
       },
       "id": "station-greyford-highland-boathouse-primary",
       "key": "station-greyford-highland-boathouse-primary",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 6,
         "y": 3
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 8,
   "zones": [
     {

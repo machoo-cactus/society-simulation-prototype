@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-intermodal-logistics-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "8c300ddfe77587ec47348f5176a014c91175fd186b148a8b4ea013d74979dc28",
+        "content_hash": "b988a6c2fd41e66c2c2ffc80474d466dc80df1ab7ee385d2cd6a85c2db21539a",
         "id": "greyford-office-evening.map-greyford-intermodal-logistics",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

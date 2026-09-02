@@ -55,6 +55,7 @@ class ActionOutcome(StrEnum):
 class InteractionType(StrEnum):
     SPEECH = "speech"
     TRANSACTION = "transaction"
+    PHYSICAL = "physical"
 
 
 @dataclass(frozen=True, slots=True)

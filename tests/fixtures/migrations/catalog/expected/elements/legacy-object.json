@@ -1,0 +1,48 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A generic object whose dimensions are intentionally unknown.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "legacy-object",
+  "kind": "object",
+  "name": "Legacy Object",
+  "npc_role": null,
+  "object_type": null,
+  "offers": [],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "openable": null,
+      "portable": null,
+      "readable": null,
+      "slots": [],
+      "support": null,
+      "usable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": 0,
+          "y": 0
+        }
+      ]
+    },
+    "initial_open": null,
+    "obstruction": {
+      "movement": "NONE",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 2,
+  "supported_actions": null
+}

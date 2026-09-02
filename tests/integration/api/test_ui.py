@@ -1,5 +1,6 @@
 import json
 import re
+from dataclasses import replace
 from html import unescape
 from importlib.resources import files
 from uuid import uuid4
@@ -8,7 +9,23 @@ from fastapi.testclient import TestClient
 
 from stage0_sim.api import ui as operator_ui
 from stage0_sim.api.app import app
+from stage0_sim.api.operator_sessions import SESSION_COOKIE
+from stage0_sim.application.manager import SimulationManager
+from stage0_sim.domain.components import (
+    CharacterHandStateComponent,
+    CharacterPosture,
+    CharacterPostureComponent,
+    CustodyComponent,
+    OpenableComponent,
+    PhysicalRelationKind,
+    PhysicalStateComponent,
+    SpatialParentRelationComponent,
+)
 from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.integration.api.test_simulation_api import (
+    _create_physical_api_run,
+    _physical_api_source,
+)
 
 
 def _create_persisted_dataset_run(
@@ -39,6 +56,51 @@ def _create_persisted_dataset_run(
     client.post(f"/simulation/runs/{run_id}/step")
     client.post(f"/simulation/runs/{run_id}/stop")
     return run_id
+
+
+def _create_persisted_physical_dataset_run(client: TestClient) -> str:
+    run_id = _create_physical_api_run(client)
+    client.post(f"/simulation/runs/{run_id}/pause")
+    client.post(f"/simulation/runs/{run_id}/step")
+    client.post(f"/simulation/runs/{run_id}/stop")
+    return run_id
+
+
+def _attach_physical_operator_run(
+    client: TestClient,
+) -> tuple[str, operator_ui.OperatorSession]:
+    library, source = _physical_api_source()
+    original_library = app.state.element_library
+    app.state.element_library = library
+    try:
+        scenario_response = client.post(
+            "/simulation/scenarios",
+            json={"scenario": source, "character_assignments": {}},
+        )
+    finally:
+        app.state.element_library = original_library
+    assert scenario_response.status_code == 201
+    scenario_id = str(scenario_response.json()["scenario_id"])
+    run_response = client.post(
+        "/simulation/runs",
+        json={"scenario_id": scenario_id, "realtime": False},
+    )
+    assert run_response.status_code == 201
+    run_id = str(run_response.json()["run_id"])
+    client.get("/ui/")
+    session_id = client.cookies.get(SESSION_COOKIE)
+    assert session_id is not None
+    _, session = app.state.operator_sessions.get(session_id)
+    manager = app.state.simulation_manager
+    assert isinstance(manager, SimulationManager)
+    prepared = manager.get_scenario(scenario_id)
+    session.scenario = prepared.scenario
+    session.scenario_id = scenario_id
+    session.scenario_source = "integration physical fixture"
+    session.run_id = run_id
+    session.view_level = "room"
+    session.zoom = operator_ui.ROOM_ZOOM
+    return run_id, session
 
 
 def test_ui_assets_are_installed_as_package_data() -> None:
@@ -225,6 +287,65 @@ def test_dataset_explorer_is_server_rendered_filtered_and_private_by_opt_in() ->
     assert len(ids) == len(set(ids))
 
 
+def test_dataset_explorer_physical_views_require_private_opt_in() -> None:
+    with TestClient(app) as client:
+        run_id = _create_persisted_physical_dataset_run(client)
+        public = client.get(
+            f"/ui/datasets/{run_id}/",
+            params={"view": "physical_object_states"},
+        )
+        private = client.get(
+            f"/ui/datasets/{run_id}/",
+            params={
+                "view": "physical_object_states",
+                "object_id": "object-z-cabinet",
+                "room_id": "physical-api-building.room",
+                "phase": "run_initial",
+                "is_open": "false",
+                "is_locked": "false",
+                "include_private": "true",
+            },
+        )
+        relations = client.get(
+            f"/ui/datasets/{run_id}/",
+            params={
+                "view": "physical_relations",
+                "object_id": "object-m-secret",
+                "parent_id": "object-z-cabinet",
+                "relation_kind": "IN_CONTAINER",
+                "include_private": "true",
+            },
+        )
+        private_summary = client.get(
+            f"/ui/datasets/{run_id}/",
+            params={"include_private": "true"},
+        )
+
+    assert public.status_code == 200
+    assert "Physical object states" in public.text
+    assert "No records match the current filters." in public.text
+    assert "Private Letter" not in public.text
+    assert "object-m-secret" not in public.text
+    assert "private-secret-owner" not in public.text
+    assert 'name="object_id"' in public.text
+    assert 'name="room_id"' in public.text
+    assert 'name="parent_id"' in public.text
+    assert 'name="relation_kind"' in public.text
+    assert 'name="interaction_verb"' in public.text
+    assert 'name="phase"' in public.text
+    assert 'name="is_open"' in public.text
+    assert 'name="is_locked"' in public.text
+    assert private.status_code == 200
+    assert "Private research data is displayed" in private.text
+    assert "object-z-cabinet" in private.text
+    assert "physical-api-building.room" in private.text
+    assert "Physical relations" in relations.text
+    assert "object-m-secret" in relations.text
+    assert "IN_CONTAINER" in relations.text
+    assert "Physical observations" in private_summary.text
+    assert "private_records_included" in private_summary.text
+
+
 def test_data_management_catalog_selection_aggregate_and_deletion() -> None:
     scenario_name = f"backend data management workflow {uuid4()}"
     with TestClient(app) as client:
@@ -284,7 +405,7 @@ def test_data_management_catalog_selection_aggregate_and_deletion() -> None:
         assert "2 persisted runs selected" in selected_second.text
         assert "Pooled:" in selected_second.text
         assert "Macro per run:" in selected_second.text
-        assert "PRIVATE_RESEARCH-derived rows" in selected_second.text
+        assert "PRIVATE_RESEARCH-derived rows" not in selected_second.text
         assert "Download aggregate JSON" in selected_second.text
         assert "Download aggregate CSV" in selected_second.text
         assert all(run_id in selected_second.text for run_id in run_ids)
@@ -317,12 +438,21 @@ def test_data_management_catalog_selection_aggregate_and_deletion() -> None:
                 "scenario": scenario_name,
                 "limit": 1,
                 "privacy_setting": "1",
-                "exclude_private_derived": "true",
+            },
+        )
+        included_private = client.get(
+            str(second.url),
+            params={
+                "scenario": scenario_name,
+                "limit": 1,
+                "privacy_setting": "1",
+                "include_private_derived": "true",
             },
         )
         assert "0 runs selected across catalog pages." in cleared.text
         assert "2 runs selected across catalog pages." in selected_all.text
         assert "PRIVATE_RESEARCH-derived rows" not in excluded_private.text
+        assert "PRIVATE_RESEARCH-derived rows" in included_private.text
 
         selection_form = next(
             (
@@ -399,6 +529,7 @@ def test_operator_session_store_cleans_deleted_run_references() -> None:
     _, second = store.get(None)
     first.run_id = "deleted"
     first.selected_agent_id = "agent-001"
+    first.selected_object_id = "object-001"
     first.follow_selected = True
     first.selected_data_run_ids = ("kept", "deleted")
     first.pending_run_deletion = operator_ui.PendingRunDeletion(
@@ -415,6 +546,7 @@ def test_operator_session_store_cleans_deleted_run_references() -> None:
 
     assert first.run_id is None
     assert first.selected_agent_id is None
+    assert first.selected_object_id is None
     assert first.follow_selected is False
     assert first.selected_data_run_ids == ("kept",)
     assert first.pending_run_deletion is None
@@ -545,6 +677,416 @@ def test_zoom_state_selects_semantic_detail_and_validates_camera() -> None:
     assert valid.headers["X-Stage0-Semantic-Level"] == "building"
     assert invalid.status_code == 400
     assert "camera coordinates must be between 0 and 1" in invalid.text
+
+
+def test_physical_grid_view_uses_microcells_and_compact_footprints() -> None:
+    world = {
+        "width": 4,
+        "height": 3,
+        "zones": [
+            {
+                "id": "room",
+                "name": "Room",
+                "type": "TEST",
+                "bounds": {"x": 0, "y": 0, "width": 4, "height": 3},
+            }
+        ],
+        "blocked": [{"x": 3, "y": 2}],
+        "stations": [],
+        "transaction_points": [],
+    }
+    physical_room = {
+        "spatial": {
+            "coordinate_system": "microcell",
+            "microcells_per_legacy_cell": 9,
+            "width_microcells": 36,
+            "height_microcells": 27,
+            "width_legacy_cells": 4,
+            "height_legacy_cells": 3,
+        },
+        "objects": [
+            {
+                "id": "front-door",
+                "definition_id": "exterior-door",
+                "name": "Front Door",
+                "kind": "physical",
+                "physical": {
+                    "pose": {
+                        "room_id": "room",
+                        "anchor": {"x": 15, "y": 8},
+                        "orientation": "EAST",
+                    },
+                    "footprint": {
+                        "cells": [
+                            {"x": 0, "y": 0},
+                            {"x": 1, "y": 0},
+                            {"x": 0, "y": 1},
+                        ]
+                    },
+                    "occupied_cells": [
+                        {"x": 14, "y": 8},
+                        {"x": 15, "y": 8},
+                        {"x": 15, "y": 9},
+                    ],
+                    "obstruction": {
+                        "movement": "HARD",
+                        "vision": "OPAQUE",
+                        "blocks_movement": True,
+                        "blocks_vision": True,
+                    },
+                    "openable": {"is_open": False, "is_locked": True},
+                    "capabilities": {
+                        "portable": None,
+                        "support_slot_ids": [],
+                        "container_slot_ids": ["inside"],
+                        "openable": True,
+                        "readable": False,
+                        "consumable": None,
+                        "usable": None,
+                    },
+                    "parent_relation": None,
+                    "custodian_id": None,
+                    "held_by": None,
+                    "slots": [
+                        {
+                            "id": "inside",
+                            "accepted_relations": ["IN_CONTAINER"],
+                            "capacity": 1,
+                            "occupancy": {
+                                "entity_ids": ["parcel"],
+                                "count": 1,
+                                "remaining_capacity": 0,
+                            },
+                        }
+                    ],
+                    "spatial_indexed": True,
+                    "interaction_target": {
+                        "approach_anchors": [{"x": 13, "y": 8}],
+                        "occupancy_anchors": {
+                            "inside": [{"x": 15, "y": 8}]
+                        },
+                    },
+                },
+            },
+            {
+                "id": "room-window",
+                "definition_id": "window",
+                "name": "Open Window",
+                "kind": "physical",
+                "physical": {
+                    "pose": {
+                        "room_id": "room",
+                        "anchor": {"x": 2, "y": 2},
+                        "orientation": "NORTH",
+                    },
+                    "footprint": {"cells": [{"x": 0, "y": 0}]},
+                    "occupied_cells": [{"x": 2, "y": 2}],
+                    "obstruction": {},
+                    "openable": {"is_open": True, "is_locked": False},
+                    "capabilities": {"openable": True},
+                    "held_by": None,
+                    "slots": [],
+                },
+            },
+            {
+                "id": "parcel",
+                "definition_id": "parcel",
+                "name": "Portable Parcel",
+                "kind": "physical",
+                "physical": {
+                    "pose": {
+                        "room_id": "room",
+                        "anchor": {"x": 10, "y": 10},
+                        "orientation": "NORTH",
+                    },
+                    "footprint": {"cells": [{"x": 0, "y": 0}]},
+                    "occupied_cells": [{"x": 10, "y": 10}],
+                    "obstruction": {},
+                    "openable": None,
+                    "capabilities": {
+                        "portable": {"two_handed": False}
+                    },
+                    "held_by": "agent",
+                    "slots": [],
+                },
+            },
+        ],
+    }
+    agent = {
+        "id": "agent",
+        "position": {"x": 1, "y": 1},
+        "physical": {
+            "occupied_cells": [
+                {"x": x, "y": y}
+                for y in range(8, 13)
+                for x in range(8, 13)
+            ],
+            "posture": {"value": "SITTING", "support_id": "chair"},
+            "hands": {
+                "left_object_id": "parcel",
+                "right_object_id": None,
+                "held_object_ids": ["parcel"],
+            },
+        },
+        "physical_movement": {
+            "coordinate_system": "microcell",
+            "destination": {"x": 20, "y": 10},
+            "path": [{"x": 10, "y": 10}, {"x": 11, "y": 10}],
+        },
+        "interaction": {
+            "request": {
+                "verb": "OPEN",
+                "target_id": "front-door",
+                "destination_id": None,
+                "slot_id": None,
+                "status": "queued",
+                "action": {
+                    "action_id": "action-open-door",
+                    "action_name": "OPEN",
+                },
+            },
+            "execution": None,
+        },
+    }
+    session = operator_ui.OperatorSession(
+        selected_agent_id="agent",
+        selected_object_id="front-door",
+        zoom=operator_ui.MICROCELL_GRID_ZOOM,
+    )
+
+    view = operator_ui._grid_view(
+        world,
+        [agent],
+        session,
+        "Physical room",
+        {},
+        semantic_level="room",
+        physical_room=physical_room,
+        door_links={
+            "front-door": [
+                {
+                    "kind": "entrance",
+                    "id": "front",
+                    "label": "Entrance front",
+                    "coordinate": {"x": 15, "y": 8},
+                }
+            ]
+        },
+    )
+
+    assert view["view_box"] == "0 0 36 27"
+    assert view["base_display_width"] == 288
+    assert view["zones"][0]["rectangles"] == [
+        {"x": 0, "y": 0, "width": 36, "height": 27}
+    ]
+    assert view["blocked"] == [
+        {"x": 27, "y": 18, "width": 9, "height": 9}
+    ]
+    assert view["show_microcell_grid"] is True
+    assert view["paths"] == [
+        {
+            "agent_id": "agent",
+            "name": "agent",
+            "points": "10.5,10.5 11.5,10.5",
+        }
+    ]
+    assert view["agents"][0]["body_rectangles"] == [
+        {"x": 8, "y": 8, "width": 5, "height": 5}
+    ]
+    assert view["agents"][0]["posture"] == "SITTING"
+    assert view["agents"][0]["held_object_ids"] == ["parcel"]
+    rendered_object = next(
+        item for item in view["objects"] if item["id"] == "front-door"
+    )
+    assert rendered_object["rectangles"] == [
+        {"x": 14, "y": 8, "width": 2, "height": 1},
+        {"x": 15, "y": 9, "width": 1, "height": 1},
+    ]
+    assert {
+        "physical-object--door",
+        "state-closed",
+        "state-locked",
+        "state-occupied",
+        "door-linked",
+        "selected",
+    }.issubset(set(rendered_object["class_names"].split()))
+    assert rendered_object["approach_anchors"] == [{"x": 13, "y": 8}]
+    assert rendered_object["occupancy_anchors"] == [
+        {"x": 15, "y": 8, "slot_id": "inside"}
+    ]
+    assert rendered_object["interaction_states"] == [
+        {
+            "agent_id": "agent",
+            "phase": "request",
+            "verb": "OPEN",
+            "status": "queued",
+            "slot_id": None,
+            "action_id": "action-open-door",
+            "action_name": "OPEN",
+        }
+    ]
+    window = next(
+        item for item in view["objects"] if item["id"] == "room-window"
+    )
+    assert {
+        "physical-object--window",
+        "state-open",
+        "state-unlocked",
+    }.issubset(set(window["class_names"].split()))
+    parcel = next(
+        item for item in view["objects"] if item["id"] == "parcel"
+    )
+    assert {
+        "physical-object--portable",
+        "state-held",
+    }.issubset(set(parcel["class_names"].split()))
+
+    session.zoom = operator_ui.MICROCELL_GRID_ZOOM - 0.01
+    overview = operator_ui._grid_view(
+        world,
+        [],
+        session,
+        "Physical room",
+        {},
+        semantic_level="room",
+        physical_room={
+            **physical_room,
+            "spatial": {
+                **physical_room["spatial"],
+                "width_microcells": 9000,
+                "height_microcells": 7200,
+            },
+            "objects": [],
+        },
+    )
+    assert overview["view_box"] == "0 0 9000 7200"
+    assert overview["show_microcell_grid"] is False
+    assert len(overview["zones"]) == 1
+    assert overview["objects"] == []
+
+
+def test_operator_renders_live_physical_state_and_object_inspector() -> None:
+    with TestClient(app) as client:
+        run_id, session = _attach_physical_operator_run(client)
+        manager = app.state.simulation_manager
+        assert isinstance(manager, SimulationManager)
+        registry = manager.get_run(run_id).runner.registry
+        cabinet = registry.get_component(
+            "object-z-cabinet",
+            OpenableComponent,
+        )
+        cabinet.is_locked = True
+        posture = registry.get_component(
+            "physical-agent",
+            CharacterPostureComponent,
+        )
+        posture.posture = CharacterPosture.SITTING
+        posture.support_id = "object-a-display"
+
+        overview = client.get("/ui/")
+        session.zoom = operator_ui.MICROCELL_GRID_ZOOM
+        selected = client.post(
+            "/ui/view",
+            data={
+                "selected_object_present": "yes",
+                "selected_object": "object-z-cabinet",
+            },
+            follow_redirects=True,
+        )
+        hands = registry.get_component(
+            "physical-agent",
+            CharacterHandStateComponent,
+        )
+        hands.left_hand_object_id = "object-m-secret"
+        agent_state = registry.get_component(
+            "physical-agent",
+            PhysicalStateComponent,
+        )
+        secret_state = registry.get_component(
+            "object-m-secret",
+            PhysicalStateComponent,
+        )
+        registry.set_component(
+            "object-m-secret",
+            replace(secret_state, pose=agent_state.pose),
+        )
+        registry.set_component(
+            "object-m-secret",
+            SpatialParentRelationComponent(
+                "physical-agent",
+                PhysicalRelationKind.HELD_BY,
+                "left",
+            ),
+        )
+        registry.set_component(
+            "object-m-secret",
+            CustodyComponent("physical-agent"),
+        )
+        held = client.get(
+            "/ui/",
+            params={"object": "object-m-secret"},
+        )
+        cleared = client.post(
+            "/ui/view",
+            data={
+                "selected_object_present": "yes",
+                "selected_object": "",
+            },
+            follow_redirects=True,
+        )
+
+    assert 'viewBox="0 0 36 27"' in overview.text
+    assert 'data-coordinate-system="microcell"' in overview.text
+    assert 'id="microcell-grid"' not in overview.text
+    assert 'class="grid-line"' not in overview.text
+    assert overview.text.count('class="grid-guide ') == 1
+    assert 'data-object-id="object-m-secret"' in overview.text
+    assert 'data-posture="SITTING"' in overview.text
+    assert (
+        'class="physical-object physical-object--furniture '
+        'state-closed state-locked state-occupied'
+    ) in selected.text
+    assert 'id="microcell-grid"' in selected.text
+    assert selected.text.count('class="grid-guide ') == 2
+    assert 'value="object-z-cabinet" selected' in selected.text
+    assert "Opaque Cabinet" in selected.text
+    assert "anchor (15, 8) microcells · EAST" in selected.text
+    assert "3 cells: (14, 8), (15, 8), (15, 9)" in selected.text
+    assert "movement HARD · vision OPAQUE" in selected.text
+    assert "occupied 1 · remaining 1" in selected.text
+    assert 'data-held-object-ids="object-m-secret"' in held.text
+    assert "Held by" in held.text
+    assert "physical-agent" in held.text
+    assert 'value="" selected>Not inspecting an object' in cleared.text
+
+
+def test_operator_view_route_changes_and_clears_object_selection() -> None:
+    with TestClient(app) as client:
+        client.get("/ui/")
+        session_id = client.cookies.get(SESSION_COOKIE)
+        assert session_id is not None
+        selected = client.post(
+            "/ui/view",
+            data={
+                "selected_object_present": "yes",
+                "selected_object": "object-1",
+            },
+            follow_redirects=False,
+        )
+        _, session = app.state.operator_sessions.get(session_id)
+        assert session.selected_object_id == "object-1"
+        cleared = client.post(
+            "/ui/view",
+            data={
+                "selected_object_present": "yes",
+                "selected_object": "",
+            },
+            follow_redirects=False,
+        )
+
+    assert selected.status_code == 303
+    assert cleared.status_code == 303
+    assert session.selected_object_id is None
 
 
 def test_city_view_projects_edge_travel_and_declutters_labels() -> None:

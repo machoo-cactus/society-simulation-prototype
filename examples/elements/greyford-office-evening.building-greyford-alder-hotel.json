@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-alder-hotel-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "9760bf5b818f38550abd48000feeaf0916fd3729e7b88e1a176b00008d243a3b",
+        "content_hash": "b73de8f2e6f8ec12bd94fe2c47c6f2bad5c86f1950d931c1eaf0663594fb7c52",
         "id": "greyford-office-evening.map-greyford-alder-hotel",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-airport-terminal-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "e75bdd31c43afc226c685cafac451a6447a4a0119ffb501026ded1fc32f68e26",
+        "content_hash": "7e66fa033d0d3e7634f9a71031d857e744f886b4a2d31e76c64853d946640a4d",
         "id": "greyford-office-evening.map-greyford-airport-terminal",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

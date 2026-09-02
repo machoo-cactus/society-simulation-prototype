@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-lantern-coworking-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "e3bd7169f0205bccd1932df521028e9d1afbc1c1efa8a47b58482bf597823111",
+        "content_hash": "0af7b9add1438cd653798f5c11e783f7fa3fd2063c10368ba2ad31463311c209",
         "id": "greyford-office-evening.map-greyford-lantern-coworking",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-quayline-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "d5c8be0d166fd542f0610845a022cef7f2477ae312d0de10977f4992ab127b5e",
+        "content_hash": "dddefe9ced990e5917a592462f20b2281aa5eb5be32b9199886dcf2743c409ca",
         "id": "greyford-office-evening.map-greyford-quayline-cafe",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

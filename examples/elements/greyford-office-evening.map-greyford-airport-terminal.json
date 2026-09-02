@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "a0fd77fb0e62fe98fb5f5068b3d7c345ebb9a9f8647feeae0cd1743e60054983",
+        "content_hash": "66aae6d9d28bb8ddeabe83c9c5eb5ac1aa43b6bfb4d60dda561a909bcbdf0b92",
         "id": "greyford-office-evening.station-greyford-airport-terminal-primary",
         "kind": "object"
       },
       "id": "station-greyford-airport-terminal-primary",
       "key": "station-greyford-airport-terminal-primary",
+      "placement": {
+        "anchor": {
+          "x": 94,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 10,
         "y": 4
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 12,
   "zones": [
     {

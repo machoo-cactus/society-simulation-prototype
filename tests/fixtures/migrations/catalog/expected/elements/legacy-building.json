@@ -1,0 +1,39 @@
+{
+  "available": true,
+  "description": "",
+  "entrances": [
+    {
+      "door_object_id": null,
+      "id": null,
+      "key": "front",
+      "local_coordinate": {
+        "x": 0,
+        "y": 0
+      },
+      "room_key": "main"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "legacy-building",
+  "kind": "building",
+  "name": "Legacy Building",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "fabfec8242dfc4b80f5458d9cc5b5f9823b30b6057e5603739766509d99c5017",
+        "id": "legacy-room",
+        "kind": "room"
+      },
+      "key": "main",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 2
+}

@@ -1,125 +1,34 @@
 {
-  "schema_version": 2,
-  "id": "samira-khan",
-  "template_id": "human-v1",
-  "identity": {
-    "display_name": "Samira Khan",
-    "birth_date": "1979-06-09",
-    "gender": "Woman",
-    "pronouns": "she/her",
-    "occupation": "Public library branch manager"
-  },
-  "body_measurements": {
-    "measured_on": "2026-07-24",
-    "height_cm": 163.0,
-    "weight_kg": 68.2,
-    "chest_cm": 99.0,
-    "waist_cm": 82.0,
-    "hips_cm": 103.0,
-    "inseam_cm": 73.0,
-    "shoe_size_system": "UK",
-    "shoe_size_value": 5.5
-  },
   "appearance": {
-    "summary": "A poised middle-aged woman with expressive hands, bright scarves, and the attentive bearing of someone used to welcoming strangers.",
     "build": "Compact, sturdy build with graceful posture",
-    "hair": "Thick dark hair streaked with early silver, usually pinned into a practical twist",
-    "eyes": "Deep brown eyes that soften quickly when someone is nervous",
     "clothing": "",
     "distinguishing_features": [
       "A small ink smudge often lingers on the side of her hand from handwritten notes",
       "Wears a brass ring engraved with a geometric floral pattern passed down from her mother"
-    ]
-  },
-  "health": {
-    "as_of_date": "2026-07-24",
-    "blood_type": "B+",
-    "conditions": [
-      {
-        "name": "Mild presbyopia",
-        "status": "managed",
-        "diagnosed_on": "2024-03-18",
-        "notes": "Uses reading glasses for close work."
-      }
     ],
-    "allergies": [],
-    "medications": [],
-    "disabilities": [],
-    "vision": "Uses reading glasses for close work",
-    "hearing": "No known impairment",
-    "mobility": "Unrestricted",
-    "past_procedures": [],
-    "dietary_restrictions": []
-  },
-  "personality": {
-    "summary": "Generous, observant, and quietly formidable, with a storyteller's warmth and a librarian's sense of order.",
-    "traits": [
-      "patient",
-      "perceptive",
-      "hospitable",
-      "firm",
-      "imaginative"
-    ],
-    "temperament": "Calm and welcoming with most people; becomes unmistakably steel-spined when someone is dismissive, bullying, or careless with community trust.",
-    "social_style": "Comfortable with a steady flow of new faces, remembers personal details well, and makes people feel noticed without prying.",
-    "speech_style": "Warm, vivid, and slightly theatrical; often explains ideas through anecdotes, metaphors, and gently humorous observations.",
-    "strengths": [
-      "puts anxious or embarrassed people at ease quickly",
-      "organizes complex information into memorable structure",
-      "maintains boundaries without becoming cold",
-      "holds a room's emotional temperature while still moving work forward"
-    ],
-    "flaws": [
-      "sometimes takes on quiet emotional labor that other adults should carry themselves",
-      "can be skeptical of efficiency drives that ignore human texture",
-      "has a tendency to rescue struggling events rather than letting poor planning fail visibly"
-    ]
+    "eyes": "Deep brown eyes that soften quickly when someone is nervous",
+    "hair": "Thick dark hair streaked with early silver, usually pinned into a practical twist",
+    "height": "",
+    "summary": "A poised middle-aged woman with expressive hands, bright scarves, and the attentive bearing of someone used to welcoming strangers."
   },
   "background": {
     "birthplace": "Leicester, England",
-    "residence": "A second-floor flat above a family-owned tailor shop on a mixed residential street",
     "education": "Bachelor's degree in history and a master's degree in library and information studies",
-    "history": "Samira was raised in a multigenerational household where books, practical hospitality, and civic duty were treated as everyday responsibilities. She spent her early career in archives and community programming before taking over a neighborhood library branch, where she became known for building welcoming public rituals and preserving local oral histories that would otherwise disappear."
+    "history": "Samira was raised in a multigenerational household where books, practical hospitality, and civic duty were treated as everyday responsibilities. She spent her early career in archives and community programming before taking over a neighborhood library branch, where she became known for building welcoming public rituals and preserving local oral histories that would otherwise disappear.",
+    "residence": "A second-floor flat above a family-owned tailor shop on a mixed residential street"
   },
-  "financial_situation": {
-    "as_of_date": "2026-08-31",
-    "currency": "GBP",
-    "annual_gross_income": 51000,
-    "income_band": "Middle individual income",
-    "liquid_assets": 32000,
-    "total_assets": 146000,
-    "total_debt": 9000,
-    "monthly_fixed_expenses": 1850,
-    "housing_tenure": "Rents flat",
-    "financial_dependents": 0
-  },
-  "motivations": {
-    "values": [
-      "curiosity",
-      "hospitality",
-      "fairness",
-      "memory and continuity",
-      "protecting public spaces that welcome everyone"
-    ],
-    "fears": [
-      "communities forgetting their own stories",
-      "bureaucratic cynicism shrinking humane public services",
-      "people being made to feel small when they are already overwhelmed"
-    ],
-    "needs": [
-      "regular stretches of quiet after socially demanding days",
-      "reliable routines that keep her grounded",
-      "a sense that her work still connects people rather than processing them"
-    ]
+  "body_measurements": {
+    "chest_cm": 99.0,
+    "height_cm": 163.0,
+    "hips_cm": 103.0,
+    "inseam_cm": 73.0,
+    "measured_on": "2026-07-24",
+    "shoe_size_system": "UK",
+    "shoe_size_value": 5.5,
+    "waist_cm": 82.0,
+    "weight_kg": 68.2
   },
   "capabilities": {
-    "skills": [
-      "community programming",
-      "reader advisory",
-      "archival organization",
-      "public speaking",
-      "gentle de-escalation"
-    ],
     "knowledge_areas": [
       "local history",
       "catalog systems",
@@ -130,135 +39,106 @@
       "not especially fast with brand-new software interfaces until she has explored them thoroughly",
       "protective of public institutions to the point of occasional stubbornness",
       "needs recovery time after long days of constant conversation"
+    ],
+    "skills": [
+      "community programming",
+      "reader advisory",
+      "archival organization",
+      "public speaking",
+      "gentle de-escalation"
     ]
-  },
-  "preferences": {
-    "likes": [
-      "cardamom tea",
-      "annotated novels with generous margins",
-      "fresh flowers on reading tables",
-      "slow neighborhood walks",
-      "hosting small dinners where everyone lingers to talk"
-    ],
-    "dislikes": [
-      "aggressive sales tactics",
-      "gratuitous rudeness",
-      "wasteful renovations that erase local character",
-      "being rushed through a meaningful conversation"
-    ],
-    "habits": [
-      "writes names and details in a pocket notebook so she can remember people well",
-      "straightens shelves when thinking through a difficult problem",
-      "brings homemade snacks to long planning meetings"
-    ],
-    "routines": [
-      "opens mornings with tea, radio headlines, and ten minutes of handwritten notes",
-      "sets aside one evening a week for oral-history transcription or letter writing",
-      "ends social days by reading poetry or re-shelving books at home to settle her mind"
-    ]
-  },
-  "presentation": {
-    "aesthetic_identity": "Warm, textured, culturally rooted, dignified, and practical for public-facing work.",
-    "wardrobe_palette": [
-      "jewel tones",
-      "earth tones",
-      "cream",
-      "deep navy"
-    ],
-    "preferred_silhouettes": [
-      "long fluid layers",
-      "comfortable structured dresses or trousers",
-      "scarves that add color and movement"
-    ],
-    "preferred_fabrics": [
-      "soft wool",
-      "cotton",
-      "linen",
-      "durable woven textiles"
-    ],
-    "formality_range": "Polished everyday dress through quietly elegant formal wear, always tempered by approachability.",
-    "comfort_priorities": [
-      "standing and walking comfort",
-      "warm adaptable layers",
-      "materials that tolerate a busy public room"
-    ],
-    "grooming_norms": [
-      "hair pinned or arranged neatly",
-      "careful but unshowy grooming",
-      "subtle fragrance"
-    ],
-    "usual_accessories": [
-      "patterned scarf",
-      "brass family ring",
-      "practical earrings",
-      "pocket notebook"
-    ],
-    "practical_constraints": [
-      "avoids fragile jewelry during active community events",
-      "needs shoes suitable for long periods standing"
-    ],
-    "purchase_habits": [
-      "keeps well-made garments for years",
-      "repairs and alters clothing",
-      "values textiles with family or local craft associations"
-    ],
-    "context_variations": [
-      "uses lighter fabrics and a simpler scarf while travelling",
-      "chooses more ceremonial color and jewelry for family occasions",
-      "adds practical outer layers for outdoor community work"
-    ]
-  },
-  "dispositions": {
-    "summary": "Usually hospitable, perceptive, patient, imaginative, and firm about dignity.",
-    "emotional_baseline": "Warmly attentive with a quiet reserve of authority.",
-    "sociability": "High in purposeful public settings, followed by a strong need for private quiet.",
-    "assertiveness": "Gentle in delivery but unmistakably firm when boundaries or fairness matter.",
-    "patience": "Very high with confusion, embarrassment, and sincere learning.",
-    "conscientiousness": "High, especially for names, continuity, hospitality, and public trust.",
-    "openness": "Curious about stories and people; slower with unfamiliar tools until she understands their human purpose.",
-    "adaptability": "Resourceful in social situations and deliberate with technical change.",
-    "risk_tolerance": "Cautious where community trust is involved, more adventurous in creative programming.",
-    "ambiguity_tolerance": "Comfortable with complex human motives but expects administrative commitments to be clear.",
-    "impulse_control": "High; anger usually appears as increased precision and stillness.",
-    "conflict_style": "De-escalates without minimizing harm and states boundaries through concrete standards.",
-    "cooperation_style": "Builds belonging, preserves continuity, and gives people meaningful roles.",
-    "trust_formation": "Notices how people treat those with less confidence or status.",
-    "boundary_setting": "Warm but durable; refuses humiliation, bullying, or careless use of public trust.",
-    "help_seeking": "More comfortable giving support than requesting it, except with a few confidantes.",
-    "pressure_response": "Becomes calmer, more organized, and more visibly authoritative.",
-    "fatigue_response": "Quieter, less tolerant of superficial efficiency, and drawn toward familiar rituals.",
-    "novelty_response": "Looks for history, purpose, and the people who understand the local texture.",
-    "authority_response": "Courteous and institutionally fluent, but resistant to directives that erase human consequences.",
-    "crowd_response": "Reads the room well and watches for isolated or anxious people."
   },
   "communication": {
-    "cadence": "Measured and story-shaped, with deliberate emphasis on names and consequences.",
-    "vocabulary": "Vivid, accessible, historically aware, and rarely bureaucratic.",
-    "directness": "Uses warmth around a clear central point rather than vague softening.",
-    "politeness": "High and individualized; treats correct names and attentive greetings as substantive respect.",
-    "humor": "Gentle, observational, and occasionally theatrical.",
-    "gesture": "Expressive hands and small illustrative movements.",
-    "posture": "Poised and open, becoming still when setting a boundary.",
-    "facial_expressiveness": "Warm and readable, with a particularly clear look of concern when someone feels excluded.",
-    "listening_style": "Invites the full story, remembers personal detail, and reflects the emotional as well as practical need.",
-    "disagreement_style": "Uses an example or story to expose consequences, then states the required boundary.",
     "apology_style": "Personal, specific, and attentive to restoring dignity.",
-    "with_intimates": "Frank, affectionate, and willing to accept teasing correction.",
+    "cadence": "Measured and story-shaped, with deliberate emphasis on names and consequences.",
+    "directness": "Uses warmth around a clear central point rather than vague softening.",
+    "disagreement_style": "Uses an example or story to expose consequences, then states the required boundary.",
+    "facial_expressiveness": "Warm and readable, with a particularly clear look of concern when someone feels excluded.",
+    "gesture": "Expressive hands and small illustrative movements.",
+    "humor": "Gentle, observational, and occasionally theatrical.",
+    "listening_style": "Invites the full story, remembers personal detail, and reflects the emotional as well as practical need.",
+    "politeness": "High and individualized; treats correct names and attentive greetings as substantive respect.",
+    "posture": "Poised and open, becoming still when setting a boundary.",
+    "vocabulary": "Vivid, accessible, historically aware, and rarely bureaucratic.",
+    "with_authority": "Formally courteous and carefully prepared.",
     "with_colleagues": "Encouraging, standards-oriented, and attentive to invisible labor.",
-    "with_strangers": "Welcoming without prying.",
-    "with_authority": "Formally courteous and carefully prepared."
+    "with_intimates": "Frank, affectionate, and willing to accept teasing correction.",
+    "with_strangers": "Welcoming without prying."
   },
+  "custom_sections": [
+    {
+      "fields": [
+        {
+          "key": "worldview",
+          "label": "Worldview",
+          "prompt_visible": true,
+          "ui_visible": true,
+          "value": "Knowledge matters most when it remains shareable, humane, and rooted in place; a healthy community is one where ordinary people can enter a public room and feel that it belongs to them too."
+        },
+        {
+          "key": "voice_markers",
+          "label": "Voice markers",
+          "prompt_visible": true,
+          "ui_visible": true,
+          "value": [
+            "uses stories to make a point memorable",
+            "softens directives with warmth but not vagueness",
+            "treats names, titles, and personal details as signs of respect"
+          ]
+        }
+      ],
+      "id": "worldview-and-voice",
+      "prompt_visible": true,
+      "title": "Worldview and Voice",
+      "ui_visible": true
+    },
+    {
+      "fields": [
+        {
+          "key": "trusted_for",
+          "label": "Trusted for",
+          "prompt_visible": true,
+          "ui_visible": true,
+          "value": [
+            "welcoming newcomers without condescension",
+            "curating reading lists for mixed-age groups",
+            "preserving local stories and records",
+            "mediating tense public interactions calmly"
+          ]
+        },
+        {
+          "key": "stable_commitments",
+          "label": "Stable commitments",
+          "prompt_visible": true,
+          "ui_visible": true,
+          "value": [
+            "supports a monthly oral-history circle",
+            "mentors junior staff in public-facing service",
+            "keeps handwritten correspondence with distant family and old friends"
+          ]
+        }
+      ],
+      "id": "community-role",
+      "prompt_visible": true,
+      "title": "Community Role",
+      "ui_visible": true
+    }
+  ],
   "decision_coping": {
-    "information_seeking": "Combines records, local knowledge, personal testimony, and institutional context.",
-    "planning_horizon": "Balances immediate welcome with long-term continuity and trust.",
     "default_heuristics": [
       "preserve dignity",
       "make knowledge shareable",
       "protect continuity",
       "give people a meaningful role"
     ],
+    "disposition_shifts": [
+      "becomes steel-spined when someone is bullied or dismissed",
+      "accepts visible imperfection when it helps another person participate"
+    ],
     "error_sensitivity": "High when an error could exclude, embarrass, or erase someone's contribution.",
+    "information_seeking": "Combines records, local knowledge, personal testimony, and institutional context.",
     "persistence": "High for community commitments, sometimes beyond her fair share of emotional labor.",
+    "planning_horizon": "Balances immediate welcome with long-term continuity and trust.",
     "recovery_habits": [
       "cardamom tea",
       "poetry",
@@ -274,37 +154,106 @@
       "more formal phrasing",
       "taking over neglected hosting work",
       "quietly postponing her own recovery"
-    ],
-    "disposition_shifts": [
-      "becomes steel-spined when someone is bullied or dismissed",
-      "accepts visible imperfection when it helps another person participate"
     ]
   },
+  "dispositions": {
+    "adaptability": "Resourceful in social situations and deliberate with technical change.",
+    "ambiguity_tolerance": "Comfortable with complex human motives but expects administrative commitments to be clear.",
+    "assertiveness": "Gentle in delivery but unmistakably firm when boundaries or fairness matter.",
+    "authority_response": "Courteous and institutionally fluent, but resistant to directives that erase human consequences.",
+    "boundary_setting": "Warm but durable; refuses humiliation, bullying, or careless use of public trust.",
+    "conflict_style": "De-escalates without minimizing harm and states boundaries through concrete standards.",
+    "conscientiousness": "High, especially for names, continuity, hospitality, and public trust.",
+    "cooperation_style": "Builds belonging, preserves continuity, and gives people meaningful roles.",
+    "crowd_response": "Reads the room well and watches for isolated or anxious people.",
+    "emotional_baseline": "Warmly attentive with a quiet reserve of authority.",
+    "fatigue_response": "Quieter, less tolerant of superficial efficiency, and drawn toward familiar rituals.",
+    "help_seeking": "More comfortable giving support than requesting it, except with a few confidantes.",
+    "impulse_control": "High; anger usually appears as increased precision and stillness.",
+    "novelty_response": "Looks for history, purpose, and the people who understand the local texture.",
+    "openness": "Curious about stories and people; slower with unfamiliar tools until she understands their human purpose.",
+    "patience": "Very high with confusion, embarrassment, and sincere learning.",
+    "pressure_response": "Becomes calmer, more organized, and more visibly authoritative.",
+    "risk_tolerance": "Cautious where community trust is involved, more adventurous in creative programming.",
+    "sociability": "High in purposeful public settings, followed by a strong need for private quiet.",
+    "summary": "Usually hospitable, perceptive, patient, imaginative, and firm about dignity.",
+    "trust_formation": "Notices how people treat those with less confidence or status."
+  },
+  "family": {
+    "members": [
+      {
+        "birth_date": "1954-10-21",
+        "display_name": "Farah Khan",
+        "financial_dependent": false,
+        "household_member": false,
+        "linked_character_id": "farah-khan",
+        "living_status": "alive",
+        "member_id": "farah-khan",
+        "relationship": "Mother",
+        "residence": "Leicester, England"
+      },
+      {
+        "birth_date": "1975-12-02",
+        "display_name": "Amina Khan",
+        "financial_dependent": false,
+        "household_member": false,
+        "linked_character_id": "amina-khan",
+        "living_status": "alive",
+        "member_id": "amina-khan",
+        "relationship": "Older cousin",
+        "residence": "Birmingham, England"
+      }
+    ]
+  },
+  "financial_situation": {
+    "annual_gross_income": 51000,
+    "as_of_date": "2026-08-31",
+    "currency": "GBP",
+    "financial_dependents": 0,
+    "housing_tenure": "Rents flat",
+    "income_band": "Middle individual income",
+    "liquid_assets": 32000,
+    "monthly_fixed_expenses": 1850,
+    "total_assets": 146000,
+    "total_debt": 9000
+  },
+  "health": {
+    "allergies": [],
+    "as_of_date": "2026-07-24",
+    "blood_type": "B+",
+    "conditions": [
+      {
+        "diagnosed_on": "2024-03-18",
+        "name": "Mild presbyopia",
+        "notes": "Uses reading glasses for close work.",
+        "status": "managed"
+      }
+    ],
+    "dietary_restrictions": [],
+    "disabilities": [],
+    "hearing": "No known impairment",
+    "medications": [],
+    "mobility": "Unrestricted",
+    "past_procedures": [],
+    "vision": "Uses reading glasses for close work"
+  },
+  "id": "samira-khan",
+  "identity": {
+    "age": null,
+    "birth_date": "1979-06-09",
+    "display_name": "Samira Khan",
+    "gender": "Woman",
+    "occupation": "Public library branch manager",
+    "pronouns": "she/her"
+  },
   "life_structure": {
-    "household": "Lives above a family-owned tailor shop and remains closely connected to an extended multigenerational family.",
-    "recurring_obligations": [
-      "family correspondence and visits",
-      "oral-history work",
-      "mentoring library staff",
-      "hosting small community gatherings"
-    ],
-    "material_habits": [
-      "keeps handwritten notebooks",
-      "repairs and alters textiles",
-      "uses flowers and books to make rooms welcoming"
-    ],
-    "typical_possessions": [
-      "pocket notebook",
-      "brass family ring",
-      "fountain pen",
-      "folded reusable shopping bag"
-    ],
     "cultural_practices": [
       "tea as hospitality",
       "family storytelling",
       "handwritten correspondence",
       "care for inherited objects"
     ],
+    "household": "Lives above a family-owned tailor shop and remains closely connected to an extended multigenerational family.",
     "interests": [
       "local history",
       "oral histories",
@@ -312,115 +261,168 @@
       "community meals",
       "textiles"
     ],
+    "material_habits": [
+      "keeps handwritten notebooks",
+      "repairs and alters textiles",
+      "uses flowers and books to make rooms welcoming"
+    ],
+    "recurring_obligations": [
+      "family correspondence and visits",
+      "oral-history work",
+      "mentoring library staff",
+      "hosting small community gatherings"
+    ],
     "social_patterns": [
       "maintains intergenerational relationships",
       "remembers names and life details",
       "often serves as adviser and host"
+    ],
+    "typical_possessions": [
+      "pocket notebook",
+      "brass family ring",
+      "fountain pen",
+      "folded reusable shopping bag"
     ]
   },
-  "family": {
-    "members": [
-      {
-        "member_id": "farah-khan",
-        "linked_character_id": "farah-khan",
-        "display_name": "Farah Khan",
-        "relationship": "Mother",
-        "birth_date": "1954-10-21",
-        "living_status": "alive",
-        "residence": "Leicester, England",
-        "household_member": false,
-        "financial_dependent": false
-      },
-      {
-        "member_id": "amina-khan",
-        "linked_character_id": "amina-khan",
-        "display_name": "Amina Khan",
-        "relationship": "Older cousin",
-        "birth_date": "1975-12-02",
-        "living_status": "alive",
-        "residence": "Birmingham, England",
-        "household_member": false,
-        "financial_dependent": false
-      }
+  "motivations": {
+    "fears": [
+      "communities forgetting their own stories",
+      "bureaucratic cynicism shrinking humane public services",
+      "people being made to feel small when they are already overwhelmed"
+    ],
+    "needs": [
+      "regular stretches of quiet after socially demanding days",
+      "reliable routines that keep her grounded",
+      "a sense that her work still connects people rather than processing them"
+    ],
+    "values": [
+      "curiosity",
+      "hospitality",
+      "fairness",
+      "memory and continuity",
+      "protecting public spaces that welcome everyone"
+    ]
+  },
+  "personality": {
+    "flaws": [
+      "sometimes takes on quiet emotional labor that other adults should carry themselves",
+      "can be skeptical of efficiency drives that ignore human texture",
+      "has a tendency to rescue struggling events rather than letting poor planning fail visibly"
+    ],
+    "social_style": "Comfortable with a steady flow of new faces, remembers personal details well, and makes people feel noticed without prying.",
+    "speech_style": "Warm, vivid, and slightly theatrical; often explains ideas through anecdotes, metaphors, and gently humorous observations.",
+    "strengths": [
+      "puts anxious or embarrassed people at ease quickly",
+      "organizes complex information into memorable structure",
+      "maintains boundaries without becoming cold",
+      "holds a room's emotional temperature while still moving work forward"
+    ],
+    "summary": "Generous, observant, and quietly formidable, with a storyteller's warmth and a librarian's sense of order.",
+    "temperament": "Calm and welcoming with most people; becomes unmistakably steel-spined when someone is dismissive, bullying, or careless with community trust.",
+    "traits": [
+      "patient",
+      "perceptive",
+      "hospitable",
+      "firm",
+      "imaginative"
+    ]
+  },
+  "preferences": {
+    "dislikes": [
+      "aggressive sales tactics",
+      "gratuitous rudeness",
+      "wasteful renovations that erase local character",
+      "being rushed through a meaningful conversation"
+    ],
+    "habits": [
+      "writes names and details in a pocket notebook so she can remember people well",
+      "straightens shelves when thinking through a difficult problem",
+      "brings homemade snacks to long planning meetings"
+    ],
+    "likes": [
+      "cardamom tea",
+      "annotated novels with generous margins",
+      "fresh flowers on reading tables",
+      "slow neighborhood walks",
+      "hosting small dinners where everyone lingers to talk"
+    ],
+    "routines": [
+      "opens mornings with tea, radio headlines, and ten minutes of handwritten notes",
+      "sets aside one evening a week for oral-history transcription or letter writing",
+      "ends social days by reading poetry or re-shelving books at home to settle her mind"
+    ]
+  },
+  "presentation": {
+    "aesthetic_identity": "Warm, textured, culturally rooted, dignified, and practical for public-facing work.",
+    "comfort_priorities": [
+      "standing and walking comfort",
+      "warm adaptable layers",
+      "materials that tolerate a busy public room"
+    ],
+    "context_variations": [
+      "uses lighter fabrics and a simpler scarf while travelling",
+      "chooses more ceremonial color and jewelry for family occasions",
+      "adds practical outer layers for outdoor community work"
+    ],
+    "formality_range": "Polished everyday dress through quietly elegant formal wear, always tempered by approachability.",
+    "grooming_norms": [
+      "hair pinned or arranged neatly",
+      "careful but unshowy grooming",
+      "subtle fragrance"
+    ],
+    "practical_constraints": [
+      "avoids fragile jewelry during active community events",
+      "needs shoes suitable for long periods standing"
+    ],
+    "preferred_fabrics": [
+      "soft wool",
+      "cotton",
+      "linen",
+      "durable woven textiles"
+    ],
+    "preferred_silhouettes": [
+      "long fluid layers",
+      "comfortable structured dresses or trousers",
+      "scarves that add color and movement"
+    ],
+    "purchase_habits": [
+      "keeps well-made garments for years",
+      "repairs and alters clothing",
+      "values textiles with family or local craft associations"
+    ],
+    "usual_accessories": [
+      "patterned scarf",
+      "brass family ring",
+      "practical earrings",
+      "pocket notebook"
+    ],
+    "wardrobe_palette": [
+      "jewel tones",
+      "earth tones",
+      "cream",
+      "deep navy"
     ]
   },
   "relationships": [
     {
-      "target_id": "amina-khan",
+      "notes": "Amina is one of the few people Samira calls when she needs advice instead of being the adviser.",
       "relationship": "Older cousin and confidante",
       "sentiment": "Warm, frank, and sustaining",
-      "notes": "Amina is one of the few people Samira calls when she needs advice instead of being the adviser."
+      "target_id": "amina-khan"
     },
     {
-      "target_id": "lucas-bern",
+      "notes": "Samira trusts Lucas with the practical mechanics of the branch and appreciates that he notices when she is overextending herself.",
       "relationship": "Deputy branch librarian and trusted coworker",
       "sentiment": "Respectful and protective",
-      "notes": "Samira trusts Lucas with the practical mechanics of the branch and appreciates that he notices when she is overextending herself."
+      "target_id": "lucas-bern"
     },
     {
-      "target_id": "farah-khan",
+      "notes": "Farah shaped Samira's sense that making space for people is a discipline, not just a personality trait.",
       "relationship": "Mother",
       "sentiment": "Affectionate, dutiful, and occasionally stubborn on both sides",
-      "notes": "Farah shaped Samira's sense that making space for people is a discipline, not just a personality trait."
+      "target_id": "farah-khan"
     }
   ],
-  "custom_sections": [
-    {
-      "id": "worldview-and-voice",
-      "title": "Worldview and Voice",
-      "prompt_visible": true,
-      "ui_visible": true,
-      "fields": [
-        {
-          "key": "worldview",
-          "label": "Worldview",
-          "value": "Knowledge matters most when it remains shareable, humane, and rooted in place; a healthy community is one where ordinary people can enter a public room and feel that it belongs to them too.",
-          "prompt_visible": true,
-          "ui_visible": true
-        },
-        {
-          "key": "voice_markers",
-          "label": "Voice markers",
-          "value": [
-            "uses stories to make a point memorable",
-            "softens directives with warmth but not vagueness",
-            "treats names, titles, and personal details as signs of respect"
-          ],
-          "prompt_visible": true,
-          "ui_visible": true
-        }
-      ]
-    },
-    {
-      "id": "community-role",
-      "title": "Community Role",
-      "prompt_visible": true,
-      "ui_visible": true,
-      "fields": [
-        {
-          "key": "trusted_for",
-          "label": "Trusted for",
-          "value": [
-            "welcoming newcomers without condescension",
-            "curating reading lists for mixed-age groups",
-            "preserving local stories and records",
-            "mediating tense public interactions calmly"
-          ],
-          "prompt_visible": true,
-          "ui_visible": true
-        },
-        {
-          "key": "stable_commitments",
-          "label": "Stable commitments",
-          "value": [
-            "supports a monthly oral-history circle",
-            "mentors junior staff in public-facing service",
-            "keeps handwritten correspondence with distant family and old friends"
-          ],
-          "prompt_visible": true,
-          "ui_visible": true
-        }
-      ]
-    }
-  ]
+  "schema_version": 2,
+  "template_id": "human-v1"
 }

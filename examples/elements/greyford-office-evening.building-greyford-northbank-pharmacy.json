@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-northbank-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "6539fdfa06d688edf5875e58fcd262a2cd7fc5c0ba6bd196791d226974df5994",
+        "content_hash": "b8f6f61406eb7b92834ce68c6375b88024cf306405aa95735333c3dc3d992158",
         "id": "greyford-office-evening.map-greyford-northbank-pharmacy",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

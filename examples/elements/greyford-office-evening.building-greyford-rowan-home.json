@@ -3,6 +3,7 @@
   "description": "",
   "entrances": [
     {
+      "door_object_id": null,
       "id": "entrance-greyford-rowan-home-main",
       "key": "main",
       "local_coordinate": {
@@ -23,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "4b8edc89c211c1245767fa85cff3590882e8c52cb54b6c86ced47f545dcae541",
+        "content_hash": "8c7a4c1a8ef1bccf21062d10645b262a9f13510b5520cb3abfbe28584c737c1c",
         "id": "greyford-office-evening.map-greyford-rowan-home",
         "kind": "room"
       },
@@ -34,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 1
+  "schema_version": 3
 }

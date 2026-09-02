@@ -23,19 +23,23 @@ class NpcRole:
     )
     vision_range: int = 6
     recognition_range: int = 4
-    hearing_multiplier: float = 1.0
+    hearing_range: int = 10
+    smell_range: int = 0
 
     def __post_init__(self) -> None:
         if not self.id or not self.name:
             raise ValueError("NPC role id and name must not be empty")
         if not self.tool_allowlist:
             raise ValueError("NPC role tool allowlist must not be empty")
-        if self.vision_range < 0 or self.recognition_range < 0:
+        if min(
+            self.vision_range,
+            self.recognition_range,
+            self.hearing_range,
+            self.smell_range,
+        ) < 0:
             raise ValueError("NPC role sense ranges must not be negative")
-        if self.hearing_multiplier <= 0:
-            raise ValueError(
-                "NPC role hearing multiplier must be greater than zero"
-            )
+        if self.recognition_range > self.vision_range:
+            raise ValueError("NPC role recognition range must not exceed vision range")
 
 
 @dataclass(frozen=True, slots=True)

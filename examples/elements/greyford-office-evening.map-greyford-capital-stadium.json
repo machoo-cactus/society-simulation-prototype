@@ -21,12 +21,24 @@
   "objects": [
     {
       "element": {
-        "content_hash": "88d2e02bb64fd8a5818025076aacd7355509860e525cea07469bcd98debb1e8a",
+        "content_hash": "a831871d3693fbf01159abef2ae2ef27d33d10d073324a499cfa7a519e554e6d",
         "id": "greyford-office-evening.station-greyford-capital-stadium-primary",
         "kind": "object"
       },
       "id": "station-greyford-capital-stadium-primary",
       "key": "station-greyford-capital-stadium-primary",
+      "placement": {
+        "anchor": {
+          "x": 76,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
       "position": {
         "x": 8,
         "y": 4
@@ -35,7 +47,10 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 1,
+  "schema_version": 3,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
   "width": 10,
   "zones": [
     {

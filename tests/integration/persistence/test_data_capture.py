@@ -94,7 +94,7 @@ from stage0_sim.domain.world import (
     PhysicalPose,
     VisionObstruction,
 )
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_SCENARIOS
 
 
 class ExampleKind(StrEnum):
@@ -139,7 +139,7 @@ class _SlowModelClient(ModelClient):
 
 
 def scenario_path(name: str) -> Path:
-    return EXAMPLE_SCENARIOS / name
+    return CATALOG_SCENARIOS / name
 
 
 def _model_turn(name: str, arguments: dict[str, JsonValue]) -> ModelTurn:
@@ -1161,7 +1161,7 @@ def test_unsupported_state_and_unclassified_resources_fail_explicitly() -> None:
 
 
 def test_coverage_manifest_classifies_operational_resources() -> None:
-    scenario = load_scenario(scenario_path("minimal.json"))
+    scenario = load_scenario(scenario_path("baseline.json"))
     runner = create_runner(scenario, run_id="coverage")
 
     snapshot = capture_registry_state(runner.registry)
@@ -1187,7 +1187,7 @@ def test_collector_persists_phase_deltas_opportunities_and_population(
     tmp_path: Path,
 ) -> None:
     database = tmp_path / "capture.sqlite3"
-    scenario = load_scenario(scenario_path("system1-preemption.json"))
+    scenario = load_scenario(scenario_path("needs-and-preemption.json"))
     runner = create_runner(scenario, run_id="capture")
     store = SQLiteDatasetStore(database)
     collector = RunDataCollector(
@@ -1661,7 +1661,7 @@ def test_projection_rebuild_preserves_unfinished_interactions(
 def test_collection_does_not_change_canonical_simulation_behavior(
     tmp_path: Path,
 ) -> None:
-    scenario = load_scenario(scenario_path("system1-preemption.json"))
+    scenario = load_scenario(scenario_path("needs-and-preemption.json"))
     observed = create_runner(scenario, run_id="observed")
     baseline = create_runner(scenario, run_id="baseline")
     store = SQLiteDatasetStore(tmp_path / "canonical.sqlite3")
@@ -1684,7 +1684,7 @@ def test_collection_does_not_change_canonical_simulation_behavior(
 
 def test_derived_feature_output_is_deterministic(tmp_path: Path) -> None:
     def collect(database: Path) -> list[tuple[str, str, str, str]]:
-        scenario = load_scenario(scenario_path("system1-preemption.json"))
+        scenario = load_scenario(scenario_path("needs-and-preemption.json"))
         runner = create_runner(scenario, run_id="canonical-features")
         store = SQLiteDatasetStore(database)
         collector = RunDataCollector(

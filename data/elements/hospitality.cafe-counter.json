@@ -1,0 +1,426 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A staffed service counter with a long worktop for prepared drinks and customer exchange.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": {
+      "windows": [
+        {
+          "closes": "17:00:00",
+          "opens": "06:30:00",
+          "weekdays": [
+            "MONDAY",
+            "TUESDAY",
+            "WEDNESDAY",
+            "THURSDAY",
+            "FRIDAY"
+          ]
+        },
+        {
+          "closes": "16:00:00",
+          "opens": "07:00:00",
+          "weekdays": [
+            "SATURDAY",
+            "SUNDAY"
+          ]
+        }
+      ]
+    }
+  },
+  "holdings": {
+    "filter-coffee": 40,
+    "hot-tea": 30,
+    "morning-bun": 24,
+    "prepared-meal": 20
+  },
+  "id": "hospitality.cafe-counter",
+  "kind": "object",
+  "name": "Cafe Service Counter",
+  "npc_role": {
+    "content_hash": "680bbd051ca05224fd5a6f0578db24c456b8a9e11c226011ec4ef451cab5ec40",
+    "id": "hospitality.barista",
+    "kind": "npc_role"
+  },
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 4
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "filter-coffee",
+          "quantity": 1
+        }
+      ],
+      "duration": 5.0,
+      "id": "buy-filter-coffee",
+      "name": "Buy a filter coffee"
+    },
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 3
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "hot-tea",
+          "quantity": 1
+        }
+      ],
+      "duration": 5.0,
+      "id": "buy-tea",
+      "name": "Buy a cup of tea"
+    },
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 5
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "morning-bun",
+          "quantity": 1
+        }
+      ],
+      "duration": 5.0,
+      "id": "buy-morning-bun",
+      "name": "Buy a morning bun"
+    },
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 12
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "prepared-meal",
+          "quantity": 1
+        }
+      ],
+      "duration": 6.0,
+      "id": "buy-prepared-meal",
+      "name": "Buy a prepared meal"
+    }
+  ],
+  "operation": "STAFFED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "content_endpoints": [],
+      "openable": null,
+      "portable": null,
+      "readable": null,
+      "scent_source": null,
+      "slots": [
+        {
+          "accepted_relations": [
+            "ON_SUPPORT"
+          ],
+          "capacity": 8,
+          "id": "service-top"
+        }
+      ],
+      "support": {
+        "slot_ids": [
+          "service-top"
+        ]
+      },
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": -6,
+          "y": -2
+        },
+        {
+          "x": -5,
+          "y": -2
+        },
+        {
+          "x": -4,
+          "y": -2
+        },
+        {
+          "x": -3,
+          "y": -2
+        },
+        {
+          "x": -2,
+          "y": -2
+        },
+        {
+          "x": -1,
+          "y": -2
+        },
+        {
+          "x": 0,
+          "y": -2
+        },
+        {
+          "x": 1,
+          "y": -2
+        },
+        {
+          "x": 2,
+          "y": -2
+        },
+        {
+          "x": 3,
+          "y": -2
+        },
+        {
+          "x": 4,
+          "y": -2
+        },
+        {
+          "x": 5,
+          "y": -2
+        },
+        {
+          "x": 6,
+          "y": -2
+        },
+        {
+          "x": -6,
+          "y": -1
+        },
+        {
+          "x": -5,
+          "y": -1
+        },
+        {
+          "x": -4,
+          "y": -1
+        },
+        {
+          "x": -3,
+          "y": -1
+        },
+        {
+          "x": -2,
+          "y": -1
+        },
+        {
+          "x": -1,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 1,
+          "y": -1
+        },
+        {
+          "x": 2,
+          "y": -1
+        },
+        {
+          "x": 3,
+          "y": -1
+        },
+        {
+          "x": 4,
+          "y": -1
+        },
+        {
+          "x": 5,
+          "y": -1
+        },
+        {
+          "x": 6,
+          "y": -1
+        },
+        {
+          "x": -6,
+          "y": 0
+        },
+        {
+          "x": -5,
+          "y": 0
+        },
+        {
+          "x": -4,
+          "y": 0
+        },
+        {
+          "x": -3,
+          "y": 0
+        },
+        {
+          "x": -2,
+          "y": 0
+        },
+        {
+          "x": -1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 3,
+          "y": 0
+        },
+        {
+          "x": 4,
+          "y": 0
+        },
+        {
+          "x": 5,
+          "y": 0
+        },
+        {
+          "x": 6,
+          "y": 0
+        },
+        {
+          "x": -6,
+          "y": 1
+        },
+        {
+          "x": -5,
+          "y": 1
+        },
+        {
+          "x": -4,
+          "y": 1
+        },
+        {
+          "x": -3,
+          "y": 1
+        },
+        {
+          "x": -2,
+          "y": 1
+        },
+        {
+          "x": -1,
+          "y": 1
+        },
+        {
+          "x": 0,
+          "y": 1
+        },
+        {
+          "x": 1,
+          "y": 1
+        },
+        {
+          "x": 2,
+          "y": 1
+        },
+        {
+          "x": 3,
+          "y": 1
+        },
+        {
+          "x": 4,
+          "y": 1
+        },
+        {
+          "x": 5,
+          "y": 1
+        },
+        {
+          "x": 6,
+          "y": 1
+        },
+        {
+          "x": -6,
+          "y": 2
+        },
+        {
+          "x": -5,
+          "y": 2
+        },
+        {
+          "x": -4,
+          "y": 2
+        },
+        {
+          "x": -3,
+          "y": 2
+        },
+        {
+          "x": -2,
+          "y": 2
+        },
+        {
+          "x": -1,
+          "y": 2
+        },
+        {
+          "x": 0,
+          "y": 2
+        },
+        {
+          "x": 1,
+          "y": 2
+        },
+        {
+          "x": 2,
+          "y": 2
+        },
+        {
+          "x": 3,
+          "y": 2
+        },
+        {
+          "x": 4,
+          "y": 2
+        },
+        {
+          "x": 5,
+          "y": 2
+        },
+        {
+          "x": 6,
+          "y": 2
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "HARD",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 90.0,
+  "schema_version": 4,
+  "supported_actions": null
+}

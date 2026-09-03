@@ -20,7 +20,7 @@ from stage0_sim.application.engagements.contracts import (
 )
 from stage0_sim.application.scenario import create_runner, load_scenario
 from stage0_sim.domain.components import ControllerComponent, HomeostasisComponent
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import SCENARIO_FIXTURES
 
 pytestmark = pytest.mark.model_contract
 
@@ -181,9 +181,9 @@ def test_fake_endpoint_preserves_controller_wait_preference() -> None:
     assert calls[0]["function"]["name"] == "wait"
 
 
-def test_fake_endpoint_runs_canonical_engagement_demo() -> None:
+def test_fake_endpoint_runs_engagement_regression_fixture() -> None:
     runner = create_runner(
-        load_scenario(EXAMPLE_SCENARIOS / "engagement-demo.json"),
+        load_scenario(SCENARIO_FIXTURES / "engagement-demo.json"),
         model_client=_FakeEndpointModelClient(),
     )
 

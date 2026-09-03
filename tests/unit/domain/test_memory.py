@@ -6,7 +6,7 @@ from stage0_sim.adapters.persistence import SQLiteDatasetStore
 from stage0_sim.application.cognition import EmbeddingError
 from stage0_sim.application.memory import EpisodicMemoryStore, MemoryConfiguration
 from stage0_sim.application.scenario import create_runner, load_scenario
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_SCENARIOS
 
 
 @dataclass
@@ -132,7 +132,7 @@ def test_saved_memory_survives_close_without_run_finalization(
 
 
 def test_meaningful_events_are_recorded_but_routine_ticks_are_not() -> None:
-    scenario_path = EXAMPLE_SCENARIOS / "system1-preemption.json"
+    scenario_path = CATALOG_SCENARIOS / "needs-and-preemption.json"
     embedding_provider = FakeEmbeddingProvider()
     runner = create_runner(
         load_scenario(scenario_path),
@@ -153,7 +153,7 @@ def test_meaningful_events_are_recorded_but_routine_ticks_are_not() -> None:
 
 
 def test_physical_only_ticks_make_zero_embedding_calls() -> None:
-    scenario_path = EXAMPLE_SCENARIOS / "navigation.json"
+    scenario_path = CATALOG_SCENARIOS / "grid-navigation.json"
     provider = FakeEmbeddingProvider()
     runner = create_runner(
         load_scenario(scenario_path),
@@ -166,7 +166,7 @@ def test_physical_only_ticks_make_zero_embedding_calls() -> None:
 
 
 def test_embedding_failure_is_observable_and_does_not_stop_ticks() -> None:
-    scenario_path = EXAMPLE_SCENARIOS / "system1-preemption.json"
+    scenario_path = CATALOG_SCENARIOS / "needs-and-preemption.json"
     runner = create_runner(
         load_scenario(scenario_path),
         embedding_provider=FailingEmbeddingProvider(),

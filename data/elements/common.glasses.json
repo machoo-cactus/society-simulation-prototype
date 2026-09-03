@@ -1,0 +1,90 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "Portable corrective glasses that improve practical vision and recognition while equipped.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "common.glasses",
+  "kind": "object",
+  "name": "Prescription Glasses",
+  "npc_role": null,
+  "object_type": null,
+  "offers": [],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "content_endpoints": [],
+      "openable": null,
+      "portable": {
+        "two_handed": false
+      },
+      "readable": null,
+      "scent_source": null,
+      "slots": [],
+      "support": null,
+      "usable": null,
+      "wearable": {
+        "compatible_slots": [
+          "EYES"
+        ],
+        "effects": [
+          {
+            "id": "corrective-vision",
+            "operation": "ADD",
+            "target": "VISION_RANGE",
+            "value": 4.0
+          },
+          {
+            "id": "corrective-recognition",
+            "operation": "ADD",
+            "target": "RECOGNITION_RANGE",
+            "value": 4.0
+          }
+        ]
+      }
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": -1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": {
+        "height_cm": 4.0,
+        "length_cm": 14.0,
+        "width_cm": 3.0
+      },
+      "mass_kg": 0.03,
+      "size_class": "SMALL"
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "NONE",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 4,
+  "supported_actions": null
+}

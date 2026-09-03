@@ -7,7 +7,7 @@ import pytest
 from playwright.sync_api import Browser, Page, expect
 
 from tests.helpers.paths import (
-    EXAMPLE_SCENARIOS,
+    CATALOG_SCENARIOS,
     REPOSITORY_ROOT,
 )
 
@@ -17,16 +17,14 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _willowbrook_without_controllers() -> dict[str, object]:
+def _scenario_without_controllers(name: str) -> dict[str, object]:
     payload = json.loads(
-        (
-            EXAMPLE_SCENARIOS / "willowbrook-saturday-morning.json"
-        ).read_text(encoding="utf-8")
+        (CATALOG_SCENARIOS / name).read_text(encoding="utf-8")
     )
     for entity in payload["entities"]:
         entity["components"]["controller"]["enabled"] = False
     return {
-        "name": "willowbrook-saturday-morning.json",
+        "name": name,
         "mimeType": "application/json",
         "buffer": json.dumps(payload).encode(),
     }
@@ -368,21 +366,21 @@ def test_transaction_point_and_possessions_render_in_runtime_ui(
 ) -> None:
     payload = json.loads(
         (
-            EXAMPLE_SCENARIOS / "greyford-rivermarket-exchange.json"
+            CATALOG_SCENARIOS / "neighborhood-errand.json"
         ).read_text(encoding="utf-8")
     )
     components = payload["entities"][0]["components"]
     components["plan"]["queue"] = [
         {
             "action": "TRANSACT",
-            "target": "transaction-point-greyford-rivermarket-checkout",
-            "offer_id": "redeem-returnable-bottle",
+            "target": "building-riverbend-cafe.interior.counter",
+            "offer_id": "buy-filter-coffee",
         }
     ]
     components["spatial_location"] = {
         "scale": "BUILDING",
-        "place_id": "building-greyford-rivermarket-grocer-demo.interior",
-        "local_coordinate": {"x": 8, "y": 3},
+        "place_id": "building-riverbend-cafe.interior",
+        "local_coordinate": {"x": 3, "y": 3},
     }
     scenario_path = tmp_path / "transaction-ui.json"
     scenario_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -403,12 +401,8 @@ def test_transaction_point_and_possessions_render_in_runtime_ui(
     )
     inspector.get_by_role("checkbox", name="Live refresh").uncheck()
     character = inspector.get_by_role("combobox", name="Character")
-    character.select_option(
-        "character-greyford-rivermarket-shopper"
-    )
-    expect(character).to_have_value(
-        "character-greyford-rivermarket-shopper"
-    )
+    character.select_option("resident-shopper")
+    expect(character).to_have_value("resident-shopper")
     inspector.get_by_role("button", name="Inspect", exact=True).click()
     expect(
         inspector.get_by_role("heading", name="Possessions")
@@ -422,37 +416,37 @@ def test_transaction_point_and_possessions_render_in_runtime_ui(
     expect(
         world.get_by_role(
             "link",
-            name="Inspect object Bottle Return and Checkout Counter",
+            name="Inspect object Cafe Service Counter",
         )
     ).to_be_visible()
     possessions = page.get_by_role(
         "heading", name="Possessions"
     ).locator("..")
     expect(possessions).to_contain_text(
-        "Greyford cent: 475 minor currency unit"
+        "City credit: 479 credit"
     )
     expect(possessions).to_contain_text(
-        "Empty returnable glass bottle: 1 bottle"
+        "Empty returnable bottle: 1 bottle"
     )
     page.get_by_role("button", name="Single step").click()
     expect(
         world.get_by_role(
-            "link", name="Inspect Rivermarket Cashier"
+            "link", name="Inspect Cafe Barista"
         )
     ).to_be_visible()
     expect(
         page.get_by_text("npc.spawned", exact=True)
     ).to_be_visible()
-    page.get_by_role("button", name="Single step").click()
-    page.get_by_role("button", name="Single step").click()
+    for _ in range(5):
+        page.get_by_role("button", name="Single step").click()
     expect(possessions).to_contain_text(
-        "Greyford cent: 500 minor currency unit"
+        "City credit: 475 credit"
     )
     world.get_by_role(
-        "link", name="Inspect Rivermarket Cashier"
+        "link", name="Inspect Cafe Barista"
     ).click()
     expect(inspector).to_contain_text(
-        "Transient NPC · Rivermarket Cashier · deterministic"
+        "Transient NPC · Cafe Barista · deterministic"
     )
     expect(inspector).to_contain_text(
         "No physiological state is tracked for this transient NPC."
@@ -462,19 +456,22 @@ def test_transaction_point_and_possessions_render_in_runtime_ui(
 def test_city_scenario_has_server_rendered_city_controls(page: Page) -> None:
     page.goto("/ui/")
     page.get_by_label("Scenario JSON").set_input_files(
-        EXAMPLE_SCENARIOS / "sparse-city-car-demo.json"
+        CATALOG_SCENARIOS / "open-city-day.json"
     )
     page.get_by_role("button", name="Validate and stage").click()
     expect(page.get_by_role("img", name=re.compile("Staged city preview"))).to_be_visible()
-    page.get_by_role("button", name="Start run").click()
-    page.get_by_role("button", name="Pause").click()
-    expect(page.locator(".notice[role=status]")).to_contain_text(
-        "Simulation paused"
-    )
+    world = page.get_by_role("region", name="World")
+    world.get_by_role("checkbox", name="Live refresh").first.uncheck()
+    world.get_by_role("button", name="Apply view").click()
     page.get_by_text("Advanced scale override", exact=True).click()
     page.get_by_role("combobox", name="Scale").select_option("city")
     page.get_by_role("button", name="Apply view").click()
-    expect(page.get_by_role("img", name=re.compile(r"City ·"))).to_be_visible()
+    expect(
+        page.get_by_role(
+            "img",
+            name=re.compile(r"Staged city preview .* Open City"),
+        )
+    ).to_be_visible()
 
 
 def test_city_map_supports_unfocused_inspection_follow_and_semantic_zoom(
@@ -482,9 +479,12 @@ def test_city_map_supports_unfocused_inspection_follow_and_semantic_zoom(
 ) -> None:
     page.goto("/ui/")
     page.get_by_label("Scenario JSON").set_input_files(
-        EXAMPLE_SCENARIOS / "sparse-city-car-demo.json"
+        _scenario_without_controllers("community-meetup.json")
     )
     page.get_by_role("button", name="Validate and stage").click()
+    world = page.get_by_role("region", name="World")
+    world.get_by_role("checkbox", name="Live refresh").first.uncheck()
+    world.get_by_role("button", name="Apply view").click()
     page.get_by_role("button", name="Start run").click()
     page.get_by_role("button", name="Pause").click()
 
@@ -494,7 +494,7 @@ def test_city_map_supports_unfocused_inspection_follow_and_semantic_zoom(
             exact=True,
         )
     ).to_be_visible()
-    marker = page.get_by_role("link", name=re.compile(r"^Inspect "))
+    marker = page.get_by_role("link", name="Inspect Alex Chen")
     expect(marker).to_be_visible()
 
     viewport = page.locator("#world-render")
@@ -534,7 +534,7 @@ def test_operator_room_renders_physical_objects_and_accessible_selection(
 ) -> None:
     page.goto("/ui/")
     page.get_by_label("Scenario JSON").set_input_files(
-        _willowbrook_without_controllers()
+        _scenario_without_controllers("community-meetup.json")
     )
     page.get_by_role("button", name="Validate and stage").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
@@ -599,7 +599,7 @@ def test_physical_object_selection_remains_usable_without_javascript(
     try:
         page.goto("/ui/")
         page.get_by_label("Scenario JSON").set_input_files(
-            _willowbrook_without_controllers()
+            _scenario_without_controllers("community-meetup.json")
         )
         page.get_by_role("button", name="Validate and stage").click()
         page.get_by_role("button", name="Start run").click()
@@ -651,7 +651,7 @@ def test_physical_object_selection_remains_usable_without_javascript(
 def test_dense_city_labels_do_not_overlap_at_high_zoom(page: Page) -> None:
     page.goto("/ui/")
     page.get_by_label("Scenario JSON").set_input_files(
-        EXAMPLE_SCENARIOS / "greyford-office-evening.json"
+        CATALOG_SCENARIOS / "open-city-day.json"
     )
     page.get_by_role("button", name="Validate and stage").click()
     page.get_by_text("Advanced scale override", exact=True).click()

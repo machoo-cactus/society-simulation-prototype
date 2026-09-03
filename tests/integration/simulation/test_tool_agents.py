@@ -68,6 +68,7 @@ from stage0_sim.domain.world import (
     MovementObstruction,
     VisionObstruction,
 )
+from tests.helpers.paths import SCENARIO_FIXTURES
 
 
 def _turn(name: str, arguments: dict[str, JsonValue]) -> ModelTurn:
@@ -427,7 +428,7 @@ def test_controller_information_retrieval_failure_is_explicit() -> None:
 
 def test_embodied_text_read_is_delivered_on_the_next_decision() -> None:
     payload = json.loads(
-        Path("examples/scenarios/text-content-demo.json").read_text(
+        (SCENARIO_FIXTURES / "text-content-demo.json").read_text(
             encoding="utf-8"
         )
     )
@@ -488,7 +489,7 @@ def test_embodied_text_read_is_delivered_on_the_next_decision() -> None:
 
 def test_write_text_sends_one_recipient_message_atomically() -> None:
     payload = json.loads(
-        Path("examples/scenarios/text-content-demo.json").read_text(
+        (SCENARIO_FIXTURES / "text-content-demo.json").read_text(
             encoding="utf-8"
         )
     )

@@ -60,25 +60,25 @@ The installed package includes a self-contained deterministic demo:
 stage0-sim run demo --ticks 10
 ```
 
-Tracked, read-only authoring examples live in:
+The writable, version-controlled content catalog lives in:
 
-- `examples\scenarios\`
-- `examples\characters\`
-- `examples\elements\`
+- `data\scenarios\`
+- `data\characters\`
+- `data\elements\`
 
 For example:
 
 ```powershell
-stage0-sim run examples\scenarios\minimal.json `
-  --characters-dir examples\characters --ticks 10
+stage0-sim run data\scenarios\baseline.json `
+  --characters-dir data\characters --ticks 10
 
-stage0-sim run examples\scenarios\greyford-rivermarket-exchange.json `
-  --characters-dir examples\characters `
-  --elements-dir examples\elements --ticks 500
+stage0-sim run data\scenarios\neighborhood-errand.json `
+  --characters-dir data\characters `
+  --elements-dir data\elements --ticks 500
 ```
 
 Linux uses the same arguments with `/` path separators and `\` line
-continuations. See the [example catalog](examples/README.md) for each sample's
+continuations. See the [content catalog](data/README.md) for each scenario's
 purpose.
 
 Tool-controlled scenarios require an explicitly configured model provider.
@@ -89,16 +89,15 @@ stage0-fake-llm --host 127.0.0.1 --port 8081
 $env:STAGE0_LLM_PROVIDER = "openai-compatible"
 $env:STAGE0_LLM_BASE_URL = "http://127.0.0.1:8081/v1"
 $env:STAGE0_LLM_MODEL = "stage0-fake"
-stage0-sim run examples\scenarios\provider-character-controller.json `
-  --characters-dir examples\characters --ticks 30
-
-stage0-sim run examples\scenarios\engagement-demo.json --ticks 8
+stage0-sim run data\scenarios\community-meetup.json `
+  --characters-dir data\characters `
+  --elements-dir data\elements --ticks 30
 ```
 
 The fake endpoint keeps ordinary controller behavior deterministic and
-recognizes the separate `engagement_compilation` operation. The engagement
-demo exercises solo dancing plus a loud warning whose actual listeners are
-resolved by domain hearing and structural blocking.
+recognizes the separate `engagement_compilation` operation. The community
+meetup combines controller decisions, grounded engagement, physical
+interaction, and text communication in one reusable neighborhood.
 
 ## Core workflows
 

@@ -1,0 +1,219 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A closed storage cabinet with an accessible top and concealed interior.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "common.cabinet",
+  "kind": "object",
+  "name": "Storage Cabinet",
+  "npc_role": null,
+  "object_type": null,
+  "offers": [],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": {
+        "slot_ids": [
+          "interior"
+        ]
+      },
+      "content_endpoints": [],
+      "openable": {
+        "initially_locked": false
+      },
+      "portable": null,
+      "readable": null,
+      "scent_source": null,
+      "slots": [
+        {
+          "accepted_relations": [
+            "ON_SUPPORT"
+          ],
+          "capacity": 4,
+          "id": "top"
+        },
+        {
+          "accepted_relations": [
+            "IN_CONTAINER"
+          ],
+          "capacity": 10,
+          "id": "interior"
+        }
+      ],
+      "support": {
+        "slot_ids": [
+          "top"
+        ]
+      },
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": -3,
+          "y": -2
+        },
+        {
+          "x": -2,
+          "y": -2
+        },
+        {
+          "x": -1,
+          "y": -2
+        },
+        {
+          "x": 0,
+          "y": -2
+        },
+        {
+          "x": 1,
+          "y": -2
+        },
+        {
+          "x": 2,
+          "y": -2
+        },
+        {
+          "x": 3,
+          "y": -2
+        },
+        {
+          "x": -3,
+          "y": -1
+        },
+        {
+          "x": -2,
+          "y": -1
+        },
+        {
+          "x": -1,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 1,
+          "y": -1
+        },
+        {
+          "x": 2,
+          "y": -1
+        },
+        {
+          "x": 3,
+          "y": -1
+        },
+        {
+          "x": -3,
+          "y": 0
+        },
+        {
+          "x": -2,
+          "y": 0
+        },
+        {
+          "x": -1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 3,
+          "y": 0
+        },
+        {
+          "x": -3,
+          "y": 1
+        },
+        {
+          "x": -2,
+          "y": 1
+        },
+        {
+          "x": -1,
+          "y": 1
+        },
+        {
+          "x": 0,
+          "y": 1
+        },
+        {
+          "x": 1,
+          "y": 1
+        },
+        {
+          "x": 2,
+          "y": 1
+        },
+        {
+          "x": 3,
+          "y": 1
+        },
+        {
+          "x": -3,
+          "y": 2
+        },
+        {
+          "x": -2,
+          "y": 2
+        },
+        {
+          "x": -1,
+          "y": 2
+        },
+        {
+          "x": 0,
+          "y": 2
+        },
+        {
+          "x": 1,
+          "y": 2
+        },
+        {
+          "x": 2,
+          "y": 2
+        },
+        {
+          "x": 3,
+          "y": 2
+        }
+      ]
+    },
+    "initial_open": false,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "HARD",
+      "smell": "PASS",
+      "vision": "OPAQUE"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 4,
+  "supported_actions": null
+}

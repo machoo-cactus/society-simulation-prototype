@@ -10,7 +10,7 @@ from stage0_sim.application.scenario import (
     load_scenario,
 )
 from stage0_sim.cli import main
-from tests.helpers.paths import EXAMPLE_CHARACTERS, EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_CHARACTERS, CATALOG_SCENARIOS
 
 
 def test_scenario_loader_bootstraps_entities(tmp_path: Path) -> None:
@@ -55,7 +55,7 @@ def test_scenario_loader_rejects_duplicate_entities(tmp_path: Path) -> None:
 
 def test_cli_emits_canonical_jsonl(tmp_path: Path) -> None:
     output_path = tmp_path / "events.jsonl"
-    scenario_path = EXAMPLE_SCENARIOS / "minimal.json"
+    scenario_path = CATALOG_SCENARIOS / "baseline.json"
 
     exit_code = main(
         [
@@ -64,7 +64,7 @@ def test_cli_emits_canonical_jsonl(tmp_path: Path) -> None:
             "--ticks",
             "2",
             "--characters-dir",
-            str(EXAMPLE_CHARACTERS),
+            str(CATALOG_CHARACTERS),
             "--output",
             str(output_path),
         ]

@@ -1,0 +1,39 @@
+{
+  "available": true,
+  "description": "Reusable building archetype for portable city scenarios.",
+  "entrances": [
+    {
+      "door_object_id": "common.exterior-door",
+      "id": null,
+      "key": "front",
+      "local_coordinate": {
+        "x": 0,
+        "y": 4
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "residential.apartment",
+  "kind": "building",
+  "name": "Apartment Building",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "fc3600cf88843a48b4eba4f87d07664b2af3231f3131d7a6caa3749d1bd4e7a8",
+        "id": "residential.apartment-room",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 4
+}

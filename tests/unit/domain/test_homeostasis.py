@@ -9,11 +9,11 @@ from stage0_sim.domain.components import (
     HomeostasisConfiguration,
     default_activity_rates,
 )
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import SCENARIO_FIXTURES
 
 
 def test_working_trajectory_matches_configured_coefficients() -> None:
-    scenario_path = EXAMPLE_SCENARIOS / "homeostasis.json"
+    scenario_path = SCENARIO_FIXTURES / "homeostasis-trajectory.json"
     runner = create_runner(load_scenario(scenario_path), run_id="working")
 
     runner.run_for(10)
@@ -119,7 +119,7 @@ def test_default_configuration_covers_all_activity_types() -> None:
 
 
 def test_homeostasis_event_log_is_reproducible() -> None:
-    scenario_path = EXAMPLE_SCENARIOS / "homeostasis.json"
+    scenario_path = SCENARIO_FIXTURES / "homeostasis-trajectory.json"
     scenario = load_scenario(scenario_path)
     first = create_runner(scenario, run_id="first")
     second = create_runner(scenario, run_id="second")

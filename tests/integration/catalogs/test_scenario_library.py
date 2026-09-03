@@ -16,7 +16,7 @@ from stage0_sim.application.scenarios import (
     scenario_content_hash,
 )
 from stage0_sim.config import Settings
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_SCENARIOS
 
 
 def scenario(
@@ -123,7 +123,7 @@ def test_scenario_summaries_are_sorted_and_report_world_kind(
         "a-grid",
         scenario("Grid world", world={"width": 2, "height": 3}),
     )
-    city_source = EXAMPLE_SCENARIOS / "reference-city-restaurants.json"
+    city_source = CATALOG_SCENARIOS / "neighborhood-errand.json"
     city = ScenarioSourceDefinition.model_validate_json(
         city_source.read_text(encoding="utf-8")
     )
@@ -260,7 +260,7 @@ def test_current_reference_scenario_round_trips_without_flattening(
     tmp_path: Path,
 ) -> None:
     library = FileSystemScenarioLibrary(tmp_path)
-    path = EXAMPLE_SCENARIOS / "reference-city-restaurants.json"
+    path = CATALOG_SCENARIOS / "neighborhood-errand.json"
     original = ScenarioSourceDefinition.model_validate_json(
         path.read_text(encoding="utf-8")
     )

@@ -65,13 +65,16 @@ stress delta. They are simulation policy, not model-supplied numeric writes.
 The bundled `stage0-fake-llm` endpoint distinguishes ordinary character
 controller requests from `engagement_compilation` requests and returns strict
 deterministic `compile_engagement` calls for expressive, auditory, and bounded
-activity examples. See `examples\scenarios\engagement-demo.json`.
+activity examples. See `data\scenarios\community-meetup.json`.
 
-## Catalogs and examples
+## Content catalogs
 
-The `data\` libraries are writable and ignored by Git. Tracked examples under
-`examples\` are read-only references. The installed `stage0-sim run demo`
-resource is packaged separately and does not depend on the checkout.
+The `data\characters`, `data\scenarios`, and `data\elements` libraries are
+writable and tracked by Git. Generated datasets and content backups remain
+untracked under `data\runs`, `data\backups`, and
+`data\migration-backups`. The installed
+`stage0-sim run demo` resource is packaged separately and does not depend on
+the checkout.
 
 ## Server settings
 

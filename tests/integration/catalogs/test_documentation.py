@@ -23,7 +23,7 @@ def _markdown_documents() -> tuple[Path, ...]:
     return (
         REPOSITORY_ROOT / "README.md",
         REPOSITORY_ROOT / ".github" / "copilot-instructions.md",
-        REPOSITORY_ROOT / "examples" / "README.md",
+        REPOSITORY_ROOT / "data" / "README.md",
         *sorted((REPOSITORY_ROOT / "docs").rglob("*.md")),
     )
 

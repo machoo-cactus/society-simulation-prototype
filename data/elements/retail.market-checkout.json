@@ -1,0 +1,355 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A self-checkout cabinet with a clear bagging surface and customer approach space.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": {
+      "windows": [
+        {
+          "closes": "20:00:00",
+          "opens": "08:00:00",
+          "weekdays": [
+            "MONDAY",
+            "TUESDAY",
+            "WEDNESDAY",
+            "THURSDAY",
+            "FRIDAY",
+            "SATURDAY",
+            "SUNDAY"
+          ]
+        }
+      ]
+    }
+  },
+  "holdings": {
+    "bread-loaf": 16,
+    "city-credit": 5000,
+    "health-kit": 8,
+    "local-apples": 20,
+    "packed-lunch": 12,
+    "returnable-bottle": 0
+  },
+  "id": "retail.market-checkout",
+  "kind": "object",
+  "name": "Market Checkout and Bottle Return",
+  "npc_role": null,
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "returnable-bottle",
+          "quantity": 1
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 25
+        }
+      ],
+      "duration": 2.0,
+      "id": "redeem-returnable-bottle",
+      "name": "Redeem one returnable bottle"
+    },
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 500
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "packed-lunch",
+          "quantity": 1
+        }
+      ],
+      "duration": 2.0,
+      "id": "buy-packed-lunch",
+      "name": "Buy one packed lunch"
+    },
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 6
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "local-apples",
+          "quantity": 1
+        }
+      ],
+      "duration": 4.0,
+      "id": "buy-local-apples",
+      "name": "Buy a bag of local apples"
+    },
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 5
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "bread-loaf",
+          "quantity": 1
+        }
+      ],
+      "duration": 4.0,
+      "id": "buy-bread-loaf",
+      "name": "Buy a loaf of bread"
+    },
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 18
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "health-kit",
+          "quantity": 1
+        }
+      ],
+      "duration": 4.0,
+      "id": "buy-health-kit",
+      "name": "Buy a basic health kit"
+    }
+  ],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "content_endpoints": [],
+      "openable": null,
+      "portable": null,
+      "readable": null,
+      "scent_source": null,
+      "slots": [
+        {
+          "accepted_relations": [
+            "ON_SUPPORT"
+          ],
+          "capacity": 4,
+          "id": "bagging-top"
+        }
+      ],
+      "support": {
+        "slot_ids": [
+          "bagging-top"
+        ]
+      },
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": -4,
+          "y": -2
+        },
+        {
+          "x": -3,
+          "y": -2
+        },
+        {
+          "x": -2,
+          "y": -2
+        },
+        {
+          "x": -1,
+          "y": -2
+        },
+        {
+          "x": 0,
+          "y": -2
+        },
+        {
+          "x": 1,
+          "y": -2
+        },
+        {
+          "x": 2,
+          "y": -2
+        },
+        {
+          "x": 3,
+          "y": -2
+        },
+        {
+          "x": 4,
+          "y": -2
+        },
+        {
+          "x": -4,
+          "y": -1
+        },
+        {
+          "x": -3,
+          "y": -1
+        },
+        {
+          "x": -2,
+          "y": -1
+        },
+        {
+          "x": -1,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 1,
+          "y": -1
+        },
+        {
+          "x": 2,
+          "y": -1
+        },
+        {
+          "x": 3,
+          "y": -1
+        },
+        {
+          "x": 4,
+          "y": -1
+        },
+        {
+          "x": -4,
+          "y": 0
+        },
+        {
+          "x": -3,
+          "y": 0
+        },
+        {
+          "x": -2,
+          "y": 0
+        },
+        {
+          "x": -1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 3,
+          "y": 0
+        },
+        {
+          "x": 4,
+          "y": 0
+        },
+        {
+          "x": -4,
+          "y": 1
+        },
+        {
+          "x": -3,
+          "y": 1
+        },
+        {
+          "x": -2,
+          "y": 1
+        },
+        {
+          "x": -1,
+          "y": 1
+        },
+        {
+          "x": 0,
+          "y": 1
+        },
+        {
+          "x": 1,
+          "y": 1
+        },
+        {
+          "x": 2,
+          "y": 1
+        },
+        {
+          "x": 3,
+          "y": 1
+        },
+        {
+          "x": 4,
+          "y": 1
+        },
+        {
+          "x": -4,
+          "y": 2
+        },
+        {
+          "x": -3,
+          "y": 2
+        },
+        {
+          "x": -2,
+          "y": 2
+        },
+        {
+          "x": -1,
+          "y": 2
+        },
+        {
+          "x": 0,
+          "y": 2
+        },
+        {
+          "x": 1,
+          "y": 2
+        },
+        {
+          "x": 2,
+          "y": 2
+        },
+        {
+          "x": 3,
+          "y": 2
+        },
+        {
+          "x": 4,
+          "y": 2
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "HARD",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 4,
+  "supported_actions": null
+}

@@ -1,0 +1,282 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "Automated ticket machine for reusable mobility hubs.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": {
+      "windows": [
+        {
+          "closes": "20:00:00",
+          "opens": "08:00:00",
+          "weekdays": [
+            "MONDAY",
+            "TUESDAY",
+            "WEDNESDAY",
+            "THURSDAY",
+            "FRIDAY",
+            "SATURDAY",
+            "SUNDAY"
+          ]
+        }
+      ]
+    }
+  },
+  "holdings": {
+    "transit-pass": 100
+  },
+  "id": "mobility.ticket-machine",
+  "kind": "object",
+  "name": "Transit Ticket Machine",
+  "npc_role": null,
+  "object_type": "transaction",
+  "offers": [
+    {
+      "character_gives": [
+        {
+          "item_id": "city-credit",
+          "quantity": 3
+        }
+      ],
+      "character_receives": [
+        {
+          "item_id": "transit-pass",
+          "quantity": 1
+        }
+      ],
+      "duration": 2.0,
+      "id": "buy-day-pass",
+      "name": "Buy a day transit pass"
+    }
+  ],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "content_endpoints": [],
+      "openable": null,
+      "portable": null,
+      "readable": null,
+      "scent_source": null,
+      "slots": [
+        {
+          "accepted_relations": [
+            "ON_SUPPORT"
+          ],
+          "capacity": 4,
+          "id": "bagging-top"
+        }
+      ],
+      "support": {
+        "slot_ids": [
+          "bagging-top"
+        ]
+      },
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": -4,
+          "y": -2
+        },
+        {
+          "x": -3,
+          "y": -2
+        },
+        {
+          "x": -2,
+          "y": -2
+        },
+        {
+          "x": -1,
+          "y": -2
+        },
+        {
+          "x": 0,
+          "y": -2
+        },
+        {
+          "x": 1,
+          "y": -2
+        },
+        {
+          "x": 2,
+          "y": -2
+        },
+        {
+          "x": 3,
+          "y": -2
+        },
+        {
+          "x": 4,
+          "y": -2
+        },
+        {
+          "x": -4,
+          "y": -1
+        },
+        {
+          "x": -3,
+          "y": -1
+        },
+        {
+          "x": -2,
+          "y": -1
+        },
+        {
+          "x": -1,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 1,
+          "y": -1
+        },
+        {
+          "x": 2,
+          "y": -1
+        },
+        {
+          "x": 3,
+          "y": -1
+        },
+        {
+          "x": 4,
+          "y": -1
+        },
+        {
+          "x": -4,
+          "y": 0
+        },
+        {
+          "x": -3,
+          "y": 0
+        },
+        {
+          "x": -2,
+          "y": 0
+        },
+        {
+          "x": -1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 3,
+          "y": 0
+        },
+        {
+          "x": 4,
+          "y": 0
+        },
+        {
+          "x": -4,
+          "y": 1
+        },
+        {
+          "x": -3,
+          "y": 1
+        },
+        {
+          "x": -2,
+          "y": 1
+        },
+        {
+          "x": -1,
+          "y": 1
+        },
+        {
+          "x": 0,
+          "y": 1
+        },
+        {
+          "x": 1,
+          "y": 1
+        },
+        {
+          "x": 2,
+          "y": 1
+        },
+        {
+          "x": 3,
+          "y": 1
+        },
+        {
+          "x": 4,
+          "y": 1
+        },
+        {
+          "x": -4,
+          "y": 2
+        },
+        {
+          "x": -3,
+          "y": 2
+        },
+        {
+          "x": -2,
+          "y": 2
+        },
+        {
+          "x": -1,
+          "y": 2
+        },
+        {
+          "x": 0,
+          "y": 2
+        },
+        {
+          "x": 1,
+          "y": 2
+        },
+        {
+          "x": 2,
+          "y": 2
+        },
+        {
+          "x": 3,
+          "y": 2
+        },
+        {
+          "x": 4,
+          "y": 2
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "HARD",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 4,
+  "supported_actions": null
+}

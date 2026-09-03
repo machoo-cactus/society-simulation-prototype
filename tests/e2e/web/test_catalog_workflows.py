@@ -7,7 +7,7 @@ import pytest
 from playwright.sync_api import Browser, Page, expect
 
 from tests.helpers.paths import (
-    EXAMPLE_SCENARIOS,
+    CATALOG_SCENARIOS,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -130,7 +130,7 @@ def test_scenario_editor_keeps_save_and_stage_separate(page: Page) -> None:
 
 
 def test_scenario_editor_uses_map_selection_and_city_drill_down(page: Page) -> None:
-    page.goto("/ui/scenarios/?selected=navigation")
+    page.goto("/ui/scenarios/?selected=grid-navigation")
     expect(page.get_by_role("img", name="Grid world")).to_be_visible()
     station = page.locator(".scenario-object-explorer").get_by_role(
         "link", name=re.compile(r"Kitchen Fridge")
@@ -152,16 +152,16 @@ def test_scenario_editor_uses_map_selection_and_city_drill_down(page: Page) -> N
     )
     assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
 
-    page.goto("/ui/scenarios/?selected=reference-city-restaurants")
+    page.goto("/ui/scenarios/?selected=neighborhood-errand")
     edge = page.locator(".scenario-object-explorer").get_by_role(
-        "link", name=re.compile(r"market-walk")
+        "link", name=re.compile(r"edge-riverbend-home-market")
     )
     edge.click()
     expect(page.locator("#scenario-object-inspector")).to_contain_text(
         "transport › edges"
     )
     building = page.locator(".scenario-object-explorer").get_by_role(
-        "link", name=re.compile(r"Standard Restaurant")
+        "link", name=re.compile(r"Riverbend Market")
     ).first
     building.click()
     local_map = page.get_by_role("link", name=re.compile(r"^Open .* interior$"))
@@ -171,39 +171,60 @@ def test_scenario_editor_uses_map_selection_and_city_drill_down(page: Page) -> N
         page.get_by_role("img", name=re.compile(r"^Building interior ·"))
     ).to_be_visible()
     expect(page.get_by_role("navigation", name="World hierarchy")).to_contain_text(
-        "Market Zone"
+        "Riverbend"
     )
 
 
 def test_saved_building_references_keep_isolated_overrides(
     page: Page,
 ) -> None:
-    page.goto("/ui/scenarios/?selected=reference-city-restaurants")
+    page.goto("/ui/scenarios/?selected=community-meetup")
     explorer = page.locator(".scenario-object-explorer")
     expect(
         explorer.get_by_role(
             "link",
-            name=re.compile(r"Standard Restaurant|East Market Restaurant"),
+            name=re.compile(r"West Row Townhouse|East Row Townhouse"),
         )
     ).to_have_count(2)
 
-    explorer.get_by_role("link", name=re.compile(r"Market Zone")).click()
+    explorer.get_by_role(
+        "link", name=re.compile(r"Community District")
+    ).first.click()
     inspector = page.locator("#scenario-object-inspector")
-    expect(inspector.get_by_text("standard-restaurant", exact=True)).to_be_visible()
+    expect(
+        inspector.get_by_text("residential.townhouse", exact=True)
+    ).to_be_visible()
     expect(
         inspector.get_by_text(re.compile(r"SHA-256 [0-9a-f]{64}")).first
     ).to_be_visible()
-    inspector.get_by_role("button", name="Add Standard Restaurant").click()
+    inspector.get_by_role("button", name="Add Townhouse").click()
     expect(
         explorer.get_by_role(
             "link",
-            name=re.compile(r"Standard Restaurant|East Market Restaurant"),
+            name=re.compile(r"^Townhouse building instance"),
         )
-    ).to_have_count(3)
+    ).to_be_visible()
+    page.get_by_role("button", name="Save scenario").click()
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "Saved community-meetup"
+    )
+    added_download = page.request.get(
+        "/ui/scenarios/community-meetup/download"
+    )
+    assert added_download.ok
+    added_saved = added_download.json()
+    assert "residential.townhouse" in added_saved["world"]["building_order"]
+    added_building = next(
+        item
+        for item in added_saved["world"]["city_zones"][0]["buildings"]
+        if item["id"] == "residential.townhouse"
+    )
+    assert added_building["element"]["id"] == "residential.townhouse"
+    assert len(added_building["element"]["content_hash"]) == 64
 
     explorer.get_by_role(
         "link",
-        name=re.compile(r"Standard Restaurant"),
+        name=re.compile(r"West Row Townhouse"),
     ).first.click()
     expect(
         inspector.get_by_role("heading", name="Inherited building definition")
@@ -212,49 +233,45 @@ def test_saved_building_references_keep_isolated_overrides(
         "region",
         name="Inherited building definition",
     )
-    expect(inherited).to_contain_text("Restaurant Dining Room")
-    expect(inherited).to_contain_text("Restaurant Checkout")
-    expect(inherited).to_contain_text("NPC Restaurant Server")
+    expect(inherited).to_contain_text("Furnished Townhouse")
+    expect(inherited).to_contain_text("residential.townhouse-room")
 
     inspector.locator("summary", has_text=re.compile(r"^Overrides$")).click()
-    inspector.get_by_label("Include Name").select_option("present")
-    inspector.get_by_role("button", name="Apply selected changes").click()
-    inspector.locator("summary", has_text=re.compile(r"^Overrides$")).click()
-    inspector.get_by_label("Name", exact=True).fill("West Browser Restaurant")
+    inspector.get_by_label("Name", exact=True).fill("Browser Townhouse")
     page.get_by_role("button", name="Save scenario").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
-        "Saved reference-city-restaurants"
+        "Saved community-meetup"
     )
     expect(
-        explorer.get_by_role("link", name=re.compile("West Browser Restaurant"))
+        explorer.get_by_role("link", name=re.compile("Browser Townhouse"))
     ).to_be_visible()
     expect(
-        explorer.get_by_role("link", name=re.compile("East Market Restaurant"))
+        explorer.get_by_role("link", name=re.compile("East Row Townhouse"))
     ).to_be_visible()
 
     explorer.get_by_role(
         "link",
-        name=re.compile("West Browser Restaurant"),
+        name=re.compile("Browser Townhouse"),
     ).click()
     inspector.get_by_role("button", name="Reset building overrides").click()
     page.get_by_role("button", name="Save scenario").click()
     expect(
-        explorer.get_by_role("link", name=re.compile("Standard Restaurant"))
+        explorer.get_by_role("link", name=re.compile(r"^Townhouse building instance"))
     ).to_have_count(2)
     expect(
-        explorer.get_by_role("link", name=re.compile("East Market Restaurant"))
+        explorer.get_by_role("link", name=re.compile("East Row Townhouse"))
     ).to_be_visible()
 
     download = page.request.get(
-        "/ui/scenarios/reference-city-restaurants/download"
+        "/ui/scenarios/community-meetup/download"
     )
     assert download.ok
     saved = download.json()
     buildings = saved["world"]["city_zones"][0]["buildings"]
-    assert len(buildings) == 3
-    assert {item["element"]["id"] for item in buildings} == {
-        "standard-restaurant"
-    }
+    assert len(buildings) == 8
+    assert [
+        item["element"]["id"] for item in buildings
+    ].count("residential.townhouse") == 3
     assert "local_maps" not in saved["world"]
 
 
@@ -263,7 +280,7 @@ def test_saved_missing_and_hash_drift_dependencies_block_staging(
     ui_library_paths: tuple[Path, Path],
 ) -> None:
     scenario_directory, element_directory = ui_library_paths
-    reference_path = scenario_directory / "reference-city-restaurants.json"
+    reference_path = scenario_directory / "neighborhood-errand.json"
     missing_path = scenario_directory / "missing-browser-dependency.json"
     source = json.loads(reference_path.read_text(encoding="utf-8"))
     source["name"] = "Missing Browser Dependency"
@@ -282,7 +299,7 @@ def test_saved_missing_and_hash_drift_dependencies_block_staging(
     )
     expect(page.get_by_role("button", name="Start run")).to_be_disabled()
 
-    building_path = element_directory / "standard-restaurant.json"
+    building_path = element_directory / "retail.market.json"
     original = building_path.read_text(encoding="utf-8")
     try:
         changed = json.loads(original)
@@ -293,7 +310,7 @@ def test_saved_missing_and_hash_drift_dependencies_block_staging(
         )
         page.goto("/ui/")
         page.get_by_label("Saved scenario").select_option(
-            "reference-city-restaurants"
+            "neighborhood-errand"
         )
         page.get_by_role("button", name="Stage selected saved scenario").click()
         expect(page.locator(".notice[role=alert]")).to_contain_text(
@@ -312,7 +329,7 @@ def test_element_library_crud_is_accessible_and_hash_protected(
 ) -> None:
     page.goto("/ui/elements/?kind=npc_role")
     expect(page.get_by_role("heading", name="Element Library")).to_be_visible()
-    expect(page.get_by_text("schema version 2", exact=False)).to_be_visible()
+    expect(page.get_by_text("schema version 4", exact=False)).to_be_visible()
     page.get_by_label("Element resource ID").fill("playwright-server")
     page.get_by_label("Name", exact=True).fill("Playwright Server")
     page.get_by_label("Description", exact=True).fill(
@@ -373,21 +390,21 @@ def test_element_library_crud_is_accessible_and_hash_protected(
         context.close()
 
 
-def test_reference_scenario_resolves_shared_restaurant_elements(
+def test_reference_scenario_resolves_shared_city_elements(
     page: Page,
 ) -> None:
     page.goto("/ui/")
     page.get_by_label("Scenario JSON").set_input_files(
-        EXAMPLE_SCENARIOS / "reference-city-restaurants.json"
+        CATALOG_SCENARIOS / "neighborhood-errand.json"
     )
     page.get_by_role("button", name="Validate and stage").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
-        "reference-city-restaurants is validated and staged"
+        "neighborhood-errand is validated and staged"
     )
     expect(
         page.get_by_role("img", name=re.compile("Staged city preview"))
     ).to_be_visible()
-    expect(page.locator("#world-render .building")).to_have_count(2)
+    expect(page.locator("#world-render .building")).to_have_count(3)
     page.get_by_role("button", name="Start run").click()
     page.get_by_role("button", name="Pause").click()
     page.get_by_text("Advanced scale override", exact=True).click()
@@ -402,9 +419,9 @@ def test_reference_scenario_resolves_shared_restaurant_elements(
 def test_scenario_editor_renders_staffed_transaction_positions(
     page: Page,
 ) -> None:
-    page.goto("/ui/scenarios/?selected=reference-city-restaurants")
+    page.goto("/ui/scenarios/?selected=neighborhood-errand")
     building = page.locator(".scenario-object-explorer").get_by_role(
-        "link", name=re.compile(r"Standard Restaurant")
+        "link", name=re.compile(r"Riverside Cafe")
     ).first
     building.click()
     page.get_by_role("link", name=re.compile(r"^Open .* interior$")).click()
@@ -414,7 +431,7 @@ def test_scenario_editor_renders_staffed_transaction_positions(
             "link",
             name=(
                 "Edit transaction point "
-                "Restaurant Checkout"
+                "Cafe Service Counter"
             ),
         )
     ).to_be_visible()
@@ -423,18 +440,18 @@ def test_scenario_editor_renders_staffed_transaction_positions(
             "img",
             name=(
                 "Staff position for "
-                "Restaurant Checkout"
+                "Cafe Service Counter"
             ),
         )
     ).to_be_visible()
 
 
 def test_large_city_scenario_submits_the_native_structured_form(page: Page) -> None:
-    page.goto("/ui/scenarios/?selected=reference-city-restaurants")
+    page.goto("/ui/scenarios/?selected=open-city-day")
     expect(
-        page.get_by_role("heading", name="reference-city-restaurants")
+        page.get_by_role("heading", name="open-city-day")
     ).to_be_visible()
     page.get_by_role("button", name="Save scenario").click()
     expect(page.locator(".notice[role=status]")).to_contain_text(
-        "Saved reference-city-restaurants"
+        "Saved open-city-day"
     )

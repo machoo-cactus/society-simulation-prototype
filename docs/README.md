@@ -23,7 +23,7 @@ identifiers have one owner: [Current contracts](CURRENT_CONTRACTS.md).
 | Select valid tools, actions, criteria, and event names | [Actions, tools, and events](ACTIONS_AND_EVENTS.md) |
 | Understand character-agent actions, requirements, information retrieval, and outcomes | [Character agent actions and decision flow](CHARACTER_AGENT_ACTIONS.md) |
 | Author text artifacts, endpoints, access policies, and in-world mailboxes | [Text content and character read/write actions](TEXT_CONTENT.md) |
-| Choose and copy a tracked sample | [Example catalog](../examples/README.md) |
+| Browse and edit tracked content | [Content catalog](../data/README.md) |
 
 ## Researchers
 

@@ -1,0 +1,84 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A solid exterior door used at a building entrance.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "common.exterior-door",
+  "kind": "object",
+  "name": "Exterior Door",
+  "npc_role": null,
+  "object_type": null,
+  "offers": [],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "content_endpoints": [],
+      "openable": {
+        "initially_locked": false
+      },
+      "portable": null,
+      "readable": null,
+      "scent_source": null,
+      "slots": [],
+      "support": null,
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": 0,
+          "y": -3
+        },
+        {
+          "x": 0,
+          "y": -2
+        },
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 1
+        },
+        {
+          "x": 0,
+          "y": 2
+        },
+        {
+          "x": 0,
+          "y": 3
+        }
+      ]
+    },
+    "initial_open": false,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "BLOCK",
+      "movement": "HARD",
+      "smell": "BLOCK",
+      "vision": "OPAQUE"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 4,
+  "supported_actions": null
+}

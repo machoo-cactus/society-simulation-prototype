@@ -1,0 +1,284 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 2,
+  "description": "A two-person household sofa with a broad obstructing footprint and shared seating.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "residential.sofa",
+  "kind": "object",
+  "name": "Home Sofa",
+  "npc_role": null,
+  "object_type": "affordance",
+  "offers": [],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "content_endpoints": [],
+      "openable": null,
+      "portable": null,
+      "readable": null,
+      "scent_source": null,
+      "slots": [
+        {
+          "accepted_relations": [
+            "OCCUPIES_SLOT"
+          ],
+          "capacity": 2,
+          "id": "seating"
+        }
+      ],
+      "support": null,
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": -5,
+          "y": -2
+        },
+        {
+          "x": -4,
+          "y": -2
+        },
+        {
+          "x": -3,
+          "y": -2
+        },
+        {
+          "x": -2,
+          "y": -2
+        },
+        {
+          "x": -1,
+          "y": -2
+        },
+        {
+          "x": 0,
+          "y": -2
+        },
+        {
+          "x": 1,
+          "y": -2
+        },
+        {
+          "x": 2,
+          "y": -2
+        },
+        {
+          "x": 3,
+          "y": -2
+        },
+        {
+          "x": 4,
+          "y": -2
+        },
+        {
+          "x": 5,
+          "y": -2
+        },
+        {
+          "x": -5,
+          "y": -1
+        },
+        {
+          "x": -4,
+          "y": -1
+        },
+        {
+          "x": -3,
+          "y": -1
+        },
+        {
+          "x": -2,
+          "y": -1
+        },
+        {
+          "x": -1,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 1,
+          "y": -1
+        },
+        {
+          "x": 2,
+          "y": -1
+        },
+        {
+          "x": 3,
+          "y": -1
+        },
+        {
+          "x": 4,
+          "y": -1
+        },
+        {
+          "x": 5,
+          "y": -1
+        },
+        {
+          "x": -5,
+          "y": 0
+        },
+        {
+          "x": -4,
+          "y": 0
+        },
+        {
+          "x": -3,
+          "y": 0
+        },
+        {
+          "x": -2,
+          "y": 0
+        },
+        {
+          "x": -1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        },
+        {
+          "x": 2,
+          "y": 0
+        },
+        {
+          "x": 3,
+          "y": 0
+        },
+        {
+          "x": 4,
+          "y": 0
+        },
+        {
+          "x": 5,
+          "y": 0
+        },
+        {
+          "x": -5,
+          "y": 1
+        },
+        {
+          "x": -4,
+          "y": 1
+        },
+        {
+          "x": -3,
+          "y": 1
+        },
+        {
+          "x": -2,
+          "y": 1
+        },
+        {
+          "x": -1,
+          "y": 1
+        },
+        {
+          "x": 0,
+          "y": 1
+        },
+        {
+          "x": 1,
+          "y": 1
+        },
+        {
+          "x": 2,
+          "y": 1
+        },
+        {
+          "x": 3,
+          "y": 1
+        },
+        {
+          "x": 4,
+          "y": 1
+        },
+        {
+          "x": 5,
+          "y": 1
+        },
+        {
+          "x": -5,
+          "y": 2
+        },
+        {
+          "x": -4,
+          "y": 2
+        },
+        {
+          "x": -3,
+          "y": 2
+        },
+        {
+          "x": -2,
+          "y": 2
+        },
+        {
+          "x": -1,
+          "y": 2
+        },
+        {
+          "x": 0,
+          "y": 2
+        },
+        {
+          "x": 1,
+          "y": 2
+        },
+        {
+          "x": 2,
+          "y": 2
+        },
+        {
+          "x": 3,
+          "y": 2
+        },
+        {
+          "x": 4,
+          "y": 2
+        },
+        {
+          "x": 5,
+          "y": 2
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": null,
+      "mass_kg": null,
+      "size_class": null
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "HARD",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 4,
+  "supported_actions": [
+    "RELAX"
+  ]
+}

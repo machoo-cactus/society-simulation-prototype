@@ -25,7 +25,7 @@ from stage0_sim.domain.world import (
     WorldGrid,
     WorldMap,
 )
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_SCENARIOS
 
 
 @pytest.mark.parametrize(
@@ -242,7 +242,7 @@ def test_new_more_severe_drive_cancels_active_correction_and_retargets() -> None
 
 
 def test_full_preemption_run_reaches_recovery_and_is_reproducible() -> None:
-    scenario_path = EXAMPLE_SCENARIOS / "system1-preemption.json"
+    scenario_path = CATALOG_SCENARIOS / "needs-and-preemption.json"
     scenario = load_scenario(scenario_path)
     first = create_runner(scenario, run_id="first")
     second = create_runner(scenario, run_id="second")

@@ -1,0 +1,98 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A readable portable book that can also support one book in a small stack.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "common.book",
+  "kind": "object",
+  "name": "Book",
+  "npc_role": null,
+  "object_type": null,
+  "offers": [],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "content_endpoints": [],
+      "openable": null,
+      "portable": {
+        "two_handed": false
+      },
+      "readable": {
+        "document_id": "community-reading-sample"
+      },
+      "scent_source": null,
+      "slots": [
+        {
+          "accepted_relations": [
+            "ON_SUPPORT"
+          ],
+          "capacity": 1,
+          "id": "stack-top"
+        }
+      ],
+      "support": {
+        "slot_ids": [
+          "stack-top"
+        ]
+      },
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": -1,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 1,
+          "y": -1
+        },
+        {
+          "x": -1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": {
+        "height_cm": 3.2,
+        "length_cm": 24.0,
+        "width_cm": 16.0
+      },
+      "mass_kg": 0.72,
+      "size_class": "MEDIUM"
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "NONE",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 4,
+  "supported_actions": null
+}

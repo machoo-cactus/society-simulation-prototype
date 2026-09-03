@@ -1,0 +1,195 @@
+{
+  "blocked": [
+    {
+      "x": 2,
+      "y": 0
+    },
+    {
+      "x": 2,
+      "y": 1
+    },
+    {
+      "x": 2,
+      "y": 4
+    },
+    {
+      "x": 2,
+      "y": 5
+    }
+  ],
+  "description": "A furnished transit concourse with seating, information fixtures, and ticket service.",
+  "height": 6,
+  "id": "mobility.station-room",
+  "kind": "room",
+  "name": "Transit Hub Concourse",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "8f01659b7c7d2c78e83315178f49afcbbddd4789320cc336f1cb729929553a2d",
+        "id": "common.exterior-door",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "front-door",
+      "placement": {
+        "anchor": {
+          "x": 1,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "id": "common.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "front-window",
+      "placement": {
+        "anchor": {
+          "x": 13,
+          "y": 1
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "id": "common.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "side-window",
+      "placement": {
+        "anchor": {
+          "x": 79,
+          "y": 14
+        },
+        "orientation": "EAST",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "011847b2ef6434af6a533fe3388e45dfc64d05ea79ff875887d6f2a1bc576c8e",
+        "id": "retail.shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-west-lower",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "011847b2ef6434af6a533fe3388e45dfc64d05ea79ff875887d6f2a1bc576c8e",
+        "id": "retail.shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-east-lower",
+      "placement": {
+        "anchor": {
+          "x": 49,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5dad6b693a63a1cd254cc7ed06e55d1865bcb433fa090a29a3ef8655e8ea8227",
+        "id": "retail.display",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "produce-display",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 15
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "895a6207b392220c888d0f89a3d1ed3d443d3c0490edbddeb65bc6b23a11dee3",
+        "id": "mobility.ticket-machine",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "ticket-machine",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 43
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    }
+  ],
+  "room_type": "TRANSIT",
+  "schema_version": 4,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
+  "width": 9,
+  "zones": null
+}

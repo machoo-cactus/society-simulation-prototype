@@ -1,0 +1,648 @@
+{
+  "calendar": {
+    "start_datetime": "2026-09-07T10:00:00-04:00",
+    "update_interval_seconds": 900.0
+  },
+  "character_situation_synthesis": {
+    "enabled": false
+  },
+  "cognition": {
+    "decision_timeout_seconds": 30.0,
+    "engagement_compiler": {
+      "max_concurrency": 2,
+      "max_input_tokens": null,
+      "max_output_tokens": 768,
+      "max_requests": null,
+      "max_total_output_tokens": null,
+      "model_profile": "default",
+      "timeout_seconds": 30.0
+    },
+    "max_concurrency": 4,
+    "max_input_tokens": null,
+    "max_output_tokens": 512,
+    "max_read_tool_rounds": 1,
+    "max_requests": null,
+    "max_state_changing_tools": 1,
+    "max_total_output_tokens": null,
+    "model_profile": "default",
+    "npc_control_mode": "deterministic",
+    "tool_allowlist": [
+      "navigate_to",
+      "perform",
+      "say",
+      "engage",
+      "wait",
+      "skip",
+      "transact",
+      "check_environment",
+      "read_text",
+      "write_text"
+    ]
+  },
+  "dt": 1.0,
+  "engagement": {
+    "activating_stress_delta": 2.0,
+    "alarming_listener_stress_delta": 2.0,
+    "calming_stress_delta": -2.0,
+    "high_effort_energy_cost": 6.0,
+    "long_activity_seconds": 30.0,
+    "loud_sound_range": 20,
+    "low_effort_energy_cost": 1.0,
+    "max_groups": 4,
+    "max_invocations_per_group": 4,
+    "max_public_text_chars": 280,
+    "medium_activity_seconds": 15.0,
+    "medium_effort_energy_cost": 3.0,
+    "normal_sound_range": 10,
+    "quiet_sound_range": 2,
+    "short_activity_seconds": 5.0
+  },
+  "entities": [
+    {
+      "components": {
+        "character_slot": {
+          "briefing": "Redeem the returnable bottle, buy a packed lunch, then stop at the cafe for coffee.",
+          "constraints": {
+            "allowed_genders": [],
+            "allowed_template_ids": [
+              "human-v1"
+            ],
+            "maximum_age": null,
+            "minimum_age": 18
+          },
+          "default_character_id": "alex-chen",
+          "label": "Neighborhood shopper",
+          "synthesis_guidance": ""
+        },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "activation_time": 0.0,
+              "completion_policy": "all",
+              "criteria": [
+                {
+                  "comparator": "gte",
+                  "effect": "success",
+                  "item_id": "packed-lunch",
+                  "quantity": 1,
+                  "type": "possession_threshold"
+                },
+                {
+                  "comparator": "gte",
+                  "effect": "success",
+                  "item_id": "filter-coffee",
+                  "quantity": 1,
+                  "type": "possession_threshold"
+                },
+                {
+                  "effect": "success",
+                  "location_id": "building-riverbend-cafe",
+                  "location_kind": "place",
+                  "type": "location_match"
+                }
+              ],
+              "deadline_time": null,
+              "description": "Finish the bottle return and collect lunch and coffee.",
+              "id": "complete-neighborhood-errand",
+              "priority": 80,
+              "tags": [
+                "errand",
+                "transaction"
+              ]
+            }
+          ]
+        },
+        "homeostasis": {
+          "energy": 82.0,
+          "satiety": 68.0,
+          "stress": 18.0
+        },
+        "information": {
+          "documents": [
+            {
+              "content": {
+                "destination_id": "building-riverbend-market",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-riverbend-market.interior"
+                  }
+                ],
+                "name": "Riverbend Market",
+                "transition_ids": []
+              },
+              "id": "info-resident-shopper-building-riverbend-market",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-riverbend-market"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-shopper",
+                "building-riverbend-market"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-shopper"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-riverbend-cafe",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-riverbend-cafe.interior"
+                  }
+                ],
+                "name": "Riverside Cafe",
+                "transition_ids": []
+              },
+              "id": "info-resident-shopper-building-riverbend-cafe",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-riverbend-cafe"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-shopper",
+                "building-riverbend-cafe"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-shopper"
+                ],
+                "reader_ids": []
+              }
+            }
+          ]
+        },
+        "memory": {
+          "initial_episodes": [
+            {
+              "importance": 0.6,
+              "simulation_time": 0.0,
+              "text": "A returnable bottle is ready by the door and lunch is needed for the afternoon."
+            }
+          ],
+          "top_k": 4
+        },
+        "plan": {
+          "current": null,
+          "queue": [
+            {
+              "action": "NAVIGATE",
+              "target": "building-riverbend-market.interior.checkout"
+            },
+            {
+              "action": "TRANSACT",
+              "offer_id": "redeem-returnable-bottle",
+              "target": "building-riverbend-market.interior.checkout"
+            },
+            {
+              "action": "TRANSACT",
+              "offer_id": "buy-packed-lunch",
+              "target": "building-riverbend-market.interior.checkout"
+            },
+            {
+              "action": "NAVIGATE",
+              "target": "building-riverbend-cafe.interior.counter"
+            },
+            {
+              "action": "TRANSACT",
+              "offer_id": "buy-filter-coffee",
+              "target": "building-riverbend-cafe.interior.counter"
+            }
+          ]
+        },
+        "possessions": {
+          "holdings": {
+            "city-credit": 479,
+            "returnable-bottle": 1
+          }
+        },
+        "senses": {
+          "hearing_range": 10,
+          "recognition_range": 6,
+          "smell_range": 2,
+          "vision_range": 8
+        },
+        "spatial_location": {
+          "edge_id": null,
+          "edge_progress": null,
+          "local_coordinate": {
+            "x": 1,
+            "y": 4
+          },
+          "network_node_id": null,
+          "place_id": "building-riverbend-home.interior",
+          "scale": "BUILDING"
+        }
+      },
+      "id": "resident-shopper"
+    }
+  ],
+  "homeostasis": {
+    "activity_coefficients": {}
+  },
+  "items": [
+    {
+      "id": "city-credit",
+      "name": "City credit",
+      "unit": "credit"
+    },
+    {
+      "id": "filter-coffee",
+      "name": "Filter coffee",
+      "unit": "cup"
+    },
+    {
+      "id": "hot-tea",
+      "name": "Hot tea",
+      "unit": "cup"
+    },
+    {
+      "id": "morning-bun",
+      "name": "Morning bun",
+      "unit": "item"
+    },
+    {
+      "id": "prepared-meal",
+      "name": "Prepared meal",
+      "unit": "meal"
+    },
+    {
+      "id": "local-apples",
+      "name": "Bag of local apples",
+      "unit": "bag"
+    },
+    {
+      "id": "bread-loaf",
+      "name": "Loaf of bread",
+      "unit": "loaf"
+    },
+    {
+      "id": "spring-water",
+      "name": "Spring water",
+      "unit": "serving"
+    },
+    {
+      "id": "returnable-bottle",
+      "name": "Empty returnable bottle",
+      "unit": "bottle"
+    },
+    {
+      "id": "packed-lunch",
+      "name": "Packed lunch",
+      "unit": "pack"
+    },
+    {
+      "id": "health-kit",
+      "name": "Basic health kit",
+      "unit": "kit"
+    },
+    {
+      "id": "transit-pass",
+      "name": "Day transit pass",
+      "unit": "pass"
+    }
+  ],
+  "memory": {
+    "importance_weight": 0.15,
+    "recency_half_life": 3600.0,
+    "recency_weight": 0.25,
+    "semantic_weight": 0.6
+  },
+  "name": "neighborhood-errand",
+  "perception": {
+    "blocked_tiles_are_opaque": true,
+    "fact_max_age_seconds": 300.0,
+    "inbox_limit": 100,
+    "recognition_range": 5,
+    "renderer": "deterministic",
+    "vision_range": 8,
+    "voice_range": 10,
+    "whisper_range": 2
+  },
+  "run_id": null,
+  "schema_version": 8,
+  "seed": 20260907,
+  "speed": 1.0,
+  "system1": {
+    "thresholds": {},
+    "tie_break_order": [
+      "SATIETY",
+      "ENERGY",
+      "STRESS"
+    ]
+  },
+  "text_content": {
+    "addresses": [],
+    "artifacts": [],
+    "collections": [],
+    "groups": []
+  },
+  "weather": null,
+  "world": {
+    "building_order": [
+      "building-riverbend-home",
+      "building-riverbend-market",
+      "building-riverbend-cafe"
+    ],
+    "city": {
+      "bounds_meters": {
+        "max_x": 700.0,
+        "max_y": 300.0,
+        "min_x": -100.0,
+        "min_y": -100.0
+      },
+      "id": "city-riverbend",
+      "name": "Riverbend"
+    },
+    "city_zones": [
+      {
+        "buildings": [
+          {
+            "city_position": {
+              "x": 100.0,
+              "y": 100.0
+            },
+            "element": {
+              "content_hash": "97d9a730c48459cf4655bc42f04d80fe42049293badde9e5017a497238014105",
+              "id": "residential.apartment",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-riverbend-home"
+            },
+            "id": "building-riverbend-home",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Riverbend Apartment",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 300.0,
+              "y": 100.0
+            },
+            "element": {
+              "content_hash": "cb197902021db9d86414318572181cdf04585d02940d707213ac4b14f249ad3c",
+              "id": "retail.market",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-riverbend-market"
+            },
+            "id": "building-riverbend-market",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Riverbend Market",
+              "room_overrides": {
+                "interior": {
+                  "disabled_object_keys": [],
+                  "name": "Riverbend Market Interior",
+                  "object_overrides": {
+                    "checkout": {
+                      "available": null,
+                      "environment": null,
+                      "holdings": {
+                        "bread-loaf": 16,
+                        "city-credit": 5000,
+                        "health-kit": 8,
+                        "local-apples": 20,
+                        "packed-lunch": 12,
+                        "returnable-bottle": 0
+                      },
+                      "name": "Riverbend Bottle Return and Checkout",
+                      "npc_role": null,
+                      "offers": null
+                    }
+                  },
+                  "room_type": null
+                }
+              }
+            }
+          },
+          {
+            "city_position": {
+              "x": 500.0,
+              "y": 100.0
+            },
+            "element": {
+              "content_hash": "df1042b923ad9420106e74d9c889f434d2109aa622fc872502de8acb72940bd1",
+              "id": "hospitality.cafe",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-riverbend-cafe"
+            },
+            "id": "building-riverbend-cafe",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Riverside Cafe",
+              "room_overrides": {}
+            }
+          }
+        ],
+        "center": {
+          "x": 300.0,
+          "y": 250.0
+        },
+        "id": "district-riverbend",
+        "name": "Riverbend",
+        "outdoor_places": []
+      }
+    ],
+    "npc_role_order": [
+      "hospitality.barista"
+    ],
+    "outdoor_place_order": [],
+    "transport": {
+      "car_speed_mps": 13.9,
+      "cycling_speed_mps": 4.5,
+      "edges": [
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 200.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-riverbend-home",
+          "geometry": [
+            {
+              "x": 100.0,
+              "y": 100.0
+            },
+            {
+              "x": 300.0,
+              "y": 100.0
+            }
+          ],
+          "id": "edge-riverbend-home-market",
+          "speed_limit_mps": null,
+          "to_node_id": "node-riverbend-market"
+        },
+        {
+          "allowed_modes": [
+            "WALK"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 200.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-riverbend-market",
+          "geometry": [
+            {
+              "x": 300.0,
+              "y": 100.0
+            },
+            {
+              "x": 500.0,
+              "y": 100.0
+            }
+          ],
+          "id": "edge-riverbend-market-cafe",
+          "speed_limit_mps": null,
+          "to_node_id": "node-riverbend-cafe"
+        }
+      ],
+      "metro_lines": [],
+      "metro_speed_mps": 16.0,
+      "nodes": [
+        {
+          "id": "node-riverbend-home",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-riverbend-home",
+          "position": {
+            "x": 100.0,
+            "y": 100.0
+          }
+        },
+        {
+          "id": "node-riverbend-market",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-riverbend-market",
+          "position": {
+            "x": 300.0,
+            "y": 100.0
+          }
+        },
+        {
+          "id": "node-riverbend-cafe",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-riverbend-cafe",
+          "position": {
+            "x": 500.0,
+            "y": 100.0
+          }
+        },
+        {
+          "id": "node-district-riverbend-hub",
+          "kind": "DISTRICT_HUB",
+          "place_id": "district-riverbend",
+          "position": {
+            "x": 300.0,
+            "y": 250.0
+          }
+        }
+      ],
+      "vehicles": [],
+      "walking_speed_mps": 1.4
+    },
+    "type": "city"
+  }
+}

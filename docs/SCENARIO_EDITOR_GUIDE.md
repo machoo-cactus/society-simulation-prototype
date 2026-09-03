@@ -3,8 +3,8 @@
 **Owner:** Portable scenario source schema version 8, reusable element schema,
 and structured authoring/staging workflow.
 
-Writable libraries default to `data\scenarios\` and `data\elements\`. Tracked
-references live under `examples\scenarios\` and `examples\elements\`.
+The writable, version-controlled libraries are `data\scenarios\` and
+`data\elements\`.
 
 ## Scenario source version 8
 
@@ -38,16 +38,15 @@ city bounds, city zones, hash-pinned building instances, outdoor places,
 transport nodes/edges, geometry, modes, speeds, and vehicles. Runtime
 materialization records NPC roles and resolved element graphs separately.
 
-Use the Pydantic model and tracked examples as the exhaustive field reference:
+Use the Pydantic model and tracked catalog as the exhaustive field reference:
 
-- `examples\scenarios\minimal.json` — smallest grid source;
-- `examples\scenarios\environment-demo.json` — calendar/weather/availability;
-- `examples\scenarios\sparse-city-car-demo.json` — hierarchical city travel;
-- `examples\scenarios\reference-city-restaurants.json` — element references;
-- `examples\scenarios\greyford-rivermarket-exchange.json` — staffed exchange;
-- `examples\scenarios\provider-character-controller.json` — character slots and controller.
-- `examples\scenarios\engagement-demo.json` — fake-provider engagement compilation,
-  auditory recipients, and structural hearing blocking.
+- `data\scenarios\baseline.json` — smallest lifecycle source;
+- `data\scenarios\grid-navigation.json` — deterministic grid navigation;
+- `data\scenarios\needs-and-preemption.json` — physiology and System 1;
+- `data\scenarios\weather-and-hours.json` — calendar/weather/availability;
+- `data\scenarios\neighborhood-errand.json` — references and services;
+- `data\scenarios\community-meetup.json` — physical and social interaction;
+- `data\scenarios\open-city-day.json` — multimodal free-form city.
 
 ## Entity components
 
@@ -144,8 +143,9 @@ change selected instance, room, object, or NPC-role values without mutating the
 shared element. The source stays reference-only; the prepared run records exact
 resolved definitions and hashes.
 
-`examples\elements\standard-restaurant.json` and its referenced room, object,
-and NPC-role records are the compact element-authoring example.
+The compact hospitality building graph and its referenced room, object, and
+NPC-role records in `data\elements\` are the primary element-authoring
+reference.
 
 Use [Content migration](CONTENT_MIGRATION.md) for old catalogs. Runtime
 libraries deliberately reject legacy versions.

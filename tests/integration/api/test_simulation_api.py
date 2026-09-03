@@ -39,17 +39,17 @@ from stage0_sim.domain.interactions import (
     InteractionSpecification,
     InteractionVerb,
 )
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_SCENARIOS
 
 
 def load_scenario_payload(name: str) -> dict[str, Any]:
-    path = EXAMPLE_SCENARIOS / name
+    path = CATALOG_SCENARIOS / name
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def create_run(
     client: TestClient,
-    scenario_name: str = "system1-preemption.json",
+    scenario_name: str = "needs-and-preemption.json",
 ) -> str:
     scenario_response = client.post(
         "/simulation/scenarios",
@@ -504,7 +504,7 @@ def test_data_management_api_catalog_aggregate_exports_and_safe_delete() -> None
 
 def test_controlled_vital_mutation_triggers_survival_on_next_step() -> None:
     with TestClient(app) as client:
-        run_id = create_run(client, "navigation.json")
+        run_id = create_run(client, "grid-navigation.json")
         client.post(f"/simulation/runs/{run_id}/pause")
 
         mutation = client.patch(
@@ -1193,7 +1193,7 @@ def test_openapi_contains_only_canonical_dataset_routes() -> None:
 
 
 def test_synthesis_enabled_scenario_requires_configured_provider() -> None:
-    payload = load_scenario_payload("minimal.json")
+    payload = load_scenario_payload("baseline.json")
     payload["character_situation_synthesis"] = {"enabled": True}
 
     with TestClient(app) as client:

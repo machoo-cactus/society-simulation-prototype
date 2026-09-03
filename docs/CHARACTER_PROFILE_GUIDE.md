@@ -3,9 +3,9 @@
 **Owner:** Reusable character schema version 2, assignment, and situation
 synthesis.
 
-Character files describe stable people, not current simulation state. Writable
-files live in `data\characters\`; tracked references live in
-`examples\characters\`. The filename stem must equal `id`.
+Character files describe stable people, not current simulation state. The
+writable, version-controlled library lives in `data\characters\`. The filename
+stem must equal `id`.
 
 ## Minimal schema
 
@@ -166,5 +166,5 @@ delete profiles. Saves and renames use content hashes so stale tabs cannot
 overwrite newer revisions. The API equivalents are listed in
 [API and UI workflows](API_AND_UI.md).
 
-The most complete tracked authoring sample is
-`examples\characters\samira-khan.json`.
+The most complete tracked authoring reference is
+`data\characters\samira-khan.json`.

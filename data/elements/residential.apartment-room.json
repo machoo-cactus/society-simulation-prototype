@@ -1,0 +1,755 @@
+{
+  "blocked": [
+    {
+      "x": 4,
+      "y": 0
+    },
+    {
+      "x": 4,
+      "y": 1
+    },
+    {
+      "x": 4,
+      "y": 2
+    },
+    {
+      "x": 4,
+      "y": 4
+    },
+    {
+      "x": 4,
+      "y": 5
+    },
+    {
+      "x": 4,
+      "y": 7
+    }
+  ],
+  "description": "Reusable room archetype for portable city scenarios.",
+  "height": 8,
+  "id": "residential.apartment-room",
+  "kind": "room",
+  "name": "Furnished Apartment",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "8f01659b7c7d2c78e83315178f49afcbbddd4789320cc336f1cb729929553a2d",
+        "id": "common.exterior-door",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "front-door",
+      "placement": {
+        "anchor": {
+          "x": 1,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4a1a44a9018c001c4150be5933a614f3f1071dfbc99cb1cef5bafd2479921955",
+        "id": "common.interior-door",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "bedroom-door",
+      "placement": {
+        "anchor": {
+          "x": 40,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4a1a44a9018c001c4150be5933a614f3f1071dfbc99cb1cef5bafd2479921955",
+        "id": "common.interior-door",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "living-door",
+      "placement": {
+        "anchor": {
+          "x": 40,
+          "y": 58
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "id": "common.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "kitchen-window",
+      "placement": {
+        "anchor": {
+          "x": 18,
+          "y": 1
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "id": "common.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "bedroom-window",
+      "placement": {
+        "anchor": {
+          "x": 67,
+          "y": 1
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "id": "common.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "living-window",
+      "placement": {
+        "anchor": {
+          "x": 88,
+          "y": 49
+        },
+        "orientation": "EAST",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "cdaa9d4531007551b403e38c681f561ecdd6eed6cefc1b0acfbb5849d617f3c7",
+        "id": "residential.kitchen-counter",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "kitchen-counter",
+      "placement": {
+        "anchor": {
+          "x": 8,
+          "y": 6
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "e79ace734c3c9e558884a1e804ef5dbcf26133ba075682ed0c928f45f9c85959",
+        "id": "residential.dining-table",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "kitchen-table",
+      "placement": {
+        "anchor": {
+          "x": 22,
+          "y": 13
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "ec8c6c60b13cc9b1186ea2d95e905a080a2028a29af6a496dd0932e000c6317c",
+        "id": "common.dining-chair",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "kitchen-chair-west",
+      "placement": {
+        "anchor": {
+          "x": 14,
+          "y": 13
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "ec8c6c60b13cc9b1186ea2d95e905a080a2028a29af6a496dd0932e000c6317c",
+        "id": "common.dining-chair",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "kitchen-chair-east",
+      "placement": {
+        "anchor": {
+          "x": 30,
+          "y": 13
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4c1cbda8ac2c03fa32c424895c6828b69824561ba5839b2ab7ef0e884d08422b",
+        "id": "common.mug",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "breakfast-mug",
+      "placement": {
+        "anchor": {
+          "x": 21,
+          "y": 13
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "kitchen-table",
+          "slot_id": "surface"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4d27ea93f35e8840cafe7986cc5021ba05dd368219b7195bb9733ff5488214e4",
+        "id": "common.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "table-bottle",
+      "placement": {
+        "anchor": {
+          "x": 24,
+          "y": 13
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "kitchen-table",
+          "slot_id": "surface"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4c1cbda8ac2c03fa32c424895c6828b69824561ba5839b2ab7ef0e884d08422b",
+        "id": "common.mug",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "stored-mug",
+      "placement": {
+        "anchor": {
+          "x": 8,
+          "y": 6
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "IN_CONTAINER",
+          "parent_id": "kitchen-counter",
+          "slot_id": "cupboard"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "e28cfc0a50a3b1fddc70a6f93b75f4b5ece01de69fa8160fc18f5ecd752af29e",
+        "id": "common.cabinet",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "entry-cabinet",
+      "placement": {
+        "anchor": {
+          "x": 19,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5ae404a29592e4dd2017629451ce193a9975859c82308badb05b80d73589b508",
+        "id": "common.phone",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "entry-phone",
+      "placement": {
+        "anchor": {
+          "x": 16,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "entry-cabinet",
+          "slot_id": "top"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "20999e2b0b24b4d34d63e7caa6d6ba61c85850cfc0bed96054d2db21191576b5",
+        "id": "residential.desk",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "home-desk",
+      "placement": {
+        "anchor": {
+          "x": 22,
+          "y": 61
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "8baec68f50759ee2e07954e31835ab58ccf48ef7b5ff1535601f4a4dc3e2095c",
+        "id": "common.office-chair",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "desk-chair",
+      "placement": {
+        "anchor": {
+          "x": 22,
+          "y": 53
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "desk-book",
+      "placement": {
+        "anchor": {
+          "x": 20,
+          "y": 61
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "home-desk",
+          "slot_id": "desktop"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5ae404a29592e4dd2017629451ce193a9975859c82308badb05b80d73589b508",
+        "id": "common.phone",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "desk-phone",
+      "placement": {
+        "anchor": {
+          "x": 24,
+          "y": 61
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "home-desk",
+          "slot_id": "desktop"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "f7f5d5439cb832c4a5cd86e65e8414a724997728a3d16348879934f7f0aa8506",
+        "id": "common.glasses",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "desk-glasses",
+      "placement": {
+        "anchor": {
+          "x": 28,
+          "y": 61
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "home-desk",
+          "slot_id": "desktop"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5a595a243aa32271d49042d7fd1cd24230f71c6a012a7b8331e740f6dd9c011a",
+        "id": "common.mirror",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "bedroom-mirror",
+      "placement": {
+        "anchor": {
+          "x": 88,
+          "y": 22
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "9056ba1b9ca1735f0dc1252e4cc377f7fd536eec29a444cab504001c19fcda03",
+        "id": "common.bookcase",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "study-bookcase",
+      "placement": {
+        "anchor": {
+          "x": 35,
+          "y": 63
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "study-book-lower",
+      "placement": {
+        "anchor": {
+          "x": 35,
+          "y": 59
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "study-bookcase",
+          "slot_id": "lower-shelf"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "study-book-middle",
+      "placement": {
+        "anchor": {
+          "x": 35,
+          "y": 63
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "study-bookcase",
+          "slot_id": "middle-shelf"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "aa5474694d81b796a788b22d91b721c5f618b9c5661af37eaf84c1644fc2a1b3",
+        "id": "residential.bed",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "bed",
+      "placement": {
+        "anchor": {
+          "x": 67,
+          "y": 13
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "f5b1d019c3486ee92a517b3252f0d3666f4de8d50d6b9324833f78b64e8bedbc",
+        "id": "residential.bedside-table",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "bedside-table",
+      "placement": {
+        "anchor": {
+          "x": 79,
+          "y": 13
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "500fc1a0565341abc5f0b6161cc2bbfba5578b679cf2572c6a246262615afb0b",
+        "id": "common.lamp",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "bedside-lamp",
+      "placement": {
+        "anchor": {
+          "x": 79,
+          "y": 13
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "bedside-table",
+          "slot_id": "top"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4d27ea93f35e8840cafe7986cc5021ba05dd368219b7195bb9733ff5488214e4",
+        "id": "common.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "bedside-bottle",
+      "placement": {
+        "anchor": {
+          "x": 77,
+          "y": 13
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "bedside-table",
+          "slot_id": "top"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5090c95d7d0283e63bd152a88affdcb2e5c871cc320e8e788087b43b97ac8385",
+        "id": "residential.sofa",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "sofa",
+      "placement": {
+        "anchor": {
+          "x": 67,
+          "y": 49
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "f5b1d019c3486ee92a517b3252f0d3666f4de8d50d6b9324833f78b64e8bedbc",
+        "id": "residential.bedside-table",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "sofa-side-table",
+      "placement": {
+        "anchor": {
+          "x": 79,
+          "y": 49
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "sofa-book",
+      "placement": {
+        "anchor": {
+          "x": 79,
+          "y": 49
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "sofa-side-table",
+          "slot_id": "top"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    }
+  ],
+  "room_type": "RESIDENTIAL",
+  "schema_version": 4,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
+  "width": 10,
+  "zones": null
+}

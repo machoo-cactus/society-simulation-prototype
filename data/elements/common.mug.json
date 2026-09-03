@@ -1,0 +1,83 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A portable mug holding one serving of filter coffee.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "common.mug",
+  "kind": "object",
+  "name": "Hot Drink Mug",
+  "npc_role": null,
+  "object_type": null,
+  "offers": [],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": {
+        "item_id": "filter-coffee",
+        "servings": 1
+      },
+      "container": null,
+      "content_endpoints": [],
+      "openable": null,
+      "portable": {
+        "two_handed": false
+      },
+      "readable": null,
+      "scent_source": {
+        "description": "fresh filter coffee",
+        "emission_range": 6,
+        "scent_id": "fresh-coffee"
+      },
+      "slots": [],
+      "support": null,
+      "usable": null,
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": -1,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": -1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": {
+        "height_cm": 10.0,
+        "length_cm": 12.0,
+        "width_cm": 9.0
+      },
+      "mass_kg": 0.42,
+      "size_class": "SMALL"
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "NONE",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 4,
+  "supported_actions": null
+}

@@ -3,7 +3,7 @@ import pytest
 
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.adapters.elements import FileSystemElementLibrary
-from stage0_sim.adapters.llm import FakeEmbeddingProvider, ScriptedModelClient
+from stage0_sim.adapters.llm import ScriptedModelClient
 from stage0_sim.application.agents.contracts import (
     CharacterDecisionRequest,
     CharacterObservation,
@@ -57,21 +57,34 @@ from stage0_sim.domain.world import (
 )
 from stage0_sim.domain.world.routing import RecursiveRoutePlanner
 from tests.helpers.paths import (
-    EXAMPLE_CHARACTERS,
-    EXAMPLE_ELEMENTS,
-    EXAMPLE_SCENARIOS,
+    CATALOG_CHARACTERS,
+    CATALOG_ELEMENTS,
+    CATALOG_SCENARIOS,
     REPOSITORY_ROOT,
 )
 
 ROOT = REPOSITORY_ROOT
-CITY_SCENARIO_PATH = EXAMPLE_SCENARIOS / "sparse-city-car-demo.json"
-CHARACTER_DIRECTORY = EXAMPLE_CHARACTERS
+CITY_SCENARIO_PATH = CATALOG_SCENARIOS / "open-city-day.json"
+CHARACTER_DIRECTORY = CATALOG_CHARACTERS
+CITY_ACTOR_ID = "city-alex"
+ORIGIN_BUILDING_ID = "building-city-north-apartments"
+ORIGIN_ROOM_ID = f"{ORIGIN_BUILDING_ID}.interior"
+ORIGIN_NODE_ID = "node-city-north-apartments"
+DESTINATION_BUILDING_ID = "building-city-north-cafe"
+DESTINATION_ROOM_ID = f"{DESTINATION_BUILDING_ID}.interior"
+DESTINATION_NODE_ID = "node-city-north-cafe"
+DESTINATION_ENTRANCE_ID = f"{DESTINATION_BUILDING_ID}.front"
+DESTINATION_STATION_ID = f"{DESTINATION_ROOM_ID}.window-seat"
+CITY_ROUTE_EDGE_IDS = (
+    "edge-node-city-north-apartments-node-district-city-north-hub",
+    "edge-node-city-north-cafe-node-district-city-north-hub",
+)
 
 
 def _load_city_scenario() -> ScenarioDefinition:
     return load_and_resolve_scenario(
         CITY_SCENARIO_PATH,
-        FileSystemElementLibrary(EXAMPLE_ELEMENTS),
+        FileSystemElementLibrary(CATALOG_ELEMENTS),
     ).scenario
 
 
@@ -115,8 +128,6 @@ def _request(
 
 def _city_runner(
     payload: dict,
-    *,
-    embedding_provider: FakeEmbeddingProvider | None = None,
 ):
     scenario = ScenarioDefinition.model_validate(payload)
     prepared = prepare_scenario(
@@ -126,78 +137,57 @@ def _city_runner(
     return create_runner(
         scenario,
         resolved_characters=prepared.runtime_characters(),
-        embedding_provider=embedding_provider,
     )
 
 
 def _city_payload_without_plan() -> dict:
     payload = _load_city_scenario().model_dump(mode="json")
-    payload["entities"][0]["components"]["plan"] = {"queue": []}
+    payload["dt"] = 10.0
+    for entity in payload["entities"]:
+        entity["components"]["controller"]["enabled"] = False
+        entity["components"]["plan"] = {"queue": []}
     return payload
 
 
 def _cross_building_navigation_payload() -> dict:
     payload = _city_payload_without_plan()
-    office_room = next(
-        room
-        for room in payload["world"]["rooms"]
-        if room["building_id"] == "building-office"
+    components = next(
+        entity["components"]
+        for entity in payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
     )
-    office_room["world"]["stations"] = [
-        {
-            "id": "office-desk",
-            "name": "Office Desk",
-            "position": {"x": 2, "y": 1},
-            "supported_actions": ["WORK"],
-        }
-    ]
-    payload["world"]["objects"].append(
-        {
-            "id": "office-desk",
-            "name": "Office Desk",
-            "definition_id": "office-desk",
-            "object_kind": "affordance",
-            "building_id": "building-office",
-            "room_id": office_room["id"],
-            "position": {"x": 2, "y": 1},
-        }
-    )
-    components = payload["entities"][0]["components"]
     components["plan"] = {
         "queue": [
             {
                 "action": "NAVIGATE",
-                "target": "office-desk",
-                "mode": "CAR",
+                "target": DESTINATION_STATION_ID,
+                "mode": "CYCLE",
             }
         ]
     }
     components["information"] = {
         "documents": [
             {
-                "id": "known-office-desk",
+                "id": "known-cafe-seat",
                 "kind": "knowledge.place",
-                "subject_ids": ["agent-001", "office-desk"],
+                "subject_ids": [CITY_ACTOR_ID, DESTINATION_STATION_ID],
                 "content": {
-                    "destination_id": "office-desk",
+                    "destination_id": DESTINATION_STATION_ID,
                     "kind": "station",
-                    "name": "Office Desk",
+                    "name": "Cafe Seat",
                     "locators": [
                         {
-                            "space_id": "building-office.interior",
+                            "space_id": DESTINATION_ROOM_ID,
                             "local_reference": {
                                 "kind": "coordinate",
-                                "x": 2,
-                                "y": 1,
+                                "x": 7,
+                                "y": 2,
                             },
                         }
                     ],
                     "transition_ids": [
-                        "entrance-office",
-                        "walk-home-to-parking",
-                        "road-west-central",
-                        "road-central-east",
-                        "walk-parking-to-office",
+                        DESTINATION_ENTRANCE_ID,
+                        *CITY_ROUTE_EDGE_IDS,
                     ],
                 },
             }
@@ -208,54 +198,38 @@ def _cross_building_navigation_payload() -> dict:
 
 def _door_navigation_payload(*, locked: bool) -> dict:
     payload = _city_payload_without_plan()
-    home = next(
-        building
-        for building in payload["world"]["buildings"]
-        if building["id"] == "building-home"
+    door = next(
+        world_object
+        for world_object in payload["world"]["objects"]
+        if world_object["id"] == f"{ORIGIN_ROOM_ID}.front-door"
     )
-    entrance = home["entrances"][0]
-    entrance["door_object_id"] = "home-door"
-    payload["world"]["objects"].append(
-        {
-            "id": "home-door",
-            "name": "Home Door",
-            "definition_id": "home-door",
-            "object_kind": "physical",
-            "building_id": "building-home",
-            "room_id": "building-home.interior",
-            "position": {"x": 2, "y": 1},
-            "physical": {
-                "footprint": {"cells": [{"x": 0, "y": 0}]},
-                "obstruction": {
-                    "movement": "HARD",
-                    "vision": "OPAQUE",
-                },
-                "capabilities": {
-                    "openable": {"initially_locked": locked}
-                },
-                "initial_open": False,
-            },
-            "placement": {
-                "anchor": {"x": 22, "y": 13},
-                "orientation": "NORTH",
-                "parent_relation": {
-                    "kind": "ON_FLOOR",
-                    "parent_id": "building-home.interior",
-                },
-            },
-        }
+    door["physical"]["initial_open"] = False
+    door["physical"]["capabilities"]["openable"]["initially_locked"] = (
+        locked
     )
-    components = payload["entities"][0]["components"]
-    components["spatial_location"]["local_coordinate"] = {"x": 1, "y": 1}
+    components = next(
+        entity["components"]
+        for entity in payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
+    )
     components["plan"] = {
         "queue": [
             {
                 "action": "NAVIGATE",
-                "target": "building-office",
-                "mode": "CAR",
+                "target": DESTINATION_BUILDING_ID,
+                "mode": "WALK",
             }
         ]
     }
+    destination_document = next(
+        document
+        for document in components["information"]["documents"]
+        if document["content"]["destination_id"] == DESTINATION_BUILDING_ID
+    )
+    destination_document["content"]["transition_ids"] = [
+        DESTINATION_ENTRANCE_ID,
+        *CITY_ROUTE_EDGE_IDS,
+    ]
     return payload
 
 
@@ -335,11 +309,12 @@ def test_recursive_planner_refines_same_space_and_cross_space_routes() -> None:
 def test_navigation_opens_an_unlocked_door_through_interaction_primitive() -> None:
     runner = _city_runner(_door_navigation_payload(locked=False))
 
-    runner.run_for(700)
+    runner.run_for(40)
 
-    door = runner.registry.get_component("home-door", OpenableComponent)
+    door_id = f"{ORIGIN_ROOM_ID}.front-door"
+    door = runner.registry.get_component(door_id, OpenableComponent)
     navigation = runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         NavigationComponent,
     )
     assert door.is_open
@@ -350,7 +325,7 @@ def test_navigation_opens_an_unlocked_door_through_interaction_primitive() -> No
     )
     assert any(
         event.event_type == "interaction.completed"
-        and event.payload.get("target_id") == "home-door"
+        and event.payload.get("target_id") == door_id
         and event.payload.get("source") == "navigation"
         for event in runner.events.events
     )
@@ -362,7 +337,7 @@ def test_navigation_fails_explicitly_at_a_locked_door() -> None:
     runner.run_for(20)
 
     navigation = runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         NavigationComponent,
     )
     assert navigation.status is NavigationStatus.FAILED
@@ -375,49 +350,61 @@ def test_navigation_fails_explicitly_at_a_locked_door() -> None:
 
 
 def test_known_topology_hides_global_places_until_information_references_them() -> None:
-    unknown_runner = _city_runner(_city_payload_without_plan())
+    unknown_payload = _city_payload_without_plan()
+    actor = next(
+        entity
+        for entity in unknown_payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
+    )
+    actor["components"]["information"] = {"documents": []}
+    unknown_runner = _city_runner(unknown_payload)
     unknown_projection = unknown_runner.registry.get_resource(
         NavigationService
     ).known_topology
     unknown_ids = {
         destination.id
-        for destination in unknown_projection.destinations("agent-001")
+        for destination in unknown_projection.destinations(CITY_ACTOR_ID)
     }
 
-    assert "building-home" in unknown_ids
-    assert "building-office" not in unknown_ids
-    assert "place-central-square" not in unknown_ids
+    assert ORIGIN_BUILDING_ID in unknown_ids
+    assert DESTINATION_BUILDING_ID not in unknown_ids
+    assert "place-city-central-square" not in unknown_ids
 
     payload = _city_payload_without_plan()
-    payload["entities"][0]["components"]["information"] = {
+    actor = next(
+        entity
+        for entity in payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
+    )
+    actor["components"]["information"] = {
         "documents": [
             {
-                "id": "known-office",
+                "id": "known-cafe",
                 "kind": "knowledge.place",
-                "subject_ids": ["agent-001", "building-office"],
+                "subject_ids": [CITY_ACTOR_ID, DESTINATION_BUILDING_ID],
                 "content": {
-                    "destination_id": "building-office",
+                    "destination_id": DESTINATION_BUILDING_ID,
                     "kind": "building",
-                    "name": "East Research Office",
+                    "name": "North Park Cafe",
                     "locators": [
                         {
-                            "space_id": "building-office.interior",
+                            "space_id": DESTINATION_ROOM_ID,
                             "local_reference": {
                                 "kind": "coordinate",
-                                "x": 1,
-                                "y": 1,
+                                "x": 0,
+                                "y": 4,
                             },
                         }
                     ],
                 },
             },
             {
-                "id": "known-office-route",
+                "id": "known-cafe-route",
                 "kind": "knowledge.route",
-                "subject_ids": ["agent-001", "building-office"],
+                "subject_ids": [CITY_ACTOR_ID, DESTINATION_BUILDING_ID],
                 "content": {
-                    "destination_ids": ["building-office"],
-                    "transition_ids": ["entrance-office"],
+                    "destination_ids": [DESTINATION_BUILDING_ID],
+                    "transition_ids": [DESTINATION_ENTRANCE_ID],
                 },
             },
         ]
@@ -428,22 +415,29 @@ def test_known_topology_hides_global_places_until_information_references_them() 
     ).known_topology
     known = {
         destination.id: destination
-        for destination in projection.destinations("agent-001")
+        for destination in projection.destinations(CITY_ACTOR_ID)
     }
 
-    assert known["building-office"].kind == "building"
-    assert known["building-office"].locators
-    assert "entrance-office" in projection.transition_ids("agent-001")
-    assert "place-central-square" not in known
+    assert known[DESTINATION_BUILDING_ID].kind == "building"
+    assert known[DESTINATION_BUILDING_ID].locators
+    assert DESTINATION_ENTRANCE_ID in projection.transition_ids(
+        CITY_ACTOR_ID
+    )
+    assert "place-city-central-square" not in known
 
 
 def test_known_topology_applies_character_visibility_before_projection() -> None:
     payload = _city_payload_without_plan()
     office_locator = {
-        "space_id": "building-office.interior",
+        "space_id": DESTINATION_ROOM_ID,
         "local_reference": {"kind": "coordinate", "x": 0, "y": 1},
     }
-    payload["entities"][0]["components"]["information"] = {
+    actor = next(
+        entity
+        for entity in payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
+    )
+    actor["components"]["information"] = {
         "documents": [
             {
                 "id": "private-other",
@@ -478,8 +472,8 @@ def test_known_topology_applies_character_visibility_before_projection() -> None
                 },
                 "visibility": {
                     "level": "shared",
-                    "owner_ids": ["agent-002"],
-                    "reader_ids": ["agent-001"],
+                    "owner_ids": ["city-jordan"],
+                    "reader_ids": [CITY_ACTOR_ID],
                 },
             },
             {
@@ -501,7 +495,7 @@ def test_known_topology_applies_character_visibility_before_projection() -> None
 
     known_ids = {
         destination.id
-        for destination in projection.destinations("agent-001")
+        for destination in projection.destinations(CITY_ACTOR_ID)
     }
 
     assert "shared-visible" in known_ids
@@ -513,7 +507,7 @@ def test_known_topology_applies_character_visibility_before_projection() -> None
 def test_navigate_tool_produces_only_navigation_intents() -> None:
     targets = (
         ObservedTarget("sofa", "station", "Sofa"),
-        ObservedTarget("building-office", "building", "Office"),
+        ObservedTarget("known-building", "building", "Known building"),
     )
     request = _request(
         targets,
@@ -527,7 +521,7 @@ def test_navigate_tool_produces_only_navigation_intents() -> None:
             "call-navigate",
             "navigate_to",
             {
-                "target_id": "building-office",
+                "target_id": "known-building",
                 "preferred_mode": "CAR",
                 "reason": "Work",
             },
@@ -722,7 +716,11 @@ def test_navigation_avoids_an_occupied_locator_in_a_multi_tile_zone() -> None:
 
 def test_cross_building_navigate_tool_commits_navigation() -> None:
     payload = _city_payload_without_plan()
-    components = payload["entities"][0]["components"]
+    components = next(
+        entity["components"]
+        for entity in payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
+    )
     components["controller"] = {
         "enabled": True,
         "tool_allowlist": ["navigate_to"],
@@ -730,29 +728,26 @@ def test_cross_building_navigate_tool_commits_navigation() -> None:
     components["information"] = {
         "documents": [
             {
-                "id": "known-office",
+                "id": "known-cafe",
                 "kind": "knowledge.place",
-                "subject_ids": ["agent-001", "building-office"],
+                "subject_ids": [CITY_ACTOR_ID, DESTINATION_BUILDING_ID],
                 "content": {
-                    "destination_id": "building-office",
+                    "destination_id": DESTINATION_BUILDING_ID,
                     "kind": "building",
-                    "name": "East Research Office",
+                    "name": "North Park Cafe",
                     "locators": [
                         {
-                            "space_id": "building-office.interior",
+                            "space_id": DESTINATION_ROOM_ID,
                             "local_reference": {
                                 "kind": "coordinate",
                                 "x": 0,
-                                "y": 1,
+                                "y": 4,
                             },
                         }
                     ],
                     "transition_ids": [
-                        "entrance-office",
-                        "walk-home-to-parking",
-                        "road-west-central",
-                        "road-central-east",
-                        "walk-parking-to-office",
+                        DESTINATION_ENTRANCE_ID,
+                        *CITY_ROUTE_EDGE_IDS,
                     ],
                 },
             }
@@ -765,8 +760,8 @@ def test_cross_building_navigate_tool_commits_navigation() -> None:
                 "call-1",
                 "navigate_to",
                 {
-                    "target_id": "building-office",
-                    "preferred_mode": "CAR",
+                    "target_id": DESTINATION_BUILDING_ID,
+                    "preferred_mode": "CYCLE",
                 },
             ),
         ),
@@ -788,45 +783,52 @@ def test_cross_building_navigate_tool_commits_navigation() -> None:
 
     runner.run_for(1)
 
-    plan = runner.registry.get_component("agent-001", PlanComponent)
+    plan = runner.registry.get_component(CITY_ACTOR_ID, PlanComponent)
     navigation = runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         NavigationComponent,
     )
     assert len(plan.queue) == 1
     assert plan.queue[0].action is ActionType.NAVIGATE
     assert navigation.status is NavigationStatus.REQUESTED
-    assert navigation.target_id == "building-office"
-    assert navigation.preferred_mode is TravelMode.CAR
+    assert navigation.target_id == DESTINATION_BUILDING_ID
+    assert navigation.preferred_mode is TravelMode.CYCLE
 
 
 def test_cross_building_navigation_travels_then_refines_locally_without_permissions() -> None:
-    embedding_provider = FakeEmbeddingProvider()
-    runner = _city_runner(
-        _cross_building_navigation_payload(),
-        embedding_provider=embedding_provider,
-    )
+    runner = _city_runner(_cross_building_navigation_payload())
 
-    runner.run_for(700)
+    runner.run_for(50)
 
     navigation = runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         NavigationComponent,
     )
     location = runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         SpatialLocationComponent,
     ).location
     assert navigation.status is NavigationStatus.ARRIVED
-    assert [primitive.kind for primitive in navigation.primitives] == [
-        NavigationPrimitiveKind.TRAVEL,
-        NavigationPrimitiveKind.MOVE,
+    primitive_kinds = [
+        primitive.kind for primitive in navigation.primitives
     ]
-    assert location.place_id == "building-office.interior"
-    assert runner.registry.get_component(
-        "agent-001",
+    assert NavigationPrimitiveKind.TRAVEL in primitive_kinds
+    assert NavigationPrimitiveKind.MOVE in primitive_kinds
+    assert NavigationPrimitiveKind.INTERACT in primitive_kinds
+    assert primitive_kinds.index(
+        NavigationPrimitiveKind.TRAVEL
+    ) < len(primitive_kinds) - 1
+    assert location.place_id == DESTINATION_ROOM_ID
+    assert navigation.route is not None
+    position = runner.registry.get_component(
+        CITY_ACTOR_ID,
         PositionComponent,
-    ).coordinate == Coordinate(22, 13)
+    ).coordinate
+    assert navigation.route.destination.local_reference == {
+        "kind": "coordinate",
+        "x": position.x,
+        "y": position.y,
+    }
     event_types = [event.event_type for event in runner.events.events]
     assert "travel.requested" in event_types
     assert "travel.arrived" in event_types
@@ -852,7 +854,7 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
     )
     information = runner.registry.get_resource(InformationStore)
     learned_documents = information.documents(
-        namespace_id=character_information_namespace_id("agent-001"),
+        namespace_id=character_information_namespace_id(CITY_ACTOR_ID),
         kinds=("knowledge.route",),
     )
     learned = next(
@@ -865,13 +867,12 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
         for event in runner.events.events
         if event.event_type == "navigation.arrived"
     )
-    assert embedding_provider.call_count == 0
     assert learned.schema_id == "knowledge.route.v1"
-    assert learned.subject_ids == ("agent-001", "office-desk")
-    assert learned.content["destination_id"] == "office-desk"
+    assert learned.subject_ids == (CITY_ACTOR_ID, DESTINATION_STATION_ID)
+    assert learned.content["destination_id"] == DESTINATION_STATION_ID
     assert learned.content["locator"] == {
-        "space_id": "building-office.interior",
-        "local_reference": {"kind": "coordinate", "x": 22, "y": 13},
+        "space_id": DESTINATION_ROOM_ID,
+        "local_reference": navigation.route.destination.local_reference,
     }
     assert learned.content["transition_ids"] == [
         leg.transition_id
@@ -880,17 +881,17 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
     ]
     assert learned.content["acquisition_source"] == "DIRECT_EXPERIENCE"
     assert learned.content["simulation_time"] == arrived.simulation_time
-    assert learned.source.observer_id == "agent-001"
+    assert learned.source.observer_id == CITY_ACTOR_ID
     assert learned.source.reference_ids == (
         arrived.event_id,
         arrived.correlation_id,
     )
     assert learned.recorded_at == arrived.simulation_time
     assert learned.visibility.level is VisibilityLevel.PRIVATE
-    assert learned.visibility.owner_ids == ("agent-001",)
-    assert not character_can_access_information(learned, "agent-002")
+    assert learned.visibility.owner_ids == (CITY_ACTOR_ID,)
+    assert not character_can_access_information(learned, "city-jordan")
     assert information.documents(
-        namespace_id=character_information_namespace_id("agent-002"),
+        namespace_id=character_information_namespace_id("city-jordan"),
         kinds=("knowledge.route",),
     ) == ()
 
@@ -903,61 +904,65 @@ def test_cross_building_navigation_travels_then_refines_locally_without_permissi
     recorder.update(runner.context)
     assert information.history(learned.id) == (learned,)
     namespace = runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         InformationNamespaceComponent,
     )
     assert namespace.document_ids.count(learned.id) == 1
 
     fresh_payload = _cross_building_navigation_payload()
-    fresh_components = fresh_payload["entities"][0]["components"]
+    fresh_components = next(
+        entity["components"]
+        for entity in fresh_payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
+    )
     fresh_components["plan"] = {"queue": []}
     fresh_components.pop("information")
     fresh_runner = _city_runner(fresh_payload)
     fresh_information = fresh_runner.registry.get_resource(InformationStore)
     fresh_information.register(learned)
     fresh_namespace = fresh_runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         InformationNamespaceComponent,
     )
     fresh_runner.registry.set_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         InformationNamespaceComponent(
             namespace_id=fresh_namespace.namespace_id,
             document_ids=(*fresh_namespace.document_ids, learned.id),
         ),
     )
     fresh_plan = fresh_runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         PlanComponent,
     )
     queue_plan_actions(
         fresh_runner.context,
-        "agent-001",
+        CITY_ACTOR_ID,
         fresh_plan,
         [
             PlanAction(
-            action=ActionType.NAVIGATE,
-            target="office-desk",
-            mode=TravelMode.CAR,
+                action=ActionType.NAVIGATE,
+                target=DESTINATION_STATION_ID,
+                mode=TravelMode.CYCLE,
             )
         ],
         origin=ActionOrigin.SCENARIO,
     )
     fresh_runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         NavigationComponent,
-    ).request("office-desk", preferred_mode=TravelMode.CAR)
+    ).request(DESTINATION_STATION_ID, preferred_mode=TravelMode.CYCLE)
 
-    fresh_runner.run_for(700)
+    fresh_runner.run_for(50)
 
     assert fresh_runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         NavigationComponent,
     ).status is NavigationStatus.ARRIVED
     assert fresh_runner.registry.get_component(
-        "agent-001",
-        PositionComponent,
-    ).coordinate == Coordinate(22, 13)
+        CITY_ACTOR_ID,
+        SpatialLocationComponent,
+    ).location.place_id == DESTINATION_ROOM_ID
 
 
 def test_stale_known_locator_fails_explicitly_at_authoritative_planning() -> None:
@@ -1034,17 +1039,26 @@ def test_stale_known_locator_fails_explicitly_at_authoritative_planning() -> Non
 
 def test_bare_remote_destination_remains_unresolved() -> None:
     payload = _city_payload_without_plan()
-    components = payload["entities"][0]["components"]
+    components = next(
+        entity["components"]
+        for entity in payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
+    )
     components["plan"] = {
-        "queue": [{"action": "NAVIGATE", "target": "building-office"}]
+        "queue": [
+            {
+                "action": "NAVIGATE",
+                "target": DESTINATION_BUILDING_ID,
+            }
+        ]
     }
     components["information"] = {
         "documents": [
             {
-                "id": "incomplete-office-address",
+                "id": "incomplete-cafe-address",
                 "kind": "knowledge.place",
-                "subject_ids": ["agent-001", "building-office"],
-                "content": {"destination_id": "building-office"},
+                "subject_ids": [CITY_ACTOR_ID, DESTINATION_BUILDING_ID],
+                "content": {"destination_id": DESTINATION_BUILDING_ID},
             }
         ]
     }
@@ -1053,7 +1067,7 @@ def test_bare_remote_destination_remains_unresolved() -> None:
     runner.run_for(1)
 
     navigation = runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         NavigationComponent,
     )
     assert navigation.status is NavigationStatus.FAILED
@@ -1066,41 +1080,43 @@ def test_bare_remote_destination_remains_unresolved() -> None:
     assert failure.payload["reason"] == "known_destination_has_no_locator"
 
 
-def test_sparse_navigation_cannot_use_an_unknown_road_edge() -> None:
+def test_navigation_cannot_use_an_unknown_city_edge() -> None:
     payload = _city_payload_without_plan()
-    components = payload["entities"][0]["components"]
+    components = next(
+        entity["components"]
+        for entity in payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
+    )
     components["plan"] = {
         "queue": [
             {
                 "action": "NAVIGATE",
-                "target": "building-office",
-                "mode": "CAR",
+                "target": DESTINATION_BUILDING_ID,
+                "mode": "CYCLE",
             }
         ]
     }
     components["information"] = {
         "documents": [
             {
-                "id": "partial-office-route",
+                "id": "partial-cafe-route",
                 "kind": "knowledge.route",
-                "subject_ids": ["agent-001", "building-office"],
+                "subject_ids": [CITY_ACTOR_ID, DESTINATION_BUILDING_ID],
                 "content": {
-                    "destination_id": "building-office",
+                    "destination_id": DESTINATION_BUILDING_ID,
                     "locators": [
                         {
-                            "space_id": "building-office.interior",
+                            "space_id": DESTINATION_ROOM_ID,
                             "local_reference": {
                                 "kind": "coordinate",
                                 "x": 0,
-                                "y": 1,
+                                "y": 4,
                             },
                         }
                     ],
                     "transition_ids": [
-                        "entrance-office",
-                        "walk-home-to-parking",
-                        "road-west-central",
-                        "walk-parking-to-office",
+                        DESTINATION_ENTRANCE_ID,
+                        CITY_ROUTE_EDGE_IDS[0],
                     ],
                 },
             }
@@ -1111,7 +1127,7 @@ def test_sparse_navigation_cannot_use_an_unknown_road_edge() -> None:
     runner.run_for(1)
 
     navigation = runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         NavigationComponent,
     )
     assert navigation.status is NavigationStatus.FAILED
@@ -1184,56 +1200,75 @@ def test_sequential_queued_navigation_refreshes_each_request() -> None:
 
 def test_navigation_uses_the_planned_outbound_entrance() -> None:
     payload = _city_payload_without_plan()
-    payload["world"]["buildings"][0]["entrances"].append(
+    origin_building = next(
+        building
+        for building in payload["world"]["buildings"]
+        if building["id"] == ORIGIN_BUILDING_ID
+    )
+    origin_building["entrances"].append(
         {
-            "id": "entrance-home-alt",
-            "room_id": "building-home.interior",
-            "local_coordinate": {"x": 2, "y": 1},
-            "neighborhood_node_id": "node-home-alt",
+            "id": "building-city-north-apartments.side",
+            "room_id": ORIGIN_ROOM_ID,
+            "local_coordinate": {"x": 0, "y": 3},
+            "neighborhood_node_id": "node-city-north-apartments-side",
         }
+    )
+    destination_node = next(
+        node
+        for node in payload["world"]["transport"]["nodes"]
+        if node["id"] == DESTINATION_NODE_ID
+    )
+    origin_node = next(
+        node
+        for node in payload["world"]["transport"]["nodes"]
+        if node["id"] == ORIGIN_NODE_ID
     )
     payload["world"]["transport"]["nodes"].append(
         {
-            "id": "node-home-alt",
+            "id": "node-city-north-apartments-side",
             "kind": "BUILDING_ENTRANCE",
-            "position": {"x": 700, "y": 1400},
-            "place_id": "building-home",
+            "position": {"x": 110.0, "y": 900.0},
+            "place_id": ORIGIN_BUILDING_ID,
         }
     )
     payload["world"]["transport"]["edges"].extend(
         [
             {
-                "id": "walk-home-primary-office",
-                "from_node_id": "node-home-entrance",
-                "to_node_id": "node-office-entrance",
+                "id": "walk-apartments-primary-cafe",
+                "from_node_id": ORIGIN_NODE_ID,
+                "to_node_id": DESTINATION_NODE_ID,
                 "allowed_modes": ["WALK"],
                 "distance_meters": 1000,
                 "geometry": [
-                    {"x": 650, "y": 1400},
-                    {"x": 5350, "y": 1400},
+                    origin_node["position"],
+                    destination_node["position"],
                 ],
                 "bidirectional": True,
             },
             {
-                "id": "walk-home-alt-office",
-                "from_node_id": "node-home-alt",
-                "to_node_id": "node-office-entrance",
+                "id": "walk-apartments-side-cafe",
+                "from_node_id": "node-city-north-apartments-side",
+                "to_node_id": DESTINATION_NODE_ID,
                 "allowed_modes": ["WALK"],
                 "distance_meters": 100,
                 "geometry": [
-                    {"x": 700, "y": 1400},
-                    {"x": 5350, "y": 1400},
+                    {"x": 110.0, "y": 900.0},
+                    destination_node["position"],
                 ],
                 "bidirectional": True,
             },
         ]
     )
-    components = payload["entities"][0]["components"]
+    components = next(
+        entity["components"]
+        for entity in payload["entities"]
+        if entity["id"] == CITY_ACTOR_ID
+    )
     components["plan"] = {
         "queue": [
             {
                 "action": "NAVIGATE",
-                "target": "building-office",
+                "target": DESTINATION_BUILDING_ID,
                 "mode": "WALK",
             }
         ]
@@ -1243,23 +1278,23 @@ def test_navigation_uses_the_planned_outbound_entrance() -> None:
             {
                 "id": "known-walking-route",
                 "kind": "knowledge.route",
-                "subject_ids": ["agent-001", "building-office"],
+                "subject_ids": [CITY_ACTOR_ID, DESTINATION_BUILDING_ID],
                 "content": {
-                    "destination_id": "building-office",
+                    "destination_id": DESTINATION_BUILDING_ID,
                     "locators": [
                         {
-                            "space_id": "building-office.interior",
+                            "space_id": DESTINATION_ROOM_ID,
                             "local_reference": {
                                 "kind": "coordinate",
                                 "x": 0,
-                                "y": 1,
+                                "y": 4,
                             },
                         }
                     ],
                     "transition_ids": [
-                        "entrance-office",
-                        "walk-home-primary-office",
-                        "walk-home-alt-office",
+                        DESTINATION_ENTRANCE_ID,
+                        "walk-apartments-primary-cafe",
+                        "walk-apartments-side-cafe",
                     ],
                 },
             }
@@ -1267,23 +1302,31 @@ def test_navigation_uses_the_planned_outbound_entrance() -> None:
     }
     runner = _city_runner(payload)
 
-    runner.run_for(100)
+    runner.run_for(20)
 
     navigation = runner.registry.get_component(
-        "agent-001",
+        CITY_ACTOR_ID,
         NavigationComponent,
     )
     assert navigation.status is NavigationStatus.ARRIVED
-    travel_primitive = navigation.primitives[0]
-    assert travel_primitive.outbound_transition_id == "entrance-home-alt"
-    assert travel_primitive.origin_network_node_id == "node-home-alt"
+    travel_primitive = next(
+        primitive
+        for primitive in navigation.primitives
+        if primitive.kind is NavigationPrimitiveKind.TRAVEL
+    )
+    assert travel_primitive.outbound_transition_id == (
+        "building-city-north-apartments.side"
+    )
+    assert travel_primitive.origin_network_node_id == (
+        "node-city-north-apartments-side"
+    )
     route_planned = next(
         event
         for event in runner.events.events
         if event.event_type == "travel.route_planned"
     )
     assert [leg["edge_id"] for leg in route_planned.payload["legs"]] == [
-        "walk-home-alt-office"
+        "walk-apartments-side-cafe"
     ]
 
 
@@ -1292,7 +1335,7 @@ def test_navigation_propagates_vehicle_unavailable_failure() -> None:
     payload["world"]["transport"]["vehicles"] = []
     runner = _city_runner(payload)
 
-    runner.run_for(1)
+    runner.run_for(10)
 
     failures = {
         event.event_type: event.payload["reason"]

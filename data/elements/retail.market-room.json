@@ -1,0 +1,379 @@
+{
+  "blocked": [
+    {
+      "x": 2,
+      "y": 0
+    },
+    {
+      "x": 2,
+      "y": 1
+    },
+    {
+      "x": 2,
+      "y": 4
+    },
+    {
+      "x": 2,
+      "y": 5
+    }
+  ],
+  "description": "Reusable room archetype for portable city scenarios.",
+  "height": 6,
+  "id": "retail.market-room",
+  "kind": "room",
+  "name": "Neighborhood Market",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "8f01659b7c7d2c78e83315178f49afcbbddd4789320cc336f1cb729929553a2d",
+        "id": "common.exterior-door",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "front-door",
+      "placement": {
+        "anchor": {
+          "x": 1,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "id": "common.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "front-window",
+      "placement": {
+        "anchor": {
+          "x": 13,
+          "y": 1
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "id": "common.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "side-window",
+      "placement": {
+        "anchor": {
+          "x": 79,
+          "y": 14
+        },
+        "orientation": "EAST",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "011847b2ef6434af6a533fe3388e45dfc64d05ea79ff875887d6f2a1bc576c8e",
+        "id": "retail.shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-west-lower",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "011847b2ef6434af6a533fe3388e45dfc64d05ea79ff875887d6f2a1bc576c8e",
+        "id": "retail.shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-east-lower",
+      "placement": {
+        "anchor": {
+          "x": 49,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "011847b2ef6434af6a533fe3388e45dfc64d05ea79ff875887d6f2a1bc576c8e",
+        "id": "retail.shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-west-upper",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 39
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "011847b2ef6434af6a533fe3388e45dfc64d05ea79ff875887d6f2a1bc576c8e",
+        "id": "retail.shelf",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "aisle-east-upper",
+      "placement": {
+        "anchor": {
+          "x": 49,
+          "y": 39
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5dad6b693a63a1cd254cc7ed06e55d1865bcb433fa090a29a3ef8655e8ea8227",
+        "id": "retail.display",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "produce-display",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 15
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "e28cfc0a50a3b1fddc70a6f93b75f4b5ece01de69fa8160fc18f5ecd752af29e",
+        "id": "common.cabinet",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "stock-cabinet",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 29
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "afd32db2f6d3337528c89da85d97c93005402e3cde36491b31f61599bbc031d5",
+        "id": "retail.market-checkout",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "checkout",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 43
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4d27ea93f35e8840cafe7986cc5021ba05dd368219b7195bb9733ff5488214e4",
+        "id": "common.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "shelf-bottle-a",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 12
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "aisle-west-lower",
+          "slot_id": "middle-stock"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4d27ea93f35e8840cafe7986cc5021ba05dd368219b7195bb9733ff5488214e4",
+        "id": "common.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "shelf-bottle-b",
+      "placement": {
+        "anchor": {
+          "x": 49,
+          "y": 12
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "aisle-east-lower",
+          "slot_id": "middle-stock"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4d27ea93f35e8840cafe7986cc5021ba05dd368219b7195bb9733ff5488214e4",
+        "id": "common.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "display-bottle",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 15
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "produce-display",
+          "slot_id": "display-top"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "4d27ea93f35e8840cafe7986cc5021ba05dd368219b7195bb9733ff5488214e4",
+        "id": "common.bottle",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "stored-bottle",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 29
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "IN_CONTAINER",
+          "parent_id": "stock-cabinet",
+          "slot_id": "interior"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5ae404a29592e4dd2017629451ce193a9975859c82308badb05b80d73589b508",
+        "id": "common.phone",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "checkout-phone",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 43
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "checkout",
+          "slot_id": "bagging-top"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    }
+  ],
+  "room_type": "MARKET",
+  "schema_version": 4,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
+  "width": 9,
+  "zones": null
+}

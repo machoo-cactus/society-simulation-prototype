@@ -9,7 +9,10 @@ htmlcov/
 .coverage
 *.db
 *.sqlite3
-data/
+data/runs/
+data/backups/
+data/migration-backups/
+backups/
 *.egg-info/
 build/
 dist/

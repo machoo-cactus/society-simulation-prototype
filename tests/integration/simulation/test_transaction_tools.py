@@ -22,7 +22,7 @@ from stage0_sim.application.scenario import ScenarioDefinition, create_runner
 from stage0_sim.application.scenario_resolution import load_and_resolve_scenario
 from stage0_sim.domain.components import PossessionsComponent
 from stage0_sim.domain.intents import ServeTransactionIntent, TransactionIntent
-from tests.helpers.paths import EXAMPLE_ELEMENTS, EXAMPLE_SCENARIOS, REPOSITORY_ROOT
+from tests.helpers.paths import CATALOG_ELEMENTS, CATALOG_SCENARIOS, REPOSITORY_ROOT
 
 ROOT = REPOSITORY_ROOT
 
@@ -177,34 +177,55 @@ def test_serve_transaction_is_restricted_to_observed_npc_requests() -> None:
     assert normal_character.value.reason == "tool_not_allowed_for_actor"
 
 
-def test_scripted_tool_agent_can_complete_observed_transaction() -> None:
+def test_scripted_tool_agent_can_complete_catalog_transaction() -> None:
     source = load_and_resolve_scenario(
-        EXAMPLE_SCENARIOS / "greyford-rivermarket-exchange.json",
-        FileSystemElementLibrary(EXAMPLE_ELEMENTS),
+        CATALOG_SCENARIOS / "neighborhood-errand.json",
+        FileSystemElementLibrary(CATALOG_ELEMENTS),
     ).scenario.model_dump(mode="json")
     source["cognition"] = {
-        "tool_allowlist": ["transact"],
+        "tool_allowlist": ["navigate_to", "transact"],
         "npc_control_mode": "deterministic",
     }
     components = source["entities"][0]["components"]
     components.pop("plan")
     components["spatial_location"] = {
         "scale": "BUILDING",
-        "place_id": "building-greyford-rivermarket-grocer-demo.interior",
-        "local_coordinate": {"x": 8, "y": 3},
+        "place_id": "building-riverbend-market.interior",
+        "local_coordinate": {"x": 0, "y": 4},
     }
-    components["controller"] = {"enabled": True}
+    components["controller"] = {
+        "enabled": True,
+        "tool_allowlist": ["navigate_to", "transact"],
+    }
     client = ScriptedModelClient(
         (
             ModelTurn(
                 text=None,
                 tool_calls=(
                     ModelToolCall(
-                        call_id="call-1",
+                        call_id="navigate-to-checkout",
+                        name="navigate_to",
+                        arguments={
+                            "target_id": (
+                                "building-riverbend-market.interior.checkout"
+                            )
+                        },
+                    ),
+                ),
+                finish_reason="tool_calls",
+                provider="scripted",
+                model="scripted-v1",
+                latency_ms=0,
+            ),
+            ModelTurn(
+                text=None,
+                tool_calls=(
+                    ModelToolCall(
+                        call_id="redeem-bottle",
                         name="transact",
                         arguments={
                             "point_id": (
-                                "transaction-point-greyford-rivermarket-checkout"
+                                "building-riverbend-market.interior.checkout"
                             ),
                             "offer_id": "redeem-returnable-bottle",
                         },
@@ -222,23 +243,18 @@ def test_scripted_tool_agent_can_complete_observed_transaction() -> None:
         model_client=client,
     )
 
-    runner.run_for(4)
+    runner.run_for(30)
 
     possessions = runner.registry.get_component(
-        "character-greyford-rivermarket-shopper",
+        "resident-shopper",
         PossessionsComponent,
     )
-    assert possessions.holdings == {"greyford-cent": 500}
+    assert possessions.holdings == {"city-credit": 504}
     committed = next(
         event
         for event in runner.events.events
         if event.event_type == "tool.committed"
         and event.payload["tool_name"] == "transact"
-    )
-    assert any(
-        event.event_type == "tool.committed"
-        and event.payload["tool_name"] == "transact"
-        for event in runner.events.events
     )
     completed = next(
         event

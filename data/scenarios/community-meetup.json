@@ -1,0 +1,1931 @@
+{
+  "calendar": {
+    "start_datetime": "2026-09-05T08:30:00-07:00",
+    "update_interval_seconds": 900.0
+  },
+  "character_situation_synthesis": {
+    "enabled": false
+  },
+  "cognition": {
+    "decision_timeout_seconds": 30.0,
+    "engagement_compiler": {
+      "max_concurrency": 2,
+      "max_input_tokens": null,
+      "max_output_tokens": 768,
+      "max_requests": null,
+      "max_total_output_tokens": null,
+      "model_profile": "default",
+      "timeout_seconds": 30.0
+    },
+    "max_concurrency": 4,
+    "max_input_tokens": null,
+    "max_output_tokens": 512,
+    "max_read_tool_rounds": 1,
+    "max_requests": null,
+    "max_state_changing_tools": 1,
+    "max_total_output_tokens": null,
+    "model_profile": "default",
+    "npc_control_mode": "auto",
+    "tool_allowlist": [
+      "navigate_to",
+      "perform",
+      "interact_with",
+      "say",
+      "engage",
+      "wait",
+      "skip",
+      "transact",
+      "check_environment",
+      "read_text",
+      "write_text"
+    ]
+  },
+  "dt": 1.0,
+  "engagement": {
+    "activating_stress_delta": 2.0,
+    "alarming_listener_stress_delta": 2.0,
+    "calming_stress_delta": -2.0,
+    "high_effort_energy_cost": 6.0,
+    "long_activity_seconds": 30.0,
+    "loud_sound_range": 20,
+    "low_effort_energy_cost": 1.0,
+    "max_groups": 4,
+    "max_invocations_per_group": 4,
+    "max_public_text_chars": 280,
+    "medium_activity_seconds": 15.0,
+    "medium_effort_energy_cost": 3.0,
+    "normal_sound_range": 10,
+    "quiet_sound_range": 2,
+    "short_activity_seconds": 5.0
+  },
+  "entities": [
+    {
+      "components": {
+        "character_slot": {
+          "briefing": "A casual meetup may form at Gather Cafe. Choose freely whether to attend, speak, use the shared note, or continue another activity.",
+          "constraints": {
+            "allowed_genders": [],
+            "allowed_template_ids": [
+              "human-v1"
+            ],
+            "maximum_age": null,
+            "minimum_age": 18
+          },
+          "default_character_id": "alex-chen",
+          "label": "Community resident",
+          "synthesis_guidance": ""
+        },
+        "controller": {
+          "enabled": true,
+          "tool_allowlist": [
+            "navigate_to",
+            "perform",
+            "interact_with",
+            "say",
+            "engage",
+            "wait",
+            "skip",
+            "transact",
+            "check_environment",
+            "read_text",
+            "write_text"
+          ]
+        },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "activation_time": 0.0,
+              "completion_policy": "all",
+              "criteria": [
+                {
+                  "simulation_time": 3600.0,
+                  "type": "simulation_time"
+                }
+              ],
+              "deadline_time": null,
+              "description": "Decide whether and how to join the informal community meetup.",
+              "id": "resident-alex-meet-neighbors",
+              "priority": 45,
+              "tags": [
+                "social",
+                "open-ended"
+              ]
+            }
+          ]
+        },
+        "homeostasis": {
+          "energy": 84.0,
+          "satiety": 76.0,
+          "stress": 14.0
+        },
+        "information": {
+          "documents": [
+            {
+              "content": {
+                "destination_id": "building-community-cafe",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-cafe.interior"
+                  }
+                ],
+                "name": "Gather Cafe",
+                "transition_ids": []
+              },
+              "id": "info-resident-alex-building-community-cafe",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-cafe"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-alex",
+                "building-community-cafe"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-alex"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-community-library",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-library.interior"
+                  }
+                ],
+                "name": "Library Annex",
+                "transition_ids": []
+              },
+              "id": "info-resident-alex-building-community-library",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-library"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-alex",
+                "building-community-library"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-alex"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-community-market",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-market.interior"
+                  }
+                ],
+                "name": "Community Market",
+                "transition_ids": []
+              },
+              "id": "info-resident-alex-building-community-market",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-market"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-alex",
+                "building-community-market"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-alex"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-community-transit",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-transit.interior"
+                  }
+                ],
+                "name": "Community Transit Hub",
+                "transition_ids": []
+              },
+              "id": "info-resident-alex-building-community-transit",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-transit"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-alex",
+                "building-community-transit"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-alex"
+                ],
+                "reader_ids": []
+              }
+            }
+          ]
+        },
+        "memory": {
+          "initial_episodes": [
+            {
+              "importance": 0.55,
+              "simulation_time": 0.0,
+              "text": "A casual meetup may form at Gather Cafe. Choose freely whether to attend, speak, use the shared note, or continue another activity."
+            }
+          ],
+          "top_k": 5
+        },
+        "possessions": {
+          "holdings": {
+            "city-credit": 20
+          }
+        },
+        "senses": {
+          "hearing_range": 10,
+          "recognition_range": 6,
+          "smell_range": 2,
+          "vision_range": 8
+        },
+        "spatial_location": {
+          "edge_id": null,
+          "edge_progress": null,
+          "local_coordinate": {
+            "x": 1,
+            "y": 4
+          },
+          "network_node_id": null,
+          "place_id": "building-community-apartments.interior",
+          "scale": "BUILDING"
+        }
+      },
+      "id": "resident-alex"
+    },
+    {
+      "components": {
+        "character_slot": {
+          "briefing": "A casual meetup may form at Gather Cafe. Choose freely whether to attend, speak, use the shared note, or continue another activity.",
+          "constraints": {
+            "allowed_genders": [],
+            "allowed_template_ids": [
+              "human-v1"
+            ],
+            "maximum_age": null,
+            "minimum_age": 18
+          },
+          "default_character_id": "jordan-lee",
+          "label": "Community resident",
+          "synthesis_guidance": ""
+        },
+        "controller": {
+          "enabled": true,
+          "tool_allowlist": [
+            "navigate_to",
+            "perform",
+            "interact_with",
+            "say",
+            "engage",
+            "wait",
+            "skip",
+            "transact",
+            "check_environment",
+            "read_text",
+            "write_text"
+          ]
+        },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "activation_time": 0.0,
+              "completion_policy": "all",
+              "criteria": [
+                {
+                  "simulation_time": 3600.0,
+                  "type": "simulation_time"
+                }
+              ],
+              "deadline_time": null,
+              "description": "Decide whether and how to join the informal community meetup.",
+              "id": "resident-jordan-meet-neighbors",
+              "priority": 45,
+              "tags": [
+                "social",
+                "open-ended"
+              ]
+            }
+          ]
+        },
+        "homeostasis": {
+          "energy": 84.0,
+          "satiety": 76.0,
+          "stress": 14.0
+        },
+        "information": {
+          "documents": [
+            {
+              "content": {
+                "destination_id": "building-community-cafe",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-cafe.interior"
+                  }
+                ],
+                "name": "Gather Cafe",
+                "transition_ids": []
+              },
+              "id": "info-resident-jordan-building-community-cafe",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-cafe"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-jordan",
+                "building-community-cafe"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-jordan"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-community-library",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-library.interior"
+                  }
+                ],
+                "name": "Library Annex",
+                "transition_ids": []
+              },
+              "id": "info-resident-jordan-building-community-library",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-library"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-jordan",
+                "building-community-library"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-jordan"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-community-market",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-market.interior"
+                  }
+                ],
+                "name": "Community Market",
+                "transition_ids": []
+              },
+              "id": "info-resident-jordan-building-community-market",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-market"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-jordan",
+                "building-community-market"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-jordan"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-community-transit",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-transit.interior"
+                  }
+                ],
+                "name": "Community Transit Hub",
+                "transition_ids": []
+              },
+              "id": "info-resident-jordan-building-community-transit",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-transit"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-jordan",
+                "building-community-transit"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-jordan"
+                ],
+                "reader_ids": []
+              }
+            }
+          ]
+        },
+        "memory": {
+          "initial_episodes": [
+            {
+              "importance": 0.55,
+              "simulation_time": 0.0,
+              "text": "A casual meetup may form at Gather Cafe. Choose freely whether to attend, speak, use the shared note, or continue another activity."
+            }
+          ],
+          "top_k": 5
+        },
+        "possessions": {
+          "holdings": {
+            "city-credit": 24
+          }
+        },
+        "senses": {
+          "hearing_range": 10,
+          "recognition_range": 6,
+          "smell_range": 2,
+          "vision_range": 8
+        },
+        "spatial_location": {
+          "edge_id": null,
+          "edge_progress": null,
+          "local_coordinate": {
+            "x": 1,
+            "y": 6
+          },
+          "network_node_id": null,
+          "place_id": "building-community-townhouse-west.interior",
+          "scale": "BUILDING"
+        }
+      },
+      "id": "resident-jordan"
+    },
+    {
+      "components": {
+        "character_slot": {
+          "briefing": "A casual meetup may form at Gather Cafe. Choose freely whether to attend, speak, use the shared note, or continue another activity.",
+          "constraints": {
+            "allowed_genders": [],
+            "allowed_template_ids": [
+              "human-v1"
+            ],
+            "maximum_age": null,
+            "minimum_age": 18
+          },
+          "default_character_id": "maya-thompson",
+          "label": "Community resident",
+          "synthesis_guidance": ""
+        },
+        "controller": {
+          "enabled": true,
+          "tool_allowlist": [
+            "navigate_to",
+            "perform",
+            "interact_with",
+            "say",
+            "engage",
+            "wait",
+            "skip",
+            "transact",
+            "check_environment",
+            "read_text",
+            "write_text"
+          ]
+        },
+        "embodiment": {
+          "equipment_slots": [
+            {
+              "capacity": 1,
+              "slot": "EYES"
+            },
+            {
+              "capacity": 1,
+              "slot": "EARS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FACE"
+            },
+            {
+              "capacity": 1,
+              "slot": "HEAD"
+            },
+            {
+              "capacity": 1,
+              "slot": "NECK"
+            },
+            {
+              "capacity": 1,
+              "slot": "TORSO"
+            },
+            {
+              "capacity": 1,
+              "slot": "BACK"
+            },
+            {
+              "capacity": 1,
+              "slot": "WRIST"
+            },
+            {
+              "capacity": 1,
+              "slot": "LEGS"
+            },
+            {
+              "capacity": 1,
+              "slot": "FEET"
+            }
+          ],
+          "max_carried_mass_kg": 35.0,
+          "max_single_object_mass_kg": 25.0
+        },
+        "goals": {
+          "goals": [
+            {
+              "activation_time": 0.0,
+              "completion_policy": "all",
+              "criteria": [
+                {
+                  "simulation_time": 3600.0,
+                  "type": "simulation_time"
+                }
+              ],
+              "deadline_time": null,
+              "description": "Decide whether and how to join the informal community meetup.",
+              "id": "resident-maya-meet-neighbors",
+              "priority": 45,
+              "tags": [
+                "social",
+                "open-ended"
+              ]
+            }
+          ]
+        },
+        "homeostasis": {
+          "energy": 84.0,
+          "satiety": 76.0,
+          "stress": 14.0
+        },
+        "information": {
+          "documents": [
+            {
+              "content": {
+                "destination_id": "building-community-cafe",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-cafe.interior"
+                  }
+                ],
+                "name": "Gather Cafe",
+                "transition_ids": []
+              },
+              "id": "info-resident-maya-building-community-cafe",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-cafe"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-maya",
+                "building-community-cafe"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-maya"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-community-library",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-library.interior"
+                  }
+                ],
+                "name": "Library Annex",
+                "transition_ids": []
+              },
+              "id": "info-resident-maya-building-community-library",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-library"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-maya",
+                "building-community-library"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-maya"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-community-market",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-market.interior"
+                  }
+                ],
+                "name": "Community Market",
+                "transition_ids": []
+              },
+              "id": "info-resident-maya-building-community-market",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-market"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-maya",
+                "building-community-market"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-maya"
+                ],
+                "reader_ids": []
+              }
+            },
+            {
+              "content": {
+                "destination_id": "building-community-transit",
+                "kind": "building",
+                "locators": [
+                  {
+                    "local_reference": {
+                      "kind": "coordinate",
+                      "x": 0,
+                      "y": 4
+                    },
+                    "space_id": "building-community-transit.interior"
+                  }
+                ],
+                "name": "Community Transit Hub",
+                "transition_ids": []
+              },
+              "id": "info-resident-maya-building-community-transit",
+              "kind": "knowledge.place",
+              "recorded_at": 0.0,
+              "schema_id": "navigation-knowledge.v1",
+              "source": {
+                "metadata": {},
+                "observer_id": null,
+                "reference_ids": [
+                  "building-community-transit"
+                ],
+                "type": "SCENARIO_KNOWN_ROUTE"
+              },
+              "subject_ids": [
+                "resident-maya",
+                "building-community-transit"
+              ],
+              "valid_time": null,
+              "visibility": {
+                "level": "private",
+                "owner_ids": [
+                  "resident-maya"
+                ],
+                "reader_ids": []
+              }
+            }
+          ]
+        },
+        "memory": {
+          "initial_episodes": [
+            {
+              "importance": 0.55,
+              "simulation_time": 0.0,
+              "text": "A casual meetup may form at Gather Cafe. Choose freely whether to attend, speak, use the shared note, or continue another activity."
+            }
+          ],
+          "top_k": 5
+        },
+        "possessions": {
+          "holdings": {
+            "city-credit": 18
+          }
+        },
+        "senses": {
+          "hearing_range": 10,
+          "recognition_range": 6,
+          "smell_range": 2,
+          "vision_range": 8
+        },
+        "spatial_location": {
+          "edge_id": null,
+          "edge_progress": null,
+          "local_coordinate": {
+            "x": 1,
+            "y": 6
+          },
+          "network_node_id": null,
+          "place_id": "building-community-townhouse-east.interior",
+          "scale": "BUILDING"
+        }
+      },
+      "id": "resident-maya"
+    }
+  ],
+  "homeostasis": {
+    "activity_coefficients": {}
+  },
+  "items": [
+    {
+      "id": "city-credit",
+      "name": "City credit",
+      "unit": "credit"
+    },
+    {
+      "id": "filter-coffee",
+      "name": "Filter coffee",
+      "unit": "cup"
+    },
+    {
+      "id": "hot-tea",
+      "name": "Hot tea",
+      "unit": "cup"
+    },
+    {
+      "id": "morning-bun",
+      "name": "Morning bun",
+      "unit": "item"
+    },
+    {
+      "id": "prepared-meal",
+      "name": "Prepared meal",
+      "unit": "meal"
+    },
+    {
+      "id": "local-apples",
+      "name": "Bag of local apples",
+      "unit": "bag"
+    },
+    {
+      "id": "bread-loaf",
+      "name": "Loaf of bread",
+      "unit": "loaf"
+    },
+    {
+      "id": "spring-water",
+      "name": "Spring water",
+      "unit": "serving"
+    },
+    {
+      "id": "returnable-bottle",
+      "name": "Empty returnable bottle",
+      "unit": "bottle"
+    },
+    {
+      "id": "packed-lunch",
+      "name": "Packed lunch",
+      "unit": "pack"
+    },
+    {
+      "id": "health-kit",
+      "name": "Basic health kit",
+      "unit": "kit"
+    },
+    {
+      "id": "transit-pass",
+      "name": "Day transit pass",
+      "unit": "pass"
+    }
+  ],
+  "memory": {
+    "importance_weight": 0.15,
+    "recency_half_life": 3600.0,
+    "recency_weight": 0.25,
+    "semantic_weight": 0.6
+  },
+  "name": "community-meetup",
+  "perception": {
+    "blocked_tiles_are_opaque": true,
+    "fact_max_age_seconds": 300.0,
+    "inbox_limit": 100,
+    "recognition_range": 5,
+    "renderer": "deterministic",
+    "vision_range": 8,
+    "voice_range": 10,
+    "whisper_range": 2
+  },
+  "run_id": null,
+  "schema_version": 8,
+  "seed": 20260908,
+  "speed": 1.0,
+  "system1": {
+    "thresholds": {},
+    "tie_break_order": [
+      "SATIETY",
+      "ENERGY",
+      "STRESS"
+    ]
+  },
+  "text_content": {
+    "addresses": [],
+    "artifacts": [
+      {
+        "access_policy": {
+          "grants": [
+            {
+              "operation": "read",
+              "principals": [
+                {
+                  "id": "resident-alex",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-jordan",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-maya",
+                  "kind": "character"
+                }
+              ]
+            },
+            {
+              "operation": "append",
+              "principals": [
+                {
+                  "id": "resident-alex",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-jordan",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-maya",
+                  "kind": "character"
+                }
+              ]
+            },
+            {
+              "operation": "replace",
+              "principals": [
+                {
+                  "id": "resident-alex",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-jordan",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-maya",
+                  "kind": "character"
+                }
+              ]
+            },
+            {
+              "operation": "edit",
+              "principals": [
+                {
+                  "id": "resident-alex",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-jordan",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-maya",
+                  "kind": "character"
+                }
+              ]
+            },
+            {
+              "operation": "delete",
+              "principals": [
+                {
+                  "id": "resident-alex",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-jordan",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-maya",
+                  "kind": "character"
+                }
+              ]
+            }
+          ]
+        },
+        "attribution": {
+          "authoritative_actor_id": "resident-alex",
+          "display": "verified",
+          "display_label": "Community participant",
+          "sender_address_id": null
+        },
+        "blocks": [
+          {
+            "id": "title",
+            "kind": "title",
+            "text": "Community meetup notes"
+          },
+          {
+            "id": "welcome",
+            "kind": "entry",
+            "text": "Add useful updates without assuming a fixed outcome."
+          }
+        ],
+        "id": "shared-community-note",
+        "media_kind": "document",
+        "mode": "mutable"
+      }
+    ],
+    "collections": [
+      {
+        "access_policy": {
+          "grants": [
+            {
+              "operation": "discover",
+              "principals": [
+                {
+                  "id": "resident-alex",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-jordan",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-maya",
+                  "kind": "character"
+                }
+              ]
+            },
+            {
+              "operation": "list",
+              "principals": [
+                {
+                  "id": "resident-alex",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-jordan",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-maya",
+                  "kind": "character"
+                }
+              ]
+            },
+            {
+              "operation": "create",
+              "principals": [
+                {
+                  "id": "resident-alex",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-jordan",
+                  "kind": "character"
+                },
+                {
+                  "id": "resident-maya",
+                  "kind": "character"
+                }
+              ]
+            }
+          ]
+        },
+        "capacity": 100,
+        "id": "shared-documents",
+        "kind": "document_set",
+        "members": [
+          "shared-community-note"
+        ]
+      }
+    ],
+    "groups": [
+      {
+        "id": "community-participants",
+        "member_ids": [
+          "resident-alex",
+          "resident-jordan",
+          "resident-maya"
+        ]
+      }
+    ]
+  },
+  "weather": {
+    "effects": {
+      "CLEAR": {
+        "base_drying_per_second": 0.0002,
+        "cycling_speed_multiplier": 1.0,
+        "temperature_drying_per_degree_second": 5e-06,
+        "visibility_multiplier": 1.0,
+        "walking_speed_multiplier": 1.0,
+        "wetness_gain_per_mm_hour_second": 2e-05,
+        "wind_drying_per_mps_second": 2e-05
+      },
+      "RAIN": {
+        "base_drying_per_second": 5e-05,
+        "cycling_speed_multiplier": 0.65,
+        "temperature_drying_per_degree_second": 1e-06,
+        "visibility_multiplier": 0.45,
+        "walking_speed_multiplier": 0.8,
+        "wetness_gain_per_mm_hour_second": 0.0001,
+        "wind_drying_per_mps_second": 5e-06
+      }
+    },
+    "initial": {
+      "condition": "CLEAR",
+      "precipitation_mm_per_hour": 0.0,
+      "temperature_c": 19.0,
+      "visibility_meters": 10000.0,
+      "wind_direction_degrees": 240.0,
+      "wind_speed_mps": 2.0
+    },
+    "transitions": [
+      {
+        "at_seconds": 900.0,
+        "state": {
+          "condition": "RAIN",
+          "precipitation_mm_per_hour": 8.0,
+          "temperature_c": 16.0,
+          "visibility_meters": 1800.0,
+          "wind_direction_degrees": 260.0,
+          "wind_speed_mps": 5.0
+        }
+      },
+      {
+        "at_seconds": 2700.0,
+        "state": {
+          "condition": "CLEAR",
+          "precipitation_mm_per_hour": 0.0,
+          "temperature_c": 18.0,
+          "visibility_meters": 10000.0,
+          "wind_direction_degrees": 270.0,
+          "wind_speed_mps": 4.0
+        }
+      }
+    ]
+  },
+  "world": {
+    "building_order": [
+      "building-community-apartments",
+      "building-community-townhouse-west",
+      "building-community-townhouse-east",
+      "building-community-cafe",
+      "building-community-market",
+      "building-community-library",
+      "building-community-transit"
+    ],
+    "city": {
+      "bounds_meters": {
+        "max_x": 900.0,
+        "max_y": 850.0,
+        "min_x": -100.0,
+        "min_y": -50.0
+      },
+      "id": "city-community",
+      "name": "Community City"
+    },
+    "city_zones": [
+      {
+        "buildings": [
+          {
+            "city_position": {
+              "x": 100.0,
+              "y": 500.0
+            },
+            "element": {
+              "content_hash": "97d9a730c48459cf4655bc42f04d80fe42049293badde9e5017a497238014105",
+              "id": "residential.apartment",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-community-apartments"
+            },
+            "id": "building-community-apartments",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Garden Apartments",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 100.0,
+              "y": 200.0
+            },
+            "element": {
+              "content_hash": "c0a7c1576beba6dac63ddc64495367e16e311963123bf81e80fc857ed3ff08d6",
+              "id": "residential.townhouse",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-community-townhouse-west"
+            },
+            "id": "building-community-townhouse-west",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "West Row Townhouse",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 300.0,
+              "y": 150.0
+            },
+            "element": {
+              "content_hash": "c0a7c1576beba6dac63ddc64495367e16e311963123bf81e80fc857ed3ff08d6",
+              "id": "residential.townhouse",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-community-townhouse-east"
+            },
+            "id": "building-community-townhouse-east",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "East Row Townhouse",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 500.0,
+              "y": 350.0
+            },
+            "element": {
+              "content_hash": "df1042b923ad9420106e74d9c889f434d2109aa622fc872502de8acb72940bd1",
+              "id": "hospitality.cafe",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-community-cafe"
+            },
+            "id": "building-community-cafe",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Gather Cafe",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 700.0,
+              "y": 420.0
+            },
+            "element": {
+              "content_hash": "cb197902021db9d86414318572181cdf04585d02940d707213ac4b14f249ad3c",
+              "id": "retail.market",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-community-market"
+            },
+            "id": "building-community-market",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Community Market",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 700.0,
+              "y": 180.0
+            },
+            "element": {
+              "content_hash": "ce89b2022628440636d565273faa4604038dc3ec2d0f19b53bc46238c91fddb6",
+              "id": "civic.library",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-community-library"
+            },
+            "id": "building-community-library",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Library Annex",
+              "room_overrides": {}
+            }
+          },
+          {
+            "city_position": {
+              "x": 500.0,
+              "y": 650.0
+            },
+            "element": {
+              "content_hash": "131e8b9c72704c75a57f67ce31e69b6d885305f09430c26113f7d0e9ecc2d2d4",
+              "id": "mobility.station",
+              "kind": "building"
+            },
+            "entrance_node_ids": {
+              "front": "node-community-transit"
+            },
+            "id": "building-community-transit",
+            "overrides": {
+              "available": null,
+              "disabled_room_keys": [],
+              "environment": null,
+              "name": "Community Transit Hub",
+              "room_overrides": {}
+            }
+          }
+        ],
+        "center": {
+          "x": 450.0,
+          "y": 350.0
+        },
+        "id": "district-community",
+        "name": "Community District",
+        "outdoor_places": [
+          {
+            "available": true,
+            "city_position": {
+              "x": 450.0,
+              "y": 500.0
+            },
+            "environment": {
+              "closed_weather": [
+                "STORM"
+              ],
+              "schedule": null
+            },
+            "id": "place-community-park",
+            "name": "Community Park",
+            "network_node_id": "node-community-park"
+          },
+          {
+            "available": true,
+            "city_position": {
+              "x": 450.0,
+              "y": 250.0
+            },
+            "environment": {
+              "closed_weather": [
+                "STORM"
+              ],
+              "schedule": null
+            },
+            "id": "place-community-plaza",
+            "name": "Community Plaza",
+            "network_node_id": "node-community-plaza"
+          }
+        ]
+      }
+    ],
+    "npc_role_order": [
+      "hospitality.barista"
+    ],
+    "outdoor_place_order": [
+      "place-community-park",
+      "place-community-plaza"
+    ],
+    "transport": {
+      "car_speed_mps": 13.9,
+      "cycling_speed_mps": 4.5,
+      "edges": [
+        {
+          "allowed_modes": [
+            "WALK",
+            "CYCLE"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 380.789,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-community-apartments",
+          "geometry": [
+            {
+              "x": 100.0,
+              "y": 500.0
+            },
+            {
+              "x": 450.0,
+              "y": 350.0
+            }
+          ],
+          "id": "edge-node-community-apartments-node-district-community-hub",
+          "speed_limit_mps": null,
+          "to_node_id": "node-district-community-hub"
+        },
+        {
+          "allowed_modes": [
+            "WALK",
+            "CYCLE"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 380.789,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-community-townhouse-west",
+          "geometry": [
+            {
+              "x": 100.0,
+              "y": 200.0
+            },
+            {
+              "x": 450.0,
+              "y": 350.0
+            }
+          ],
+          "id": "edge-node-community-townhouse-west-node-district-community-hub",
+          "speed_limit_mps": null,
+          "to_node_id": "node-district-community-hub"
+        },
+        {
+          "allowed_modes": [
+            "WALK",
+            "CYCLE"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 250.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-community-townhouse-east",
+          "geometry": [
+            {
+              "x": 300.0,
+              "y": 150.0
+            },
+            {
+              "x": 450.0,
+              "y": 350.0
+            }
+          ],
+          "id": "edge-node-community-townhouse-east-node-district-community-hub",
+          "speed_limit_mps": null,
+          "to_node_id": "node-district-community-hub"
+        },
+        {
+          "allowed_modes": [
+            "WALK",
+            "CYCLE"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 50.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-community-cafe",
+          "geometry": [
+            {
+              "x": 500.0,
+              "y": 350.0
+            },
+            {
+              "x": 450.0,
+              "y": 350.0
+            }
+          ],
+          "id": "edge-node-community-cafe-node-district-community-hub",
+          "speed_limit_mps": null,
+          "to_node_id": "node-district-community-hub"
+        },
+        {
+          "allowed_modes": [
+            "WALK",
+            "CYCLE"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 259.615,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-community-market",
+          "geometry": [
+            {
+              "x": 700.0,
+              "y": 420.0
+            },
+            {
+              "x": 450.0,
+              "y": 350.0
+            }
+          ],
+          "id": "edge-node-community-market-node-district-community-hub",
+          "speed_limit_mps": null,
+          "to_node_id": "node-district-community-hub"
+        },
+        {
+          "allowed_modes": [
+            "WALK",
+            "CYCLE"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 302.324,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-community-library",
+          "geometry": [
+            {
+              "x": 700.0,
+              "y": 180.0
+            },
+            {
+              "x": 450.0,
+              "y": 350.0
+            }
+          ],
+          "id": "edge-node-community-library-node-district-community-hub",
+          "speed_limit_mps": null,
+          "to_node_id": "node-district-community-hub"
+        },
+        {
+          "allowed_modes": [
+            "WALK",
+            "CYCLE"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 304.138,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-community-transit",
+          "geometry": [
+            {
+              "x": 500.0,
+              "y": 650.0
+            },
+            {
+              "x": 450.0,
+              "y": 350.0
+            }
+          ],
+          "id": "edge-node-community-transit-node-district-community-hub",
+          "speed_limit_mps": null,
+          "to_node_id": "node-district-community-hub"
+        },
+        {
+          "allowed_modes": [
+            "WALK",
+            "CYCLE"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 150.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-community-park",
+          "geometry": [
+            {
+              "x": 450.0,
+              "y": 500.0
+            },
+            {
+              "x": 450.0,
+              "y": 350.0
+            }
+          ],
+          "id": "edge-node-community-park-node-district-community-hub",
+          "speed_limit_mps": null,
+          "to_node_id": "node-district-community-hub"
+        },
+        {
+          "allowed_modes": [
+            "WALK",
+            "CYCLE"
+          ],
+          "available": true,
+          "bidirectional": true,
+          "distance_meters": 100.0,
+          "environment": {
+            "closed_weather": [
+              "STORM"
+            ],
+            "schedule": null
+          },
+          "from_node_id": "node-community-plaza",
+          "geometry": [
+            {
+              "x": 450.0,
+              "y": 250.0
+            },
+            {
+              "x": 450.0,
+              "y": 350.0
+            }
+          ],
+          "id": "edge-node-community-plaza-node-district-community-hub",
+          "speed_limit_mps": null,
+          "to_node_id": "node-district-community-hub"
+        }
+      ],
+      "metro_lines": [],
+      "metro_speed_mps": 16.0,
+      "nodes": [
+        {
+          "id": "node-community-apartments",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-community-apartments",
+          "position": {
+            "x": 100.0,
+            "y": 500.0
+          }
+        },
+        {
+          "id": "node-community-townhouse-west",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-community-townhouse-west",
+          "position": {
+            "x": 100.0,
+            "y": 200.0
+          }
+        },
+        {
+          "id": "node-community-townhouse-east",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-community-townhouse-east",
+          "position": {
+            "x": 300.0,
+            "y": 150.0
+          }
+        },
+        {
+          "id": "node-community-cafe",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-community-cafe",
+          "position": {
+            "x": 500.0,
+            "y": 350.0
+          }
+        },
+        {
+          "id": "node-community-market",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-community-market",
+          "position": {
+            "x": 700.0,
+            "y": 420.0
+          }
+        },
+        {
+          "id": "node-community-library",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-community-library",
+          "position": {
+            "x": 700.0,
+            "y": 180.0
+          }
+        },
+        {
+          "id": "node-community-transit",
+          "kind": "BUILDING_ENTRANCE",
+          "place_id": "building-community-transit",
+          "position": {
+            "x": 500.0,
+            "y": 650.0
+          }
+        },
+        {
+          "id": "node-community-park",
+          "kind": "PUBLIC_PLACE",
+          "place_id": "place-community-park",
+          "position": {
+            "x": 450.0,
+            "y": 500.0
+          }
+        },
+        {
+          "id": "node-community-plaza",
+          "kind": "PUBLIC_PLACE",
+          "place_id": "place-community-plaza",
+          "position": {
+            "x": 450.0,
+            "y": 250.0
+          }
+        },
+        {
+          "id": "node-district-community-hub",
+          "kind": "DISTRICT_HUB",
+          "place_id": "district-community",
+          "position": {
+            "x": 450.0,
+            "y": 350.0
+          }
+        }
+      ],
+      "vehicles": [],
+      "walking_speed_mps": 1.4
+    },
+    "type": "city"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "available": true,
+  "description": "Reusable building archetype for portable city scenarios.",
+  "entrances": [
+    {
+      "door_object_id": "common.exterior-door",
+      "id": null,
+      "key": "front",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "civic.library",
+  "kind": "building",
+  "name": "Public Library",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "f89bc9dae64260f6fae42a9e11b3204ac96d359a588df9d2b4822d6094f5ecae",
+        "id": "civic.library-room",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 4
+}

@@ -20,7 +20,7 @@ from stage0_sim.domain.components import (
     PlanComponent,
 )
 from stage0_sim.domain.lineage import queue_plan_actions
-from tests.helpers.paths import EXAMPLE_SCENARIOS, REPOSITORY_ROOT, SCENARIO_FIXTURES
+from tests.helpers.paths import CATALOG_SCENARIOS, REPOSITORY_ROOT, SCENARIO_FIXTURES
 
 ROOT = REPOSITORY_ROOT
 
@@ -104,7 +104,7 @@ def _move_client() -> ScriptedModelClient:
 
 
 def test_scenario_actions_receive_stable_ids() -> None:
-    scenario = load_scenario(EXAMPLE_SCENARIOS / "system1-preemption.json")
+    scenario = load_scenario(CATALOG_SCENARIOS / "needs-and-preemption.json")
     first = create_runner(scenario, run_id="lineage-first")
     second = create_runner(scenario, run_id="lineage-second")
 
@@ -224,7 +224,7 @@ def test_controller_and_system1_origins_and_preemption_are_explicit() -> None:
     assert controller_action.payload["plan_revision"] == 1
 
     survival = create_runner(
-        load_scenario(EXAMPLE_SCENARIOS / "system1-preemption.json"),
+        load_scenario(CATALOG_SCENARIOS / "needs-and-preemption.json"),
         run_id="system1-lineage",
     )
     survival.run_for(1)

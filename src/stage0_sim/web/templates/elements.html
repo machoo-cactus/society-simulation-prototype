@@ -70,7 +70,7 @@
       </label>
 
       <fieldset id="{{ draft.root.control_id }}" class="scenario-group element-structured-editor" tabindex="-1">
-        <legend>{{ draft.kind.value|replace("_", " ")|title }} definition · schema version 2</legend>
+        <legend>{{ draft.kind.value|replace("_", " ")|title }} definition · schema version 4</legend>
         {{ field_errors(draft.root) }}
         <div class="scenario-fields">
           {% for child in draft.root.children if child.schema.field_name not in ("schema_version", "id", "kind") and child.schema.kind == "scalar" %}

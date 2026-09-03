@@ -13,9 +13,9 @@ import pytest
 from playwright.sync_api import Browser, Page, sync_playwright
 
 from tests.helpers.paths import (
-    EXAMPLE_CHARACTERS,
-    EXAMPLE_ELEMENTS,
-    EXAMPLE_SCENARIOS,
+    CATALOG_CHARACTERS,
+    CATALOG_ELEMENTS,
+    CATALOG_SCENARIOS,
     REPOSITORY_ROOT,
 )
 
@@ -34,23 +34,25 @@ def ui_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     global _UI_ELEMENT_DIRECTORY, _UI_SCENARIO_DIRECTORY
     temporary = tmp_path_factory.mktemp("playwright-ui")
     characters = temporary / "characters"
-    shutil.copytree(EXAMPLE_CHARACTERS, characters)
+    shutil.copytree(CATALOG_CHARACTERS, characters)
     scenarios = temporary / "scenarios"
     scenarios.mkdir()
-    for name in ("minimal.json", "navigation.json"):
+    for name in (
+        "baseline.json",
+        "grid-navigation.json",
+        "neighborhood-errand.json",
+        "community-meetup.json",
+        "open-city-day.json",
+    ):
         payload = json.loads(
-            (EXAMPLE_SCENARIOS / name).read_text(encoding="utf-8")
+            (CATALOG_SCENARIOS / name).read_text(encoding="utf-8")
         )
         (scenarios / name).write_text(
             json.dumps(payload, indent=2),
             encoding="utf-8",
         )
-    shutil.copy2(
-        EXAMPLE_SCENARIOS / "reference-city-restaurants.json",
-        scenarios / "reference-city-restaurants.json",
-    )
     elements = temporary / "elements"
-    shutil.copytree(EXAMPLE_ELEMENTS, elements)
+    shutil.copytree(CATALOG_ELEMENTS, elements)
     _UI_SCENARIO_DIRECTORY = scenarios
     _UI_ELEMENT_DIRECTORY = elements
     data = temporary / "runs"

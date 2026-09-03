@@ -21,7 +21,7 @@ from stage0_sim.domain.components import (
     PhysicalStateComponent,
     SpatialParentRelationComponent,
 )
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_SCENARIOS
 from tests.integration.api.test_simulation_api import (
     _create_physical_api_run,
     _physical_api_source,
@@ -34,7 +34,7 @@ def _create_persisted_dataset_run(
     scenario_name: str | None = None,
 ) -> str:
     scenario = json.loads(
-        (EXAMPLE_SCENARIOS / "system1-preemption.json").read_text(
+        (CATALOG_SCENARIOS / "needs-and-preemption.json").read_text(
             encoding="utf-8"
         )
     )
@@ -167,7 +167,7 @@ def test_root_redirects_to_accessible_server_rendered_ui() -> None:
 
 
 def test_reference_scenario_upload_resolves_shared_elements() -> None:
-    scenario_path = EXAMPLE_SCENARIOS / "reference-city-restaurants.json"
+    scenario_path = CATALOG_SCENARIOS / "neighborhood-errand.json"
 
     with TestClient(app) as client:
         response = client.post(
@@ -183,9 +183,9 @@ def test_reference_scenario_upload_resolves_shared_elements() -> None:
         )
 
     assert response.status_code == 200
-    assert "reference-city-restaurants is validated and staged" in response.text
-    assert "Standard Restaurant" in response.text
-    assert "East Market Restaurant" in response.text
+    assert "neighborhood-errand is validated and staged" in response.text
+    assert "Riverside Cafe" in response.text
+    assert "Riverbend Market" in response.text
 
 
 def test_dataset_explorer_is_server_rendered_filtered_and_private_by_opt_in() -> None:

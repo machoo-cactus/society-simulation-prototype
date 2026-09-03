@@ -33,9 +33,9 @@ from stage0_sim.application.elements import (
 from stage0_sim.application.scenarios import scenario_content_hash
 from stage0_sim.config import Settings
 from tests.helpers.paths import (
-    EXAMPLE_CHARACTERS,
-    EXAMPLE_ELEMENTS,
-    EXAMPLE_SCENARIOS,
+    CATALOG_CHARACTERS,
+    CATALOG_ELEMENTS,
+    CATALOG_SCENARIOS,
 )
 
 
@@ -70,21 +70,21 @@ def scenario_ui(
 ) -> Iterator[tuple[TestClient, FastAPI, Path]]:
     scenarios = tmp_path / "scenarios"
     scenarios.mkdir()
-    for name in ("engagement-demo.json", "minimal.json", "navigation.json"):
-        payload = json.loads((EXAMPLE_SCENARIOS / name).read_text(encoding="utf-8"))
+    for name in ("weather-and-hours.json", "baseline.json", "grid-navigation.json"):
+        payload = json.loads((CATALOG_SCENARIOS / name).read_text(encoding="utf-8"))
         payload["schema_version"] = 8
         (scenarios / name).write_text(
             json.dumps(payload),
             encoding="utf-8",
         )
     shutil.copy2(
-        EXAMPLE_SCENARIOS / "reference-city-restaurants.json",
-        scenarios / "reference-city-restaurants.json",
+        CATALOG_SCENARIOS / "neighborhood-errand.json",
+        scenarios / "neighborhood-errand.json",
     )
     elements = tmp_path / "elements"
-    shutil.copytree(EXAMPLE_ELEMENTS, elements)
+    shutil.copytree(CATALOG_ELEMENTS, elements)
     characters = tmp_path / "characters"
-    shutil.copytree(EXAMPLE_CHARACTERS, characters)
+    shutil.copytree(CATALOG_CHARACTERS, characters)
     settings = Settings(
         data_directory=tmp_path / "runs",
         character_directory=characters,
@@ -156,7 +156,7 @@ def test_scenario_editor_descriptor_covers_every_typed_field() -> None:
     }
 
 
-def test_structured_element_editor_round_trips_v2_physical_fields(
+def test_structured_element_editor_round_trips_v4_physical_fields(
     scenario_ui: tuple[TestClient, FastAPI, Path],
 ) -> None:
     client, app, _directory = scenario_ui
@@ -736,7 +736,7 @@ def test_scenario_library_page_renders_structured_grid_city_and_entity_controls(
     client, app, _directory = scenario_ui
 
     page = client.get(
-        "/ui/scenarios/?selected=navigation",
+        "/ui/scenarios/?selected=grid-navigation",
         follow_redirects=True,
     )
     token = page.url.params["draft"]
@@ -761,11 +761,11 @@ def test_scenario_library_page_renders_structured_grid_city_and_entity_controls(
     assert len(identifiers) == len(set(identifiers))
 
     city_page = client.get(
-        "/ui/scenarios/?selected=reference-city-restaurants",
+        "/ui/scenarios/?selected=neighborhood-errand",
         follow_redirects=True,
     )
     assert "City zones" in city_page.text
-    assert "Buildings · Market Zone" in city_page.text
+    assert "Buildings · Riverbend" in city_page.text
     assert "Transport nodes" in city_page.text
     assert "Walking Speed Mps" in city_page.text
     assert "Metro Lines" in city_page.text
@@ -773,7 +773,7 @@ def test_scenario_library_page_renders_structured_grid_city_and_entity_controls(
     stations = find_node_by_path(draft.root, ("world", "stations"))
     assert stations is not None and stations.items
     station_page = client.get(
-        f"/ui/scenarios/?draft={draft.token}&selected=navigation"
+        f"/ui/scenarios/?draft={draft.token}&selected=grid-navigation"
         f"&focus={stations.items[0].id}",
     )
     assert 'option value="EAT"' in station_page.text
@@ -794,7 +794,7 @@ def test_scenario_library_page_renders_structured_grid_city_and_entity_controls(
     entity = find_node_by_path(draft.root, ("entities", 0))
     assert entity is not None
     slot_page = client.get(
-        f"/ui/scenarios/?draft={draft.token}&selected=navigation&focus={entity.id}",
+        f"/ui/scenarios/?draft={draft.token}&selected=grid-navigation&focus={entity.id}",
     )
     assert "Unknown Passthrough Components" in slot_page.text
     assert "Default Character Id" in slot_page.text
@@ -805,7 +805,7 @@ def test_visual_editor_selects_objects_adds_records_and_drills_into_rooms(
     scenario_ui: tuple[TestClient, FastAPI, Path],
 ) -> None:
     client, app, _directory = scenario_ui
-    grid = _open_draft(client, app, "/ui/scenarios/?selected=navigation")
+    grid = _open_draft(client, app, "/ui/scenarios/?selected=grid-navigation")
     blocked = find_node_by_path(grid.root, ("world", "blocked"))
     assert blocked is not None
 
@@ -823,38 +823,38 @@ def test_visual_editor_selects_objects_adds_records_and_drills_into_rooms(
     city = _open_draft(
         client,
         app,
-        "/ui/scenarios/?selected=reference-city-restaurants",
+        "/ui/scenarios/?selected=neighborhood-errand",
     )
     buildings = find_node_by_path(
         city.root,
         ("world", "city_zones", 0, "buildings"),
     )
     assert buildings is not None and buildings.items
-    building = buildings.items[0]
+    building = buildings.items[2]
 
     selected = client.get(
-        f"/ui/scenarios/?draft={city.token}&selected=reference-city-restaurants"
+        f"/ui/scenarios/?draft={city.token}&selected=neighborhood-errand"
         f"&focus={building.id}",
     )
     assert selected.status_code == 200
-    assert "Open Standard Restaurant interior" in selected.text
+    assert "Open Riverside Cafe interior" in selected.text
     assert "Inherited building definition" in selected.text
 
     drilled = client.get(
-        f"/ui/scenarios/?draft={city.token}&selected=reference-city-restaurants"
+        f"/ui/scenarios/?draft={city.token}&selected=neighborhood-errand"
         f"&scope={building.id}&focus={building.id}",
     )
     assert drilled.status_code == 200
-    assert "Building interior · Standard Restaurant" in drilled.text
-    assert "Reference City" in drilled.text
-    assert "Market Zone" in drilled.text
+    assert "Building interior · Riverside Cafe" in drilled.text
+    assert "Riverbend" in drilled.text
+    assert "Riverbend" in drilled.text
 
 
 def test_visual_editor_reports_unprojectable_spatial_records(
     scenario_ui: tuple[TestClient, FastAPI, Path],
 ) -> None:
     client, app, _directory = scenario_ui
-    draft = _open_draft(client, app, "/ui/scenarios/?selected=navigation")
+    draft = _open_draft(client, app, "/ui/scenarios/?selected=grid-navigation")
     blocked = find_node_by_path(draft.root, ("world", "blocked"))
     assert blocked is not None
     client.post(
@@ -878,8 +878,8 @@ def test_separate_tabs_keep_separate_drafts_and_invalid_values(
     scenario_ui: tuple[TestClient, FastAPI, Path],
 ) -> None:
     client, app, _directory = scenario_ui
-    first = _open_draft(client, app, "/ui/scenarios/?selected=minimal")
-    second = _open_draft(client, app, "/ui/scenarios/?selected=minimal")
+    first = _open_draft(client, app, "/ui/scenarios/?selected=baseline")
+    second = _open_draft(client, app, "/ui/scenarios/?selected=baseline")
     assert first.token != second.token
     first_name = _node(first, ("name",), kind="scalar")
     second_name = _node(second, ("name",), kind="scalar")
@@ -887,7 +887,7 @@ def test_separate_tabs_keep_separate_drafts_and_invalid_values(
     invalid = client.post(
         f"/ui/scenarios/drafts/{first.token}",
         data={
-            "resource_id": "minimal",
+            "resource_id": "baseline",
             f"value_{first_name.id}": "",
             "intent": "save",
         },
@@ -898,7 +898,7 @@ def test_separate_tabs_keep_separate_drafts_and_invalid_values(
     assert "Scenario validation failed" in invalid.text
     assert "String should have at least 1 character" in invalid.text
     assert first_name.value == ""
-    assert second_name.value == "minimal"
+    assert second_name.value == "baseline"
 
 
 def test_create_collections_save_and_unsaved_stage_are_separate(
@@ -1008,17 +1008,17 @@ def test_stale_editor_save_is_rejected_without_losing_the_draft(
     scenario_ui: tuple[TestClient, FastAPI, Path],
 ) -> None:
     client, app, _directory = scenario_ui
-    draft = _open_draft(client, app, "/ui/scenarios/?selected=minimal")
+    draft = _open_draft(client, app, "/ui/scenarios/?selected=baseline")
     library = app.state.scenario_library
-    current = library.get("minimal")
+    current = library.get("baseline")
     external = current.model_copy(update={"name": "External update"})
-    library.update("minimal", external, scenario_content_hash(current))
+    library.update("baseline", external, scenario_content_hash(current))
     name = _node(draft, ("name",), kind="scalar")
 
     response = client.post(
         f"/ui/scenarios/drafts/{draft.token}",
         data={
-            "resource_id": "minimal",
+            "resource_id": "baseline",
             f"value_{name.id}": "Stale draft value",
             "intent": "save",
         },
@@ -1027,29 +1027,29 @@ def test_stale_editor_save_is_rejected_without_losing_the_draft(
 
     assert "scenario changed since it was loaded" in response.text
     assert name.value == "Stale draft value"
-    assert library.get("minimal").name == "External update"
+    assert library.get("baseline").name == "External update"
 
 
 def test_nested_grid_and_city_fields_save_through_structured_controls(
     scenario_ui: tuple[TestClient, FastAPI, Path],
 ) -> None:
     client, app, _directory = scenario_ui
-    grid = _open_draft(client, app, "/ui/scenarios/?selected=navigation")
+    grid = _open_draft(client, app, "/ui/scenarios/?selected=grid-navigation")
     grid_width = _node(grid, ("world", "width"), kind="scalar")
     client.post(
         f"/ui/scenarios/drafts/{grid.token}",
         data={
-            "resource_id": "navigation",
+            "resource_id": "grid-navigation",
             f"value_{grid_width.id}": "13",
             "intent": "save",
         },
     )
-    assert app.state.scenario_library.get("navigation").world.width == 13
+    assert app.state.scenario_library.get("grid-navigation").world.width == 13
 
     city = _open_draft(
         client,
         app,
-        "/ui/scenarios/?selected=reference-city-restaurants",
+        "/ui/scenarios/?selected=neighborhood-errand",
     )
     city_name = _node(city, ("world", "city", "name"), kind="scalar")
     walking_speed = _node(
@@ -1060,14 +1060,14 @@ def test_nested_grid_and_city_fields_save_through_structured_controls(
     response = client.post(
         f"/ui/scenarios/drafts/{city.token}",
         data={
-            "resource_id": "reference-city-restaurants",
+            "resource_id": "neighborhood-errand",
             f"value_{city_name.id}": "Edited City",
             f"value_{walking_speed.id}": "1.75",
             "intent": "save",
         },
         follow_redirects=True,
     )
-    loaded = app.state.scenario_library.get("reference-city-restaurants")
+    loaded = app.state.scenario_library.get("neighborhood-errand")
 
     assert response.status_code == 200
     assert "Saved" in response.text
@@ -1083,7 +1083,7 @@ def test_building_library_add_populates_reference_and_reset_is_isolated(
     draft = _open_draft(
         client,
         app,
-        "/ui/scenarios/?selected=reference-city-restaurants",
+        "/ui/scenarios/?selected=neighborhood-errand",
     )
     zone = _node(draft, ("world", "city_zones", 0), kind="model")
     buildings = _node(
@@ -1096,8 +1096,8 @@ def test_building_library_add_populates_reference_and_reset_is_isolated(
     added = client.post(
         f"/ui/scenarios/drafts/{draft.token}",
         data={
-            "resource_id": "reference-city-restaurants",
-            "building_action": f"add:{zone.id}:standard-restaurant",
+            "resource_id": "neighborhood-errand",
+            "building_action": f"add:{zone.id}:hospitality.cafe",
         },
         follow_redirects=True,
     )
@@ -1131,37 +1131,64 @@ def test_building_library_add_populates_reference_and_reset_is_isolated(
         ),
         kind="scalar",
     )
-    assert reference_id.value == "standard-restaurant"
+    assert reference_id.value == "hospitality.cafe"
     assert len(reference_hash.value) == 64
     assert "Inherited building definition" in added.text
 
-    first = buildings.items[0]
+    instance_id = _node(
+        draft,
+        ("world", "city_zones", 0, "buildings", added_index, "id"),
+        kind="scalar",
+    )
+    saved_addition = client.post(
+        f"/ui/scenarios/drafts/{draft.token}",
+        data={
+            "resource_id": "neighborhood-errand",
+            "intent": "save",
+        },
+        follow_redirects=True,
+    )
+    assert "Saved neighborhood-errand" in saved_addition.text
+    added_source = app.state.scenario_library.get("neighborhood-errand")
+    assert isinstance(added_source.world, CityWorldSourceDefinition)
+    assert added_source.world.building_order[-1] == instance_id.value
+    assert added_source.world.city_zones[0].buildings[-1].element.id == (
+        "hospitality.cafe"
+    )
+
     first_name = _node(
         draft,
-        ("world", "city_zones", 0, "buildings", 0, "overrides", "name"),
+        (
+            "world",
+            "city_zones",
+            0,
+            "buildings",
+            0,
+            "overrides",
+            "name",
+        ),
         kind="optional",
     )
     changed = client.post(
         f"/ui/scenarios/drafts/{draft.token}",
         data={
-            "resource_id": "reference-city-restaurants",
-            f"choice_{first_name.id}": "present",
-            f"value_{first_name.items[0].id}": "West Custom Restaurant",
+            "resource_id": "neighborhood-errand",
+            f"value_{first_name.items[0].id}": "Custom Riverbend Building",
             "intent": "save",
         },
         follow_redirects=True,
     )
     assert "Saved" in changed.text
-    saved = app.state.scenario_library.get("reference-city-restaurants")
+    saved = app.state.scenario_library.get("neighborhood-errand")
     assert isinstance(saved.world, CityWorldSourceDefinition)
     assert saved.world.city_zones[0].buildings[0].overrides.name == (
-        "West Custom Restaurant"
+        "Custom Riverbend Building"
     )
     assert saved.world.city_zones[0].buildings[1].overrides.name == (
-        "East Market Restaurant"
+        "Riverbend Market"
     )
 
-    first = _node(
+    first_building = _node(
         draft,
         ("world", "city_zones", 0, "buildings", 0),
         kind="model",
@@ -1169,8 +1196,8 @@ def test_building_library_add_populates_reference_and_reset_is_isolated(
     reset = client.post(
         f"/ui/scenarios/drafts/{draft.token}",
         data={
-            "resource_id": "reference-city-restaurants",
-            "building_action": f"reset:{first.id}",
+            "resource_id": "neighborhood-errand",
+            "building_action": f"reset:{first_building.id}",
         },
         follow_redirects=True,
     )
@@ -1178,22 +1205,22 @@ def test_building_library_add_populates_reference_and_reset_is_isolated(
     saved_again = client.post(
         f"/ui/scenarios/drafts/{draft.token}",
         data={
-            "resource_id": "reference-city-restaurants",
+            "resource_id": "neighborhood-errand",
             "intent": "save",
         },
         follow_redirects=True,
     )
     assert "Saved" in saved_again.text
     reset_source = app.state.scenario_library.get(
-        "reference-city-restaurants"
+        "neighborhood-errand"
     )
     assert isinstance(reset_source.world, CityWorldSourceDefinition)
     assert reset_source.world.city_zones[0].buildings[0].overrides.name is None
     assert reset_source.world.city_zones[0].buildings[1].overrides.name == (
-        "East Market Restaurant"
+        "Riverbend Market"
     )
     on_disk = json.loads(
-        (_directory / "reference-city-restaurants.json").read_text(
+        (_directory / "neighborhood-errand.json").read_text(
             encoding="utf-8"
         )
     )
@@ -1206,7 +1233,7 @@ def test_missing_and_hash_drift_dependencies_block_saved_staging(
 ) -> None:
     client, app, _directory = scenario_ui
     library = app.state.scenario_library
-    source = library.get("reference-city-restaurants")
+    source = library.get("neighborhood-errand")
     raw = source.model_dump(mode="json")
     raw["world"]["city_zones"][0]["buildings"][0]["element"]["id"] = (
         "missing-building"
@@ -1223,16 +1250,16 @@ def test_missing_and_hash_drift_dependencies_block_saved_staging(
     assert "unknown element: missing-building" in missing_response.text
 
     building = app.state.element_library.get(
-        "standard-restaurant",
+        "hospitality.cafe",
         ElementKind.BUILDING,
     )
     building_hash = next(
         summary.content_hash
         for summary in app.state.element_library.list(ElementKind.BUILDING)
-        if summary.id == "standard-restaurant"
+        if summary.id == "hospitality.cafe"
     )
     app.state.element_library.update(
-        "standard-restaurant",
+        "hospitality.cafe",
         building.model_copy(
             update={"description": "Changed after scenario save"}
         ),
@@ -1240,7 +1267,7 @@ def test_missing_and_hash_drift_dependencies_block_saved_staging(
     )
     drift_response = client.post(
         "/ui/scenario/library/stage",
-        data={"scenario_id": "reference-city-restaurants"},
+        data={"scenario_id": "neighborhood-errand"},
         follow_redirects=True,
     )
     assert "Could not stage saved scenario" in drift_response.text
@@ -1341,7 +1368,7 @@ def test_simulation_page_stages_only_the_selected_saved_scenario(
     page = client.get("/ui/")
     staged = client.post(
         "/ui/scenario/library/stage",
-        data={"scenario_id": "engagement-demo"},
+        data={"scenario_id": "weather-and-hours"},
         follow_redirects=True,
     )
     session_id = client.cookies["stage0_operator_session"]
@@ -1349,9 +1376,9 @@ def test_simulation_page_stages_only_the_selected_saved_scenario(
 
     assert "Stage selected saved scenario" in page.text
     assert "Open selected scenario in editor" in page.text
-    assert "engagement-demo is validated and staged" in staged.text
+    assert "weather-and-hours is validated and staged" in staged.text
     assert operator_session.scenario is not None
-    assert operator_session.scenario.name == "engagement-demo"
+    assert operator_session.scenario.name == "weather-and-hours"
     assert operator_session.run_id is None
     assert operator_session.scenario_id is not None
     prepared = app.state.simulation_manager.get_scenario(
@@ -1368,20 +1395,20 @@ def test_saved_reference_scenario_preserves_resolved_provenance(
 
     staged = client.post(
         "/ui/scenario/library/stage",
-        data={"scenario_id": "reference-city-restaurants"},
+        data={"scenario_id": "neighborhood-errand"},
         follow_redirects=True,
     )
     session_id = client.cookies["stage0_operator_session"]
     operator_session = app.state.operator_sessions.get(session_id)[1]
 
-    assert "reference-city-restaurants is validated and staged" in staged.text
+    assert "neighborhood-errand is validated and staged" in staged.text
     assert operator_session.scenario_id is not None
     prepared = app.state.simulation_manager.get_scenario(
         operator_session.scenario_id
     )
     assert prepared.scenario_source is not None
     assert "city_zones" in prepared.scenario_source["world"]
-    assert prepared.resolved_elements["standard-restaurant"]["kind"] == (
+    assert prepared.resolved_elements["hospitality.cafe"]["kind"] == (
         "building"
     )
 

@@ -1,0 +1,188 @@
+{
+  "appearance": {
+    "build": "",
+    "clothing": "",
+    "distinguishing_features": [],
+    "eyes": "",
+    "hair": "",
+    "height": "",
+    "summary": ""
+  },
+  "background": {
+    "birthplace": "",
+    "education": "",
+    "history": "",
+    "residence": ""
+  },
+  "body_measurements": {
+    "chest_cm": null,
+    "height_cm": 166.0,
+    "hips_cm": null,
+    "inseam_cm": null,
+    "measured_on": "2026-08-11",
+    "shoe_size_system": "",
+    "shoe_size_value": null,
+    "waist_cm": null,
+    "weight_kg": null
+  },
+  "capabilities": {
+    "knowledge_areas": [],
+    "limitations": [],
+    "skills": [
+      "site observation",
+      "sketching",
+      "route planning"
+    ]
+  },
+  "communication": {
+    "apology_style": "",
+    "cadence": "",
+    "directness": "",
+    "disagreement_style": "",
+    "facial_expressiveness": "",
+    "gesture": "",
+    "humor": "",
+    "listening_style": "",
+    "politeness": "",
+    "posture": "",
+    "vocabulary": "",
+    "with_authority": "",
+    "with_colleagues": "",
+    "with_intimates": "",
+    "with_strangers": ""
+  },
+  "custom_sections": [],
+  "decision_coping": {
+    "default_heuristics": [],
+    "disposition_shifts": [],
+    "error_sensitivity": "",
+    "information_seeking": "",
+    "persistence": "",
+    "planning_horizon": "",
+    "recovery_habits": [],
+    "self_soothing": [],
+    "stress_signals": []
+  },
+  "dispositions": {
+    "adaptability": "",
+    "ambiguity_tolerance": "",
+    "assertiveness": "",
+    "authority_response": "",
+    "boundary_setting": "",
+    "conflict_style": "",
+    "conscientiousness": "",
+    "cooperation_style": "",
+    "crowd_response": "",
+    "emotional_baseline": "",
+    "fatigue_response": "",
+    "help_seeking": "",
+    "impulse_control": "",
+    "novelty_response": "",
+    "openness": "",
+    "patience": "",
+    "pressure_response": "",
+    "risk_tolerance": "",
+    "sociability": "",
+    "summary": "",
+    "trust_formation": ""
+  },
+  "family": {
+    "members": []
+  },
+  "financial_situation": {
+    "annual_gross_income": null,
+    "as_of_date": null,
+    "currency": "",
+    "financial_dependents": null,
+    "housing_tenure": "",
+    "income_band": "",
+    "liquid_assets": null,
+    "monthly_fixed_expenses": null,
+    "total_assets": null,
+    "total_debt": null
+  },
+  "health": {
+    "allergies": [],
+    "as_of_date": null,
+    "blood_type": "",
+    "conditions": [],
+    "dietary_restrictions": [],
+    "disabilities": [],
+    "hearing": "",
+    "medications": [],
+    "mobility": "",
+    "past_procedures": [],
+    "vision": ""
+  },
+  "id": "maya-thompson",
+  "identity": {
+    "age": null,
+    "birth_date": "1993-05-22",
+    "display_name": "Maya Thompson",
+    "gender": "Woman",
+    "occupation": "Landscape designer",
+    "pronouns": "she/her"
+  },
+  "life_structure": {
+    "cultural_practices": [],
+    "household": "",
+    "interests": [],
+    "material_habits": [],
+    "recurring_obligations": [],
+    "social_patterns": [],
+    "typical_possessions": []
+  },
+  "motivations": {
+    "fears": [],
+    "needs": [],
+    "values": [
+      "stewardship",
+      "clarity",
+      "craft"
+    ]
+  },
+  "personality": {
+    "flaws": [
+      "can become impatient with vague plans"
+    ],
+    "social_style": "Comfortable in small groups with room to improvise.",
+    "speech_style": "Concrete, lively, and concise.",
+    "strengths": [
+      "spatial reasoning",
+      "visual communication"
+    ],
+    "summary": "Curious, candid, and attentive to place.",
+    "temperament": "Calm until avoidable confusion accumulates.",
+    "traits": [
+      "creative",
+      "observant",
+      "independent"
+    ]
+  },
+  "preferences": {
+    "dislikes": [],
+    "habits": [],
+    "likes": [
+      "parks",
+      "markets",
+      "natural light"
+    ],
+    "routines": []
+  },
+  "presentation": {
+    "aesthetic_identity": "",
+    "comfort_priorities": [],
+    "context_variations": [],
+    "formality_range": "",
+    "grooming_norms": [],
+    "practical_constraints": [],
+    "preferred_fabrics": [],
+    "preferred_silhouettes": [],
+    "purchase_habits": [],
+    "usual_accessories": [],
+    "wardrobe_palette": []
+  },
+  "relationships": [],
+  "schema_version": 2,
+  "template_id": "human-v1"
+}

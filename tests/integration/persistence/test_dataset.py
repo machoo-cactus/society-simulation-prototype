@@ -49,11 +49,11 @@ from stage0_sim.domain.information import (
     VisibilityLevel,
     VisibilityPolicy,
 )
-from tests.helpers.paths import EXAMPLE_CHARACTERS, EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_CHARACTERS, CATALOG_SCENARIOS
 
 
 def scenario_path(name: str) -> Path:
-    return EXAMPLE_SCENARIOS / name
+    return CATALOG_SCENARIOS / name
 
 
 def collect_run(
@@ -81,7 +81,7 @@ def parse_export(store: SQLiteDatasetStore, run_id: str) -> list[dict[str, objec
 def test_completed_run_contains_offline_analysis_records(tmp_path: Path) -> None:
     store, run_id = collect_run(
         tmp_path / "dataset.sqlite3",
-        "system1-preemption.json",
+        "needs-and-preemption.json",
         10,
     )
 
@@ -678,11 +678,11 @@ def test_telemetry_sampling_does_not_add_canonical_records(tmp_path: Path) -> No
         manager = SimulationManager(
             dataset_store=store,
             character_library=FileSystemCharacterLibrary(
-                EXAMPLE_CHARACTERS
+                CATALOG_CHARACTERS
             ),
             telemetry_hz=50,
         )
-        scenario = load_scenario(scenario_path("system1-preemption.json"))
+        scenario = load_scenario(scenario_path("needs-and-preemption.json"))
         scenario_id = await manager.add_scenario(scenario)
         run_id = await manager.start_run(scenario_id, realtime=False)
         manager.pause(run_id)
@@ -704,10 +704,10 @@ def test_manager_close_preserves_failed_realtime_task_status(
         manager = SimulationManager(
             dataset_store=SQLiteDatasetStore(database),
             character_library=FileSystemCharacterLibrary(
-                EXAMPLE_CHARACTERS
+                CATALOG_CHARACTERS
             ),
         )
-        scenario = load_scenario(scenario_path("system1-preemption.json"))
+        scenario = load_scenario(scenario_path("needs-and-preemption.json"))
         scenario_id = await manager.add_scenario(scenario)
         run_id = await manager.start_run(scenario_id, realtime=False)
         managed = manager.get_run(run_id)
@@ -777,11 +777,11 @@ def test_cli_persists_and_exports_without_ui(tmp_path: Path) -> None:
     exit_code = main(
         [
             "run",
-            str(scenario_path("minimal.json")),
+            str(scenario_path("baseline.json")),
             "--ticks",
             "2",
             "--characters-dir",
-            str(EXAMPLE_CHARACTERS),
+            str(CATALOG_CHARACTERS),
             "--database",
             str(database),
             "--export",

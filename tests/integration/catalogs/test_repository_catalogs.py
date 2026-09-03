@@ -21,10 +21,10 @@ from stage0_sim.application.scenario import create_runner
 from stage0_sim.application.scenario_resolution import resolve_scenario
 from stage0_sim.config import Settings
 from tests.helpers.paths import (
-    EXAMPLE_CHARACTERS,
-    EXAMPLE_ELEMENTS,
-    EXAMPLE_SCENARIOS,
-    EXAMPLES_ROOT,
+    CATALOG_CHARACTERS,
+    CATALOG_ELEMENTS,
+    CATALOG_ROOT,
+    CATALOG_SCENARIOS,
     PACKAGED_DEMO,
     REPOSITORY_ROOT,
     SCENARIO_FIXTURES,
@@ -33,8 +33,8 @@ from tests.helpers.paths import (
 REFERENCE_PATTERN = re.compile(
     r"`((?:scenarios|characters|elements)[\\/][^`]+\.json)`"
 )
-REPOSITORY_EXAMPLE_PATTERN = re.compile(
-    r"(examples[\\/](?:scenarios|characters|elements)[\\/][a-z0-9._-]+\.json)"
+REPOSITORY_CATALOG_PATTERN = re.compile(
+    r"(data[\\/](?:scenarios|characters|elements)[\\/][a-z0-9._-]+\.json)"
 )
 
 
@@ -42,7 +42,9 @@ def _json_files() -> tuple[Path, ...]:
     return tuple(
         sorted(
             (
-                *EXAMPLES_ROOT.rglob("*.json"),
+                *CATALOG_CHARACTERS.glob("*.json"),
+                *CATALOG_ELEMENTS.glob("*.json"),
+                *CATALOG_SCENARIOS.glob("*.json"),
                 *SCENARIO_FIXTURES.rglob("*.json"),
                 *PACKAGED_DEMO.parent.glob("*.json"),
             ),
@@ -73,22 +75,22 @@ def test_all_retained_json_is_parseable() -> None:
 
 
 def test_catalog_ids_filenames_and_current_schemas_are_coherent() -> None:
-    character_library = FileSystemCharacterLibrary(EXAMPLE_CHARACTERS)
-    element_library = FileSystemElementLibrary(EXAMPLE_ELEMENTS)
+    character_library = FileSystemCharacterLibrary(CATALOG_CHARACTERS)
+    element_library = FileSystemElementLibrary(CATALOG_ELEMENTS)
 
     characters = character_library.list()
     elements = element_library.list()
     assert {item.id for item in characters} == {
-        path.stem for path in EXAMPLE_CHARACTERS.glob("*.json")
+        path.stem for path in CATALOG_CHARACTERS.glob("*.json")
     }
     assert {item.id for item in elements} == {
-        path.stem for path in EXAMPLE_ELEMENTS.glob("*.json")
+        path.stem for path in CATALOG_ELEMENTS.glob("*.json")
     }
     assert {item.schema_version for item in characters} == {2}
     assert {item.schema_version for item in elements} == {4}
 
     character_ids = {item.id for item in characters}
-    for path in EXAMPLE_SCENARIOS.glob("*.json"):
+    for path in CATALOG_SCENARIOS.glob("*.json"):
         source = ScenarioSourceDefinition.model_validate_json(
             path.read_text(encoding="utf-8")
         )
@@ -126,7 +128,7 @@ def test_catalog_ids_filenames_and_current_schemas_are_coherent() -> None:
 
 
 def test_element_references_and_semantic_hashes_resolve() -> None:
-    library = FileSystemElementLibrary(EXAMPLE_ELEMENTS)
+    library = FileSystemElementLibrary(CATALOG_ELEMENTS)
 
     for summary in library.list():
         element = library.get(summary.id)
@@ -140,7 +142,7 @@ def test_element_references_and_semantic_hashes_resolve() -> None:
 
 
 def test_every_user_scenario_resolves_and_runs_one_tick() -> None:
-    library = FileSystemElementLibrary(EXAMPLE_ELEMENTS)
+    library = FileSystemElementLibrary(CATALOG_ELEMENTS)
     turns = tuple(
         ModelTurn(
             text=None,
@@ -159,7 +161,7 @@ def test_every_user_scenario_resolves_and_runs_one_tick() -> None:
         for index in range(20)
     )
 
-    for path in sorted(EXAMPLE_SCENARIOS.glob("*.json")):
+    for path in sorted(CATALOG_SCENARIOS.glob("*.json")):
         source = ScenarioSourceDefinition.model_validate_json(
             path.read_text(encoding="utf-8")
         )
@@ -173,20 +175,20 @@ def test_every_user_scenario_resolves_and_runs_one_tick() -> None:
         assert runner.clock.tick == 1
 
 
-def test_documented_examples_are_reachable_and_complete() -> None:
-    documentation = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
+def test_documented_catalog_resources_are_reachable_and_complete() -> None:
+    documentation = (CATALOG_ROOT / "README.md").read_text(encoding="utf-8")
     documented = {
-        EXAMPLES_ROOT / relative.replace("\\", "/")
+        CATALOG_ROOT / relative.replace("\\", "/")
         for relative in REFERENCE_PATTERN.findall(documentation)
     }
 
     assert documented
     assert all(path.is_file() for path in documented)
     assert {
-        path for path in EXAMPLE_SCENARIOS.glob("*.json")
+        path for path in CATALOG_SCENARIOS.glob("*.json")
     } <= documented
     assert {
-        path for path in EXAMPLE_CHARACTERS.glob("*.json")
+        path for path in CATALOG_CHARACTERS.glob("*.json")
     } <= documented
 
     active_documents = (
@@ -197,7 +199,7 @@ def test_documented_examples_are_reachable_and_complete() -> None:
     repository_references = {
         REPOSITORY_ROOT / relative.replace("\\", "/")
         for document in active_documents
-        for relative in REPOSITORY_EXAMPLE_PATTERN.findall(
+        for relative in REPOSITORY_CATALOG_PATTERN.findall(
             document.read_text(encoding="utf-8")
         )
     }
@@ -205,28 +207,30 @@ def test_documented_examples_are_reachable_and_complete() -> None:
     assert all(path.is_file() for path in repository_references)
 
 
-def test_runtime_catalog_defaults_are_ignored_data_paths() -> None:
+def test_runtime_catalog_defaults_are_tracked_data_paths() -> None:
     fields = Settings.model_fields
 
     assert fields["character_directory"].default == Path("data/characters")
     assert fields["scenario_directory"].default == Path("data/scenarios")
     assert fields["element_directory"].default == Path("data/elements")
-    assert "data/" in (
+    ignore_lines = (
         REPOSITORY_ROOT / ".gitignore"
     ).read_text(encoding="utf-8").splitlines()
+    assert "data/" not in ignore_lines
+    assert "data/runs/" in ignore_lines
+    assert "data/backups/" in ignore_lines
+    assert "data/migration-backups/" in ignore_lines
     environment_example = (
         REPOSITORY_ROOT / ".env.example"
     ).read_text(encoding="utf-8")
     assert "STAGE0_CHARACTER_DIRECTORY=data/characters" in environment_example
     assert "STAGE0_SCENARIO_DIRECTORY=data/scenarios" in environment_example
     assert "STAGE0_ELEMENT_DIRECTORY=data/elements" in environment_example
-    assert not (REPOSITORY_ROOT / "data").resolve().is_relative_to(
-        EXAMPLES_ROOT.resolve()
-    )
+    assert CATALOG_ROOT == REPOSITORY_ROOT / "data"
 
 
 def test_character_samples_validate_as_current_profiles() -> None:
-    for path in EXAMPLE_CHARACTERS.glob("*.json"):
+    for path in CATALOG_CHARACTERS.glob("*.json"):
         character = CharacterDefinition.model_validate_json(
             path.read_text(encoding="utf-8")
         )
@@ -235,11 +239,11 @@ def test_character_samples_validate_as_current_profiles() -> None:
 
 
 def test_repository_content_requires_no_migration() -> None:
-    examples = migrate_catalog(
+    catalog = migrate_catalog(
         CatalogMigrationOptions(
-            characters_dir=EXAMPLE_CHARACTERS,
-            elements_dir=EXAMPLE_ELEMENTS,
-            scenarios_dir=EXAMPLE_SCENARIOS,
+            characters_dir=CATALOG_CHARACTERS,
+            elements_dir=CATALOG_ELEMENTS,
+            scenarios_dir=CATALOG_SCENARIOS,
         )
     )
     packaged = migrate_catalog(
@@ -253,6 +257,6 @@ def test_repository_content_requires_no_migration() -> None:
         )
     )
 
-    for report in (examples, packaged, current_fixture):
+    for report in (catalog, packaged, current_fixture):
         assert report.succeeded, report.errors
         assert report.changed_count == 0

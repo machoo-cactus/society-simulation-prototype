@@ -21,7 +21,7 @@ $env:STAGE0_LLM_API_KEY = ""
 The endpoint may be local or on a rented machine. Keep it behind an appropriate
 network boundary; the Stage 0 application does not provide deployment
 authentication. Credentials and provider URLs never belong in scenarios,
-tracked examples, test fixtures, or diagnostics.
+tracked content, test fixtures, or diagnostics.
 
 ## Deterministic contract checks
 
@@ -85,4 +85,3 @@ restricted research artifacts; do not commit them by default.
 
 Use sanitized logs. Never print authorization headers or copy private character
 context into issue reports.
-

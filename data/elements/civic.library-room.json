@@ -1,0 +1,609 @@
+{
+  "blocked": [
+    {
+      "x": 2,
+      "y": 0
+    },
+    {
+      "x": 2,
+      "y": 1
+    },
+    {
+      "x": 2,
+      "y": 5
+    },
+    {
+      "x": 2,
+      "y": 6
+    }
+  ],
+  "description": "Reusable room archetype for portable city scenarios.",
+  "height": 7,
+  "id": "civic.library-room",
+  "kind": "room",
+  "name": "Library Reading Room",
+  "objects": [
+    {
+      "element": {
+        "content_hash": "8f01659b7c7d2c78e83315178f49afcbbddd4789320cc336f1cb729929553a2d",
+        "id": "common.exterior-door",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "front-door",
+      "placement": {
+        "anchor": {
+          "x": 1,
+          "y": 31
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "id": "common.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "front-window",
+      "placement": {
+        "anchor": {
+          "x": 13,
+          "y": 1
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "id": "common.window",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "reading-window",
+      "placement": {
+        "anchor": {
+          "x": 97,
+          "y": 31
+        },
+        "orientation": "EAST",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5a7edb3ef439353543bd156ed6ba7098cf953069692184117156806135827ad5",
+        "id": "civic.service-desk",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "service-desk",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "8baec68f50759ee2e07954e31835ab58ccf48ef7b5ff1535601f4a4dc3e2095c",
+        "id": "common.office-chair",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "service-chair",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 7
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5ae404a29592e4dd2017629451ce193a9975859c82308badb05b80d73589b508",
+        "id": "common.phone",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "service-phone",
+      "placement": {
+        "anchor": {
+          "x": 28,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "service-desk",
+          "slot_id": "desktop"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "500fc1a0565341abc5f0b6161cc2bbfba5578b679cf2572c6a246262615afb0b",
+        "id": "common.lamp",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "service-lamp",
+      "placement": {
+        "anchor": {
+          "x": 34,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "service-desk",
+          "slot_id": "desktop"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "9056ba1b9ca1735f0dc1252e4cc377f7fd536eec29a444cab504001c19fcda03",
+        "id": "common.bookcase",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "reference-bookcase",
+      "placement": {
+        "anchor": {
+          "x": 43,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "9056ba1b9ca1735f0dc1252e4cc377f7fd536eec29a444cab504001c19fcda03",
+        "id": "common.bookcase",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "east-bookcase-lower",
+      "placement": {
+        "anchor": {
+          "x": 85,
+          "y": 14
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "9056ba1b9ca1735f0dc1252e4cc377f7fd536eec29a444cab504001c19fcda03",
+        "id": "common.bookcase",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "east-bookcase-upper",
+      "placement": {
+        "anchor": {
+          "x": 85,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "9056ba1b9ca1735f0dc1252e4cc377f7fd536eec29a444cab504001c19fcda03",
+        "id": "common.bookcase",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "north-bookcase",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 57
+        },
+        "orientation": "EAST",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "reference-book-a",
+      "placement": {
+        "anchor": {
+          "x": 43,
+          "y": 11
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "reference-bookcase",
+          "slot_id": "lower-shelf"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "reference-book-b",
+      "placement": {
+        "anchor": {
+          "x": 43,
+          "y": 15
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "reference-bookcase",
+          "slot_id": "middle-shelf"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "east-book-a",
+      "placement": {
+        "anchor": {
+          "x": 85,
+          "y": 11
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "east-bookcase-lower",
+          "slot_id": "lower-shelf"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "east-book-b",
+      "placement": {
+        "anchor": {
+          "x": 85,
+          "y": 38
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "east-bookcase-upper",
+          "slot_id": "middle-shelf"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "north-book",
+      "placement": {
+        "anchor": {
+          "x": 68,
+          "y": 57
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "north-bookcase",
+          "slot_id": "upper-shelf"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "0e019dd4b112a256190c5ecee7bd9568a6681957f8f90d615ff468b2bddf67f8",
+        "id": "civic.library-table",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "reading-table",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "ec8c6c60b13cc9b1186ea2d95e905a080a2028a29af6a496dd0932e000c6317c",
+        "id": "common.dining-chair",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "reading-chair-south",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 32
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "ec8c6c60b13cc9b1186ea2d95e905a080a2028a29af6a496dd0932e000c6317c",
+        "id": "common.dining-chair",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "reading-chair-north",
+      "placement": {
+        "anchor": {
+          "x": 58,
+          "y": 48
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "reading-book",
+      "placement": {
+        "anchor": {
+          "x": 56,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "reading-table",
+          "slot_id": "reading-surface"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "stacked-book",
+      "placement": {
+        "anchor": {
+          "x": 56,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "reading-book",
+          "slot_id": "stack-top"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "5ae404a29592e4dd2017629451ce193a9975859c82308badb05b80d73589b508",
+        "id": "common.phone",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "reading-phone",
+      "placement": {
+        "anchor": {
+          "x": 60,
+          "y": 40
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "reading-table",
+          "slot_id": "reading-surface"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "0e019dd4b112a256190c5ecee7bd9568a6681957f8f90d615ff468b2bddf67f8",
+        "id": "civic.library-table",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "quiet-table",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 43
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "ec8c6c60b13cc9b1186ea2d95e905a080a2028a29af6a496dd0932e000c6317c",
+        "id": "common.dining-chair",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "quiet-chair",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 51
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_FLOOR",
+          "parent_id": null,
+          "slot_id": null
+        }
+      },
+      "position": null,
+      "staff_position": null
+    },
+    {
+      "element": {
+        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "id": "common.book",
+        "kind": "object"
+      },
+      "id": null,
+      "key": "quiet-book",
+      "placement": {
+        "anchor": {
+          "x": 31,
+          "y": 43
+        },
+        "orientation": "NORTH",
+        "parent_relation": {
+          "kind": "ON_SUPPORT",
+          "parent_id": "quiet-table",
+          "slot_id": "reading-surface"
+        }
+      },
+      "position": null,
+      "staff_position": null
+    }
+  ],
+  "room_type": "LIBRARY",
+  "schema_version": 4,
+  "spatial_metric": {
+    "microcells_per_legacy_cell": 9
+  },
+  "width": 11,
+  "zones": null
+}

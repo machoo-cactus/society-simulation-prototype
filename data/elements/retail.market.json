@@ -1,0 +1,39 @@
+{
+  "available": true,
+  "description": "Reusable building archetype for portable city scenarios.",
+  "entrances": [
+    {
+      "door_object_id": "common.exterior-door",
+      "id": null,
+      "key": "front",
+      "local_coordinate": {
+        "x": 0,
+        "y": 3
+      },
+      "room_key": "interior"
+    }
+  ],
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "id": "retail.market",
+  "kind": "building",
+  "name": "Neighborhood Market",
+  "portals": [],
+  "rooms": [
+    {
+      "element": {
+        "content_hash": "9759d7ae14e38cc5e346ddb7c3551ce5a6584e0be3c9468b668ba062e0b05782",
+        "id": "retail.market-room",
+        "kind": "room"
+      },
+      "key": "interior",
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "schema_version": 4
+}

@@ -126,7 +126,7 @@ wearable/scent capabilities and slots, initial
 open/locked/ownership/custody state, room metric, placement
 anchor/orientation/relation/slot, and entrance/portal door links. Physical
 objects are presented separately from compatibility station and transaction
-views. Version 7 also exposes separate engagement compiler settings and
+views. Version 8 also exposes separate engagement compiler settings and
 top-level engagement validation/effect bands. Validating or staging these
 settings does not start or advance a run.
 

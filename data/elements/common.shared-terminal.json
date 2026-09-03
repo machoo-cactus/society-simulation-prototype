@@ -1,0 +1,157 @@
+{
+  "actions": null,
+  "available": true,
+  "capacity": 1,
+  "description": "A reusable public terminal exposing a bounded shared-document collection.",
+  "environment": {
+    "closed_weather": [],
+    "schedule": null
+  },
+  "holdings": {},
+  "id": "common.shared-terminal",
+  "kind": "object",
+  "name": "Shared Document Terminal",
+  "npc_role": null,
+  "object_type": null,
+  "offers": [],
+  "operation": "AUTOMATED",
+  "physical": {
+    "capabilities": {
+      "consumable": null,
+      "container": null,
+      "content_endpoints": [
+        {
+          "access_mode": "exposed_reachable",
+          "created_access_policy": {
+            "grants": [
+              {
+                "operation": "read",
+                "principals": [
+                  {
+                    "id": "public",
+                    "kind": "public"
+                  }
+                ]
+              },
+              {
+                "operation": "append",
+                "principals": [
+                  {
+                    "id": "public",
+                    "kind": "public"
+                  }
+                ]
+              },
+              {
+                "operation": "replace",
+                "principals": [
+                  {
+                    "id": "public",
+                    "kind": "public"
+                  }
+                ]
+              },
+              {
+                "operation": "edit",
+                "principals": [
+                  {
+                    "id": "public",
+                    "kind": "public"
+                  }
+                ]
+              },
+              {
+                "operation": "delete",
+                "principals": [
+                  {
+                    "id": "public",
+                    "kind": "public"
+                  }
+                ]
+              }
+            ]
+          },
+          "created_media_kind": "document",
+          "created_mode": "mutable",
+          "id": "shared-documents",
+          "kind": "collection",
+          "label": "Shared community documents",
+          "lists_items": true,
+          "notifies_owner": false,
+          "operations": [
+            "list",
+            "read",
+            "create",
+            "append",
+            "replace",
+            "edit",
+            "delete"
+          ],
+          "originates_messages": false,
+          "resource_id": "shared-documents"
+        }
+      ],
+      "openable": null,
+      "portable": {
+        "two_handed": false
+      },
+      "readable": null,
+      "scent_source": null,
+      "slots": [],
+      "support": null,
+      "usable": {
+        "use_kind": "mobile-phone"
+      },
+      "wearable": null
+    },
+    "custodian_id": null,
+    "footprint": {
+      "cells": [
+        {
+          "x": -1,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 1,
+          "y": -1
+        },
+        {
+          "x": -1,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 1,
+          "y": 0
+        }
+      ]
+    },
+    "initial_open": null,
+    "intrinsics": {
+      "dimensions_cm": {
+        "height_cm": 0.8,
+        "length_cm": 15.0,
+        "width_cm": 7.2
+      },
+      "mass_kg": 0.19,
+      "size_class": "SMALL"
+    },
+    "obstruction": {
+      "hearing": "PASS",
+      "movement": "NONE",
+      "smell": "PASS",
+      "vision": "TRANSPARENT"
+    },
+    "owner_id": null
+  },
+  "request_timeout": 60.0,
+  "schema_version": 4,
+  "supported_actions": null
+}

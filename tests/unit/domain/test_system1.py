@@ -15,11 +15,11 @@ from stage0_sim.domain.components import (
 )
 from stage0_sim.domain.lineage import queue_plan_actions
 from stage0_sim.domain.world import Coordinate
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_SCENARIOS
 
 
 def test_critical_satiety_preempts_plan_and_targets_fridge_on_next_tick() -> None:
-    scenario_path = EXAMPLE_SCENARIOS / "system1-preemption.json"
+    scenario_path = CATALOG_SCENARIOS / "needs-and-preemption.json"
     runner = create_runner(load_scenario(scenario_path), run_id="preemption")
 
     runner.run_for(1)

@@ -23,9 +23,9 @@ Write a complete migrated copy to a new directory:
 
 ```powershell
 stage0-sim migrate content `
-  --characters-dir examples\characters `
-  --elements-dir examples\elements `
-  --scenarios-dir examples\scenarios `
+  --characters-dir data\characters `
+  --elements-dir data\elements `
+  --scenarios-dir data\scenarios `
   --output migrated-content
 ```
 
@@ -64,6 +64,5 @@ validation, a repository content check, and migration of all tracked current
 content.**
 
 Preserve representative old inputs and exact expected outputs under
-`tests\fixtures\migrations\`. Large catalogs, including locally present
-untracked authoring examples, must be migrated through this service rather
-than by bulk hand editing.
+`tests\fixtures\migrations\`. Large catalogs and restored authoring backups must be migrated through this
+service rather than by bulk hand editing.

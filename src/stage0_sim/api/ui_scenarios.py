@@ -654,6 +654,14 @@ def _apply_building_action(
         },
     )
     buildings.items.append(instance)
+    building_order = find_node_by_path(
+        draft.root,
+        ("world", "building_order"),
+    )
+    if building_order is not None and building_order.schema.item is not None:
+        building_order.items.append(
+            node_from_value(building_order.schema.item, instance_id)
+        )
     transport_nodes = find_node_by_path(
         draft.root,
         ("world", "transport", "nodes"),

@@ -12,11 +12,11 @@ from stage0_sim.domain.components import (
     PositionComponent,
     System1State,
 )
-from tests.helpers.paths import EXAMPLE_SCENARIOS
+from tests.helpers.paths import CATALOG_SCENARIOS
 
 
 def _scenario_path(name: str) -> Path:
-    return EXAMPLE_SCENARIOS / name
+    return CATALOG_SCENARIOS / name
 
 
 def test_capacity_reservations_choose_deterministic_next_nearest_station() -> None:
@@ -123,7 +123,7 @@ def test_stop_cancels_critical_pending_memory_without_embedding(
 ) -> None:
     embeddings = FakeEmbeddingProvider()
     runner = create_runner(
-        load_scenario(_scenario_path("system1-preemption.json")),
+        load_scenario(_scenario_path("needs-and-preemption.json")),
         run_id="critical-stop",
         embedding_provider=embeddings,
     )
@@ -158,7 +158,7 @@ def test_finalization_cancels_critical_pending_memory_without_embedding(
 ) -> None:
     embeddings = FakeEmbeddingProvider()
     runner = create_runner(
-        load_scenario(_scenario_path("system1-preemption.json")),
+        load_scenario(_scenario_path("needs-and-preemption.json")),
         run_id="critical-finalize",
         embedding_provider=embeddings,
     )

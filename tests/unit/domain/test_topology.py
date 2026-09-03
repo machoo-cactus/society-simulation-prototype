@@ -3,6 +3,7 @@ import pytest
 
 from stage0_sim.adapters.characters import FileSystemCharacterLibrary
 from stage0_sim.adapters.elements import FileSystemElementLibrary
+from stage0_sim.adapters.llm import ScriptedModelClient
 from stage0_sim.application.characters import prepare_scenario
 from stage0_sim.application.scenario import (
     ScenarioDefinition,
@@ -30,21 +31,21 @@ from stage0_sim.domain.world import (
 )
 from stage0_sim.domain.world.routing import RecursiveRoutePlanner
 from tests.helpers.paths import (
-    EXAMPLE_CHARACTERS,
-    EXAMPLE_ELEMENTS,
-    EXAMPLE_SCENARIOS,
+    CATALOG_CHARACTERS,
+    CATALOG_ELEMENTS,
+    CATALOG_SCENARIOS,
     REPOSITORY_ROOT,
 )
 
 ROOT = REPOSITORY_ROOT
-CITY_SCENARIO_PATH = EXAMPLE_SCENARIOS / "sparse-city-car-demo.json"
-CHARACTER_DIRECTORY = EXAMPLE_CHARACTERS
+CITY_SCENARIO_PATH = CATALOG_SCENARIOS / "open-city-day.json"
+CHARACTER_DIRECTORY = CATALOG_CHARACTERS
 
 
 def _load_city_scenario() -> ScenarioDefinition:
     return load_and_resolve_scenario(
         CITY_SCENARIO_PATH,
-        FileSystemElementLibrary(EXAMPLE_ELEMENTS),
+        FileSystemElementLibrary(CATALOG_ELEMENTS),
     ).scenario
 
 
@@ -57,6 +58,7 @@ def _city_runner(scenario: ScenarioDefinition | None = None):
     return create_runner(
         scenario,
         resolved_characters=prepared.runtime_characters(),
+        model_client=ScriptedModelClient(()),
     )
 
 
@@ -136,17 +138,19 @@ def test_grid_topology_delegates_to_deterministic_astar() -> None:
     assert route.total_cost == len(expected)
 
 
-def test_sparse_graph_topology_matches_existing_transport_route() -> None:
+def test_sparse_graph_topology_matches_open_city_transport_route() -> None:
     runner = _city_runner()
     city = runner.registry.get_resource(CityWorld)
     topology = SparseGraphTopology(city.id, city)
-    origin = topology.node_locator("node-home-entrance")
-    destination = topology.node_locator("node-office-entrance")
+    origin_id = "node-city-north-apartments"
+    destination_id = "node-city-east-civic"
+    origin = topology.node_locator(origin_id)
+    destination = topology.node_locator(destination_id)
 
     expected = find_transport_route(
         city,
-        "node-home-entrance",
-        "node-office-entrance",
+        origin_id,
+        destination_id,
         TravelMode.CAR,
     )
     route = topology.plan_local_route(
@@ -171,53 +175,36 @@ def test_sparse_graph_topology_matches_existing_transport_route() -> None:
 
 def test_city_registry_contains_all_entrances_and_destinations() -> None:
     payload = _load_city_scenario().model_dump(mode="json")
+    first_building = payload["world"]["buildings"][0]
     payload["world"]["buildings"][0]["entrances"].append(
         {
-            "id": "entrance-home-side",
-            "room_id": "building-home.interior",
-            "local_coordinate": {"x": 2, "y": 0},
-            "neighborhood_node_id": "node-home-entrance",
+            "id": "entrance-north-apartments-side",
+            "room_id": "building-city-north-apartments.interior",
+            "local_coordinate": {"x": 0, "y": 5},
+            "neighborhood_node_id": "node-city-north-apartments",
         }
     )
     runner = _city_runner(ScenarioDefinition.model_validate(payload))
     registry = runner.registry.get_resource(SpaceRegistry)
     city = runner.registry.get_resource(CityWorld)
 
-    assert [space.id for space in registry.spaces()] == sorted(
-        [
-        "building-home",
-        "building-office",
+    expected_spaces = {
         city.id,
-        "district-central",
-        "district-east",
-        "district-west",
-        "building-home.interior",
-        "building-office.interior",
-        ]
-    )
-    assert [space.id for space in registry.child_spaces(city.id)] == [
-        "district-central",
-        "district-east",
-        "district-west",
-    ]
+        *(district.id for district in city.districts),
+        *(building.id for building in city.buildings),
+        *(room.id for room in city.rooms),
+    }
+    assert {space.id for space in registry.spaces()} == expected_spaces
+    assert {space.id for space in registry.child_spaces(city.id)} == {
+        district.id for district in city.districts
+    }
     assert [
-        space.id for space in registry.child_spaces("district-west")
-    ] == [
-        "building-home",
-    ]
-    assert [
-        space.id for space in registry.child_spaces("district-east")
-    ] == [
-        "building-office",
-    ]
-    assert [
-        space.id for space in registry.child_spaces("building-home")
-    ] == ["building-home.interior"]
-    assert [transition.id for transition in registry.transitions()] == [
-        "entrance-home",
-        "entrance-home-side",
-        "entrance-office",
-    ]
+        space.id
+        for space in registry.child_spaces("building-city-north-apartments")
+    ] == ["building-city-north-apartments.interior"]
+    assert "entrance-north-apartments-side" in {
+        transition.id for transition in registry.transitions()
+    }
     for transition in registry.transitions():
         assert registry.transitions_from(transition.from_locator) == (transition,)
         reverse = registry.transitions_from(transition.to_locator)
@@ -228,33 +215,25 @@ def test_city_registry_contains_all_entrances_and_destinations() -> None:
         )
     assert {
         locator.space_id
-        for locator in registry.destination_locators("building-home")
-    } == {"building-home.interior"}
-    assert len(registry.destination_locators("building-home")) == 2
-    outdoor = registry.destination_locators("place-central-square")
+        for locator in registry.destination_locators(first_building["id"])
+    } == {"building-city-north-apartments.interior"}
+    assert len(registry.destination_locators(first_building["id"])) == 2
+    outdoor = registry.destination_locators("place-city-central-square")
     assert len(outdoor) == 1
     assert outdoor[0].space_id == city.id
     assert outdoor[0].local_reference == {
         "kind": "node",
-        "node_id": "node-central-junction",
+        "node_id": "node-city-central-square",
     }
-    assert registry.destination_locators("home-entry")
-    assert {
-        locator.space_id
-        for locator in registry.destination_locators("home-entry")
-    } == {"building-home.interior"}
     spatial = runner.registry.get_component(
-        "agent-001",
+        "city-alex",
         SpatialLocationComponent,
     )
-    assert spatial.locator == Locator(
-        "building-home.interior",
-        {"kind": "coordinate", "x": 22, "y": 13},
-    )
+    assert spatial.locator.space_id == "building-city-north-apartments.interior"
 
 
 def test_legacy_scenario_builds_implicit_grid_registry() -> None:
-    runner = create_runner(load_scenario(EXAMPLE_SCENARIOS / "navigation.json"))
+    runner = create_runner(load_scenario(CATALOG_SCENARIOS / "grid-navigation.json"))
     registry = runner.registry.get_resource(SpaceRegistry)
 
     assert [space.id for space in registry.spaces()] == ["implicit-building"]
@@ -270,7 +249,8 @@ def test_legacy_scenario_builds_implicit_grid_registry() -> None:
 
 def test_explicit_transition_cannot_collide_with_synthesized_reverse_id() -> None:
     topology = _city_runner().registry.get_resource(SpaceRegistry)
-    transition = topology.transition("entrance-home").reverse()
+    entrance = topology.transitions()[0]
+    transition = entrance.reverse()
 
     with pytest.raises(ValueError, match="reserved"):
         topology.register_transition(transition)

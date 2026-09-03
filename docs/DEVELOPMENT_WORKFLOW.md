@@ -17,7 +17,7 @@ browser, package, and platform coverage belongs to CI.
 | UI behavior | Route, template, enhancement, browser workflow | Focused HTTP tests and one focused Playwright workflow |
 | Content contract | Character, element, or scenario schema | Adjacent migration, golden fixtures, focused migration/catalog tests |
 | Model protocol | Controller, compiler, prompt, or provider contract | `model_contract` tests and optional live smoke |
-| Release/diagnostic | Stabilization or unexplained broad failure | Explicit full local gates |
+| Release/diagnostic | Stabilization or unexplained broad failure | Selected local modules followed by CI `full-validation` |
 
 A task may combine classes, but each class must correspond to an actual changed
 surface. Do not add checks only because they appeared in an older plan.
@@ -79,6 +79,9 @@ are the durable result; the plan is not a second implementation report.
 Examples from the repository root:
 
 ```powershell
+# Stable fast feedback tier
+python -m pytest -m quick
+
 # One unit or integration boundary
 python -m pytest tests\unit\domain\test_navigation.py
 python -m pytest tests\integration\simulation\test_engagement_runtime.py -k timeout
@@ -92,6 +95,9 @@ python -m pytest tests\unit\application\test_content_migrations.py tests\integra
 # Model request/compiler/provider contracts without a live model
 python -m pytest -m model_contract
 
+# Real application composition without integration monkeypatches
+python -m pytest -m startup_contract
+
 # Focused browser behavior
 $env:STAGE0_RUN_PLAYWRIGHT = "1"
 python -m pytest tests\e2e\web\test_operator_runtime.py -k engagement
@@ -103,18 +109,41 @@ python -m ruff check src\stage0_sim\application tests\unit\application
 Select commands that can falsify the changed behavior. Documentation-only work
 does not require unrelated build or runtime checks.
 
-Do not run full local pytest, full Playwright, package build, installed-wheel,
-or multi-version/platform matrices by default. Use the full sequence only for
-an explicit release or difficult diagnostic task:
+## Test tiers
+
+| Tier/module | Command or CI job | Proves |
+| --- | --- | --- |
+| Quick | `python -m pytest -m quick` | Fast deterministic unit and selected contract feedback |
+| Source regression | `python -m pytest -m source_regression` | Remaining unit/integration behavior |
+| Startup contract | `python -m pytest -m startup_contract` | Unpatched Uvicorn lifespan, settings, and persisted-state boundaries |
+| Model contract | `python -m pytest -m model_contract` | Controller/compiler/fake/replay/provider protocol |
+| Browser | CI `browser` or focused local Playwright | Real browser, accessibility, and no-JavaScript workflows |
+| Package | CI `package` and `installed-wheel` | Build contents plus startup and workflows outside the checkout |
+| Platform | CI `windows` and `compatibility` | Windows and supported Python versions |
+| Full | CI `full-validation` only | Every required module above passed |
+
+Every collected test module has one base tier assigned by
+`tests\tier_policy.py`. `model_contract` is an orthogonal feature marker and
+does not replace its base tier.
+
+`python -m pytest` is source-tree regression with browser tests skipped unless
+enabled. It is not complete project validation: it does not build/install the
+wheel or prove every platform. Likewise, build success alone does not execute
+the installed artifact.
+
+Do not run broad local pytest, full Playwright, package build, installed-wheel,
+or platform matrices by default. For a difficult local diagnostic, individual
+modules and static gates may be combined:
 
 ```powershell
-python -m pytest
+python -m pytest -m "quick or source_regression or startup_contract"
 python -m ruff check .
 python -m mypy
 python -m build
 ```
 
-CI owns broad regression and keeps core Python, browser, static/type, package,
+Only the required CI `full-validation` aggregate is called full validation.
+CI keeps quick, source regression, startup, browser, static/type, package,
 Windows, and compatibility failures independently visible.
 
 ## Model-development loop
@@ -140,7 +169,6 @@ Before completing a task:
 
 - confirm the requested behavior and removals are persistent;
 - run the focused checks selected for the change classes;
-- state plainly when broad validation is delegated to CI;
+- state plainly that complete validation is delegated to CI;
 - remove temporary diagnostics and screenshots;
 - leave unrelated working-tree changes untouched.
-

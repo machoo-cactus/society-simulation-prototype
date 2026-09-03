@@ -125,8 +125,8 @@ For every behavior or layout change:
 5. Use the ARIA snapshot to distinguish test error, accessibility defect, and
    application bug.
 6. Fix the root cause and rerun the focused browser and closest HTTP tests.
-7. Delegate complete browser and repository regression to CI unless this is an
-   explicit release or diagnostic run.
+7. Delegate complete browser and repository regression to the CI `browser` and
+   `full-validation` jobs unless this is an explicit local diagnostic run.
 
 Source inspection, JavaScript syntax checks, HTTP 200 responses, and generated
 HTML do not prove browser behavior.
@@ -178,8 +178,8 @@ real prompts, memories, profiles, or model text into failure output.
 Changes to engagement projection, event filtering, selected-character
 inspection, or scenario forms require focused Playwright coverage with
 `STAGE0_RUN_PLAYWRIGHT=1`. Complete browser, no-JavaScript, accessibility, and
-partial-refresh regression runs in CI; Python unit or HTTP tests alone do not
-prove browser behavior.
+partial-refresh regression runs in the CI `browser` module; Python unit or HTTP
+tests alone do not prove browser behavior.
 
 ## Focused debugging
 

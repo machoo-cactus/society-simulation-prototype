@@ -12,7 +12,7 @@ absolute paths.
 | `STAGE0_ENVIRONMENT` | `development` | Deployment label |
 | `STAGE0_CORS_ORIGINS` | `[]` | JSON list of allowed origins for separate clients |
 | `STAGE0_DATA_DIRECTORY` | `data/runs` | Dataset/output directory |
-| `STAGE0_DATASET_DATABASE` | `stage0.sqlite3` | SQLite filename inside the data directory |
+| `STAGE0_DATASET_DATABASE` | `stage0-v12.sqlite3` | Schema-qualified SQLite filename inside the data directory |
 | `STAGE0_CHARACTER_DIRECTORY` | `data/characters` | Writable character library |
 | `STAGE0_SCENARIO_DIRECTORY` | `data/scenarios` | Writable scenario library |
 | `STAGE0_ELEMENT_DIRECTORY` | `data/elements` | Writable element library |

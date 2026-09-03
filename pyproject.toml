@@ -74,7 +74,11 @@ stage0_sim = [
 testpaths = ["tests"]
 addopts = "-q"
 markers = [
+    "browser: subprocess-backed Playwright browser workflows",
     "model_contract: deterministic controller, compiler, replay, and provider protocol checks",
+    "quick: fast deterministic local feedback without subprocess servers, browsers, builds, or live providers",
+    "source_regression: non-quick unit and integration source-tree regression",
+    "startup_contract: unpatched subprocess application startup and environment compatibility",
 ]
 
 [tool.ruff]

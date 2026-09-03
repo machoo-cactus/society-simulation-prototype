@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
@@ -41,16 +42,22 @@ def main() -> int:
     os.chdir(work_directory)
 
     from stage0_sim import __version__
+    from stage0_sim.adapters.persistence.sqlite_schema import (
+        DATABASE_SCHEMA_VERSION,
+    )
 
     package = files("stage0_sim")
-    assert __version__ == "0.2.0"
     assert package.joinpath("resources", "demo.json").is_file()
     assert package.joinpath("resources", "demo-character.json").is_file()
     assert package.joinpath("web", "templates", "base.html").is_file()
     assert package.joinpath("web", "static", "styles.css").is_file()
 
     data = work_directory / "data"
-    environment = os.environ.copy()
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("STAGE0_")
+    }
     environment.update(
         {
             "STAGE0_CHARACTER_DIRECTORY": str(data / "characters"),
@@ -59,6 +66,18 @@ def main() -> int:
             "STAGE0_DATA_DIRECTORY": str(data / "runs"),
         }
     )
+    old_database = data / "runs" / "stage0.sqlite3"
+    old_database.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(old_database)
+    connection.executescript(
+        f"""
+        CREATE TABLE sentinel (value TEXT NOT NULL);
+        INSERT INTO sentinel VALUES ('preserve-me');
+        PRAGMA user_version = {max(1, DATABASE_SCHEMA_VERSION - 1)};
+        """
+    )
+    connection.commit()
+    connection.close()
     cli = subprocess.run(
         [
             sys.executable,
@@ -118,7 +137,7 @@ def main() -> int:
                 if status == 200:
                     assert json.loads(body) == {
                         "status": "ok",
-                        "version": "0.2.0",
+                        "version": __version__,
                     }
                     break
             except OSError:
@@ -170,6 +189,22 @@ def main() -> int:
             payload={},
         )
         assert status == 200
+
+        current_database = (
+            data
+            / "runs"
+            / f"stage0-v{DATABASE_SCHEMA_VERSION}.sqlite3"
+        )
+        connection = sqlite3.connect(current_database)
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == (
+            DATABASE_SCHEMA_VERSION
+        )
+        connection.close()
+        connection = sqlite3.connect(old_database)
+        assert connection.execute(
+            "SELECT value FROM sentinel"
+        ).fetchone()[0] == "preserve-me"
+        connection.close()
     finally:
         server.terminate()
         try:

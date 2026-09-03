@@ -40,6 +40,7 @@ identifiers have one owner: [Current contracts](CURRENT_CONTRACTS.md).
 | Task | Owner |
 | --- | --- |
 | Plan, implement, validate, and hand off agent work | [Development workflow](DEVELOPMENT_WORKFLOW.md) |
+| Select quick, startup, source, package, browser, and full-CI test tiers | [Development workflow](DEVELOPMENT_WORKFLOW.md) |
 | Check current release, schema, telemetry, vocabulary, and route identifiers | [Current contracts](CURRENT_CONTRACTS.md) |
 | Locate authority and dependency boundaries | [Architecture](ARCHITECTURE.md) |
 | Change tick, cognition, perception, or action behavior | [Runtime semantics](RUNTIME.md) |

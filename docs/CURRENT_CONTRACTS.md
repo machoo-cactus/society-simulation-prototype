@@ -13,12 +13,18 @@ page synchronized with them.
 | Character source | `2` with template `human-v1` |
 | Reusable element source | `4` |
 | Dataset | `stage0.dataset.v6` |
-| SQLite | schema `12`, fresh-only |
+| SQLite | schema `12`, fresh-only; default `stage0-v12.sqlite3` |
 | Telemetry | `stage0.telemetry.v5` |
 
 Runtime libraries accept only current character, element, and scenario sources.
 The offline migration service retains tested adjacent transforms for authored
 content. Existing SQLite databases are not migrated.
+
+The default SQLite filename includes the schema version. After a schema bump,
+the application creates the new default beside earlier databases rather than
+overwriting, deleting, or attempting to migrate research records. An explicitly
+configured `STAGE0_DATASET_DATABASE` remains exact and fails if its schema is
+not current.
 
 ## Runtime boundaries
 
@@ -53,4 +59,3 @@ When a value changes:
 
 The root README, status, Copilot instructions, and specialist documents should
 link here rather than duplicate this inventory.
-

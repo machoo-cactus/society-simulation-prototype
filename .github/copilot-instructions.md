@@ -24,6 +24,11 @@ existing environment. Source updates require explicit `-Pull` or `--pull`.
 - Run focused local tests and Ruff paths that can falsify the changed behavior.
   Broad pytest, Playwright, mypy, build, package, and platform gates are CI
   responsibilities unless the task is explicitly a release or diagnostic run.
+- Use `python -m pytest -m quick` for stable fast feedback and
+  `python -m pytest -m startup_contract` when application composition,
+  settings, persistence defaults, or startup changes. `python -m pytest` is
+  source regression, not complete project validation; only CI
+  `full-validation` covers browser, installed package, and platform modules.
 - For UI work, run the closest HTTP tests and one focused Playwright workflow.
 - For model protocol work, run `python -m pytest -m model_contract`; a live
   provider is optional and uses the bounded smoke in

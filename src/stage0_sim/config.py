@@ -9,6 +9,7 @@ from stage0_sim.adapters.llm import (
     RecordingModelClient,
     ReplayModelClient,
 )
+from stage0_sim.adapters.persistence.sqlite_schema import DATABASE_SCHEMA_VERSION
 from stage0_sim.application.agents.contracts import ModelClient
 
 
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     cors_origins: list[str] = []
     data_directory: Path = Path("data/runs")
-    dataset_database: str = "stage0.sqlite3"
+    dataset_database: str = f"stage0-v{DATABASE_SCHEMA_VERSION}.sqlite3"
     character_directory: Path = Path("data/characters")
     scenario_directory: Path = Path("data/scenarios")
     element_directory: Path = Path("data/elements")

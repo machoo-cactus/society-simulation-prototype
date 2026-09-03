@@ -179,6 +179,56 @@ def test_high_stress_targets_relaxation_station() -> None:
     assert drive.target_station_id == "sofa"
 
 
+def test_opt_in_hydration_targets_drink_station() -> None:
+    scenario = ScenarioDefinition.model_validate(
+        {
+            "name": "hydration-correction",
+            "homeostasis": {
+                "activity_coefficients": {
+                    "IDLE": {"satiety": 0, "energy": 0, "stress": 0}
+                }
+            },
+            "system1": {
+                "enabled_drives": ["HYDRATION"],
+                "tie_break_order": ["HYDRATION"],
+            },
+            "world": {
+                "width": 2,
+                "height": 1,
+                "stations": [
+                    {
+                        "id": "water",
+                        "name": "Water Station",
+                        "position": {"x": 1, "y": 0},
+                        "supported_actions": ["DRINK"],
+                    }
+                ],
+            },
+            "entities": [
+                {
+                    "id": "agent",
+                    "components": {
+                        "position": {"x": 0, "y": 0},
+                        "homeostasis": {
+                            "satiety": 80,
+                            "energy": 80,
+                            "stress": 20,
+                            "hydration": 10,
+                        },
+                    },
+                }
+            ],
+        }
+    )
+    runner = create_runner(scenario)
+
+    runner.run_for(1)
+
+    drive = runner.registry.get_component("agent", DriveComponent)
+    assert drive.active_drive is DriveType.HYDRATION
+    assert drive.target_station_id == "water"
+
+
 def test_system1_hysteresis_holds_until_recovery_threshold() -> None:
     scenario = ScenarioDefinition.model_validate(
         {

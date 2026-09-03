@@ -198,6 +198,7 @@ DATA_RUN_STATUSES = (
     "created",
     "running",
     "paused",
+    "suspended",
     "completed",
     "stopped",
     "failed",
@@ -651,6 +652,10 @@ async def operator_page(request: Request) -> Response:
             error=True,
         )
         saved_scenarios = ()
+    try:
+        checkpoints = manager.list_checkpoints()
+    except (KeyError, ValueError):
+        checkpoints = ()
     message, page_error = session.consume_notice()
     dataset_summary: dict[str, JsonValue] | None = None
     if session.run_id is not None:
@@ -666,6 +671,7 @@ async def operator_page(request: Request) -> Response:
             "scenario": session.scenario,
             "prepared": prepared,
             "saved_scenarios": saved_scenarios,
+            "checkpoints": checkpoints,
             "characters": _library(request).list(),
             "slot_characters": _slot_character_options(
                 session.scenario,
@@ -1356,6 +1362,69 @@ async def set_run_speed(request: Request) -> Response:
     return _with_session(_redirect(), session_id)
 
 
+@router.post("/run/checkpoints")
+async def save_run_checkpoint(request: Request) -> Response:
+    session_id, session = _session(request)
+    form = await request.form()
+    try:
+        if session.run_id is None:
+            raise SimulationNotFoundError("there is no active run")
+        checkpoint = _manager(request).save_checkpoint(
+            session.run_id,
+            label=str(form.get("label", "")),
+        )
+        session.notify(
+            f"Saved checkpoint at tick {checkpoint.simulation_tick}."
+        )
+    except (
+        RuntimeError,
+        ValueError,
+        SimulationNotFoundError,
+    ) as error:
+        session.notify(f"Could not save checkpoint: {error}", error=True)
+    return _with_session(_redirect(), session_id)
+
+
+@router.post("/checkpoints/{checkpoint_id}/restore")
+async def restore_run_checkpoint(
+    checkpoint_id: str,
+    request: Request,
+) -> Response:
+    session_id, session = _session(request)
+    manager = _manager(request)
+    active = _managed_run(manager, session)
+    if active is not None and active.runner.status is not RunnerStatus.STOPPED:
+        session.notify(
+            "Stop the active run before restoring a checkpoint.",
+            error=True,
+        )
+        return _with_session(_redirect(), session_id)
+    try:
+        result = await manager.restore_checkpoint(checkpoint_id)
+        managed = manager.get_run(result.run_id)
+        session.run_id = result.run_id
+        session.scenario = managed.prepared.scenario
+        session.scenario_id = None
+        session.event_start_index = 0
+        session.selected_agent_id = None
+        session.selected_object_id = None
+        session.notify(
+            
+                "Restored checkpoint as a paused branch run."
+                if result.branched
+                else "Restored checkpoint into the paused mainline run."
+            
+        )
+    except (
+        RuntimeError,
+        ValueError,
+        SimulationConflictError,
+        SimulationNotFoundError,
+    ) as error:
+        session.notify(f"Could not restore checkpoint: {error}", error=True)
+    return _with_session(_redirect(), session_id)
+
+
 @router.post("/run/vitals")
 async def mutate_vitals(request: Request) -> Response:
     session_id, session = _session(request)
@@ -1364,7 +1433,15 @@ async def mutate_vitals(request: Request) -> Response:
         if session.run_id is None or session.selected_agent_id is None:
             raise SimulationNotFoundError("select a character in an active run")
         values: dict[str, float] = {}
-        for name in ("satiety", "energy", "stress"):
+        for name in (
+            "satiety",
+            "energy",
+            "stress",
+            "hydration",
+            "social_connection",
+            "happiness",
+            "fear",
+        ):
             raw = str(form.get(name, "")).strip()
             if not raw:
                 continue
@@ -1723,6 +1800,12 @@ def _control_availability(managed: ManagedRun | None, scenario_id: str | None) -
         "stop": status in {RunnerStatus.RUNNING, RunnerStatus.PAUSED},
         "speed": status in {RunnerStatus.RUNNING, RunnerStatus.PAUSED},
         "vitals": status in {RunnerStatus.RUNNING, RunnerStatus.PAUSED},
+        "checkpoint": (
+            status is RunnerStatus.PAUSED
+            and managed is not None
+            and managed.runner.cognition_phase.value == "idle"
+            and not managed.runner.advancing
+        ),
     }
 
 
@@ -1775,6 +1858,7 @@ def _data_run_filters(values: Any) -> PersistedRunFilter:
 
     persisted_status = optional("persisted_status")
     effective_status = optional("status")
+    lineage_kind = optional("lineage")
     return PersistedRunFilter(
         search_text=optional("search"),
         persisted_statuses=(persisted_status,) if persisted_status else (),
@@ -1784,6 +1868,7 @@ def _data_run_filters(values: Any) -> PersistedRunFilter:
         capture_complete=(
             capture_value == "true" if capture_value is not None else None
         ),
+        lineage_kinds=(lineage_kind,) if lineage_kind else (),
         started_at_or_after=parsed_datetime("started_after"),
         started_before=parsed_datetime("started_before"),
         completed_at_or_after=parsed_datetime("completed_after"),
@@ -1803,6 +1888,7 @@ def _data_filter_values(request: Request) -> dict[str, str]:
             "scenario",
             "schema",
             "capture_complete",
+            "lineage",
             "started_after",
             "started_before",
             "completed_after",

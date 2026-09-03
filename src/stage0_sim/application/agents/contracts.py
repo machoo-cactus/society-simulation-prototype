@@ -209,6 +209,10 @@ class CharacterObservation:
     targets: tuple[ObservedTarget, ...]
     facts: tuple[ObservationFact, ...]
     recent_outcome: str | None
+    hydration: float | None = None
+    social_connection: float | None = None
+    happiness: float | None = None
+    fear: float | None = None
     spatial_location: dict[str, JsonValue] | None = None
     available_travel_modes: tuple[str, ...] = ()
     calendar_time: CalendarTimeObservation | None = None

@@ -112,6 +112,25 @@ class EpisodicMemoryStore:
     def records(self) -> tuple[MemoryRecord, ...]:
         return tuple(self._records)
 
+    @property
+    def next_id(self) -> int:
+        return self._next_id
+
+    def restore_records(
+        self,
+        records: tuple[MemoryRecord, ...],
+        *,
+        next_id: int,
+    ) -> None:
+        if self._persistence is not None:
+            raise RuntimeError(
+                "memory records must be restored before persistence binding"
+            )
+        if next_id < 1:
+            raise ValueError("memory next ID must be positive")
+        self._records = list(records)
+        self._next_id = next_id
+
     def bind_research_recorder(self, recorder: ResearchRecorder) -> None:
         self.research_recorder = recorder
 

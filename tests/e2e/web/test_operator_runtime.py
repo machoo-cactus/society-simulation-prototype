@@ -124,6 +124,36 @@ def test_operator_lifecycle_is_driven_by_accessible_controls(page: Page) -> None
     assert page.evaluate("performance.getEntriesByType('navigation').length") == 1
 
 
+def test_operator_saves_and_branches_from_checkpoint(page: Page) -> None:
+    page.goto("/ui/")
+    page.get_by_role("button", name="Load example scenario").click()
+    page.get_by_role("button", name="Start run").click()
+    page.get_by_role("button", name="Pause").click()
+    page.get_by_role("textbox", name="Checkpoint label").fill("Browser fork")
+    page.get_by_role("button", name="Save checkpoint").click()
+
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "Saved checkpoint"
+    )
+    page.get_by_text("Saved checkpoints (1)", exact=True).click()
+    checkpoint_row = page.get_by_role(
+        "row",
+        name=re.compile(r"Browser fork .*Creates branch"),
+    )
+    expect(checkpoint_row).to_be_visible()
+
+    page.get_by_role("button", name="Stop").click()
+    restore_button = page.get_by_role("button", name="Restore as branch")
+    if not restore_button.is_visible():
+        page.get_by_text("Saved checkpoints (1)", exact=True).click()
+    restore_button.click()
+
+    expect(page.locator(".notice[role=status]")).to_contain_text(
+        "paused branch run"
+    )
+    expect(page.get_by_role("button", name="Resume")).to_be_enabled()
+
+
 def test_scenario_upload_and_event_detail_use_native_browser_flows(
     page: Page,
 ) -> None:

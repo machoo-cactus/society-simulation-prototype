@@ -676,6 +676,94 @@ def _scenario_v7_to_v8(
     return _StepOutput(payload, changed_paths=tuple(changed))
 
 
+def _element_v4_to_v5(
+    raw: JsonObject,
+    context: MigrationContext,
+) -> _StepOutput:
+    del context
+    payload = copy.deepcopy(raw)
+    payload["schema_version"] = 5
+    return _StepOutput(payload, changed_paths=("$.schema_version",))
+
+
+def _scenario_v8_to_v9(
+    raw: JsonObject,
+    context: MigrationContext,
+) -> _StepOutput:
+    payload = copy.deepcopy(raw)
+    changed = ["$.schema_version"]
+    homeostasis = payload.setdefault("homeostasis", {})
+    if not isinstance(homeostasis, dict):
+        raise ValueError("version 8 scenario homeostasis must be an object")
+    for field in (
+        "drink_hydration_delta",
+        "read_happiness_delta",
+        "social_connection_delta",
+        "social_happiness_delta",
+        "alarming_fear_delta",
+        "calming_happiness_delta",
+        "calming_fear_delta",
+    ):
+        homeostasis.setdefault(field, 0.0)
+        changed.append(f"$.homeostasis.{field}")
+    coefficients = homeostasis.setdefault("activity_coefficients", {})
+    if not isinstance(coefficients, dict):
+        raise ValueError(
+            "version 8 scenario homeostasis.activity_coefficients must be an object"
+        )
+    for activity, rates in coefficients.items():
+        if not isinstance(rates, dict):
+            raise ValueError(
+                f"version 8 activity coefficient {activity!r} must be an object"
+            )
+        for field in ("hydration", "social_connection", "happiness", "fear"):
+            rates.setdefault(field, 0.0)
+            changed.append(
+                f"$.homeostasis.activity_coefficients.{activity}.{field}"
+            )
+    entities = payload.get("entities", [])
+    if not isinstance(entities, list):
+        raise ValueError("version 8 scenario entities must be an array")
+    for index, entity in enumerate(entities):
+        if not isinstance(entity, dict):
+            raise ValueError(f"version 8 scenario entity {index} must be an object")
+        components = entity.get("components", {})
+        if not isinstance(components, dict):
+            raise ValueError(
+                f"version 8 scenario entity {index} components must be an object"
+            )
+        state = components.get("homeostasis")
+        if state is None:
+            continue
+        if not isinstance(state, dict):
+            raise ValueError(
+                f"version 8 scenario entity {index} homeostasis must be an object"
+            )
+        defaults = {
+            "hydration": 100.0,
+            "social_connection": 50.0,
+            "happiness": 50.0,
+            "fear": 0.0,
+        }
+        for field, value in defaults.items():
+            state.setdefault(field, value)
+            changed.append(
+                f"$.entities[{index}].components.homeostasis.{field}"
+            )
+    system1 = payload.setdefault("system1", {})
+    if not isinstance(system1, dict):
+        raise ValueError("version 8 scenario system1 must be an object")
+    enabled = ["SATIETY", "ENERGY", "STRESS"]
+    system1.setdefault("enabled_drives", enabled)
+    system1.setdefault("tie_break_order", enabled)
+    changed.extend(
+        ["$.system1.enabled_drives", "$.system1.tie_break_order"]
+    )
+    _rewrite_element_references(payload, context.element_hashes, changed)
+    payload["schema_version"] = 9
+    return _StepOutput(payload, changed_paths=tuple(changed))
+
+
 def _rewrite_element_references(
     value: Any,
     hashes: dict[str, str],
@@ -738,6 +826,12 @@ CONTENT_MIGRATION_REGISTRY.register(
     _element_v3_to_v4,
 )
 CONTENT_MIGRATION_REGISTRY.register(
+    ResourceKind.ELEMENT,
+    4,
+    5,
+    _element_v4_to_v5,
+)
+CONTENT_MIGRATION_REGISTRY.register(
     ResourceKind.SCENARIO,
     4,
     5,
@@ -760,5 +854,11 @@ CONTENT_MIGRATION_REGISTRY.register(
     7,
     8,
     _scenario_v7_to_v8,
+)
+CONTENT_MIGRATION_REGISTRY.register(
+    ResourceKind.SCENARIO,
+    8,
+    9,
+    _scenario_v8_to_v9,
 )
 CONTENT_MIGRATION_REGISTRY.validate_integrity()

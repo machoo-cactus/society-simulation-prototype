@@ -1,5 +1,8 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any, cast
+
+from pydantic import TypeAdapter
 
 from stage0_sim.application.data_capture import (
     DATASET_SCHEMA_VERSION,
@@ -216,6 +219,12 @@ class RunDataCollector:
         scenario: dict[str, JsonValue],
         projector: AgentStateProjector | None = None,
         private_provenance: dict[str, JsonValue] | None = None,
+        resume_state: Mapping[str, JsonValue] | None = None,
+        continue_dataset: bool = True,
+        lineage_kind: str = "mainline",
+        root_run_id: str | None = None,
+        parent_run_id: str | None = None,
+        parent_checkpoint_id: str | None = None,
     ) -> None:
         self.store = store
         self.runner = runner
@@ -246,35 +255,45 @@ class RunDataCollector:
         self._research_pending = False
         self._capture_failed = False
         self._current_event_record_id: str | None = None
-        store.begin_run(
-            run_id=self.run_id,
-            seed=runner.configuration.seed,
-            dt=runner.configuration.dt,
-            initial_speed=runner.configuration.speed,
-            scenario=scenario,
-        )
+        if resume_state is None or not continue_dataset:
+            store.begin_run(
+                run_id=self.run_id,
+                seed=runner.configuration.seed,
+                dt=runner.configuration.dt,
+                initial_speed=runner.configuration.speed,
+                scenario=scenario,
+                lineage_kind=lineage_kind,
+                root_run_id=root_run_id,
+                parent_run_id=parent_run_id,
+                parent_checkpoint_id=parent_checkpoint_id,
+            )
+        if resume_state is not None:
+            self.restore_checkpoint_state(resume_state)
+            if not continue_dataset:
+                self._prepare_branch_capture_state()
         if runner.registry.has_resource(EpisodicMemoryStore):
             memory_store = runner.registry.get_resource(EpisodicMemoryStore)
             memory_store.bind_persistence(store, self.run_id)
-            for record in memory_store.records:
-                self._append(
-                    "memory_reference",
-                    0,
-                    record.simulation_time,
-                    record.agent_id,
-                    {
-                        "event_type": "memory.initial",
-                        "memory_id": record.id,
-                        "importance": record.importance,
-                        "text": record.text,
-                        "embedding": list(record.embedding),
-                        "memory_metadata": record.metadata,
-                    },
-                    None,
-                    category=RecordCategory.MEMORY,
-                    visibility=RecordVisibility.PRIVATE_RESEARCH,
-                    joins=RecordJoinIds(memory_id=MemoryId(record.id)),
-                )
+            if resume_state is None:
+                for record in memory_store.records:
+                    self._append(
+                        "memory_reference",
+                        0,
+                        record.simulation_time,
+                        record.agent_id,
+                        {
+                            "event_type": "memory.initial",
+                            "memory_id": record.id,
+                            "importance": record.importance,
+                            "text": record.text,
+                            "embedding": list(record.embedding),
+                            "memory_metadata": record.metadata,
+                        },
+                        None,
+                        category=RecordCategory.MEMORY,
+                        visibility=RecordVisibility.PRIVATE_RESEARCH,
+                        joins=RecordJoinIds(memory_id=MemoryId(record.id)),
+                    )
         elif runner.registry.has_resource(InformationStore):
             runner.registry.get_resource(InformationStore).bind_persistence(
                 store,
@@ -295,10 +314,11 @@ class RunDataCollector:
         runner.research.subscribe(self._research_available)
         runner.subscribe_phase(self._capture_phase)
         runner.subscribe_tick_completed(self._commit_tick)
-        self._initialize_goals()
-        self._capture_situation_provenance(
-            private_provenance if private_provenance is not None else scenario
-        )
+        if resume_state is None:
+            self._initialize_goals()
+            self._capture_situation_provenance(
+                private_provenance if private_provenance is not None else scenario
+            )
         self._drain_research()
 
     def finalize(self, status: str = "completed") -> None:
@@ -338,6 +358,144 @@ class RunDataCollector:
     @property
     def finalized(self) -> bool:
         return self._finalized
+
+    def checkpoint_state(self) -> dict[str, JsonValue]:
+        if self._finalized:
+            raise RuntimeError("a finalized collector cannot be checkpointed")
+        self._drain_research()
+        if self._research_pending or self._current_event_record_id is not None:
+            raise RuntimeError(
+                "collector checkpoint requires a settled capture boundary"
+            )
+        return {
+            "sequence": self._record_projector.sequence,
+            "activities": _dump_typed(self._activities),
+            "previous_state_samples": _dump_typed(
+                self._previous_state_samples
+            ),
+            "coverage_manifest": self._coverage_manifest,
+            "action_episodes": _dump_typed(self._action_episodes),
+            "decision_episodes": _dump_typed(self._decision_episodes),
+            "interaction_episodes": _dump_typed(
+                self._interaction_episodes
+            ),
+            "engagements": _dump_typed(self._engagements),
+            "interaction_keys": _dump_tuple_key_mapping(
+                self._interaction_keys
+            ),
+            "event_interactions": _dump_typed(self._event_interactions),
+            "exposure_sequences": _dump_tuple_key_mapping(
+                self._exposure_sequences
+            ),
+            "perception_fact_records": dict(
+                sorted(self._perception_fact_records.items())
+            ),
+            "goal_episodes": _dump_typed(self._goal_episodes),
+            "memory_request_sources": dict(
+                sorted(self._memory_request_sources.items())
+            ),
+            "event_lineage": _dump_typed(self._event_lineage),
+            "pending_action_outcomes": _dump_typed(
+                self._pending_action_outcomes
+            ),
+            "tool_names": dict(sorted(self._tool_names.items())),
+            "capture_failed": self._capture_failed,
+        }
+
+    def restore_checkpoint_state(
+        self,
+        payload: Mapping[str, JsonValue],
+    ) -> None:
+        sequence = payload.get("sequence")
+        if not isinstance(sequence, int) or isinstance(sequence, bool):
+            raise ValueError("collector checkpoint sequence must be an integer")
+        self._record_projector.sequence = sequence
+        self._activities = _load_typed(
+            payload.get("activities"),
+            dict[str, _ActivityInterval],
+        )
+        self._previous_state_samples = _load_typed(
+            payload.get("previous_state_samples"),
+            dict[str, tuple[str, dict[str, JsonValue], int, float]],
+        )
+        coverage = payload.get("coverage_manifest")
+        if coverage is not None and not isinstance(coverage, dict):
+            raise ValueError(
+                "collector checkpoint coverage manifest must be an object"
+            )
+        self._coverage_manifest = coverage
+        self._action_episodes = _load_typed(
+            payload.get("action_episodes"),
+            dict[str, _ActionEpisode],
+        )
+        self._decision_episodes = _load_typed(
+            payload.get("decision_episodes"),
+            dict[str, _DecisionEpisode],
+        )
+        self._interaction_episodes = _load_typed(
+            payload.get("interaction_episodes"),
+            dict[str, _InteractionEpisode],
+        )
+        self._engagements = _load_typed(
+            payload.get("engagements"),
+            dict[str, _EngagementProjection],
+        )
+        self._interaction_keys = _load_tuple_key_mapping(
+            payload.get("interaction_keys"),
+            str,
+        )
+        self._event_interactions = _load_typed(
+            payload.get("event_interactions"),
+            dict[str, tuple[str, ...]],
+        )
+        self._exposure_sequences = _load_tuple_key_mapping(
+            payload.get("exposure_sequences"),
+            int,
+        )
+        self._perception_fact_records = _load_typed(
+            payload.get("perception_fact_records"),
+            dict[str, str],
+        )
+        self._goal_episodes = _load_typed(
+            payload.get("goal_episodes"),
+            dict[str, _GoalEpisode],
+        )
+        self._memory_request_sources = _load_typed(
+            payload.get("memory_request_sources"),
+            dict[str, str],
+        )
+        self._event_lineage = _load_typed(
+            payload.get("event_lineage"),
+            dict[str, RecordJoinIds],
+        )
+        self._pending_action_outcomes = _load_typed(
+            payload.get("pending_action_outcomes"),
+            dict[str, list[dict[str, JsonValue]]],
+        )
+        self._tool_names = _load_typed(
+            payload.get("tool_names"),
+            dict[str, str],
+        )
+        capture_failed = payload.get("capture_failed")
+        if not isinstance(capture_failed, bool):
+            raise ValueError(
+                "collector checkpoint capture_failed must be a boolean"
+            )
+        self._capture_failed = capture_failed
+        self._research_pending = False
+        self._current_event_record_id = None
+
+    def _prepare_branch_capture_state(self) -> None:
+        self._record_projector.sequence = 0
+        self._previous_state_samples.clear()
+        self._coverage_manifest = None
+        self._exposure_sequences.clear()
+        self._perception_fact_records.clear()
+        self._memory_request_sources.clear()
+        self._event_lineage.clear()
+        self._capture_failed = False
+        for episode in self._interaction_episodes.values():
+            episode.record_id = ""
 
     @property
     def _sequence(self) -> int:
@@ -5106,6 +5264,51 @@ def _first_issue_code(issues: list[JsonValue]) -> str | None:
 
 def _optional_string(value: JsonValue | object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _dump_typed(value: object) -> JsonValue:
+    return cast(
+        JsonValue,
+        TypeAdapter(type(value)).dump_python(value, mode="json"),
+    )
+
+
+def _load_typed(value: JsonValue, annotation: Any) -> Any:
+    return TypeAdapter(annotation).validate_python(value)
+
+
+def _dump_tuple_key_mapping(
+    value: Mapping[tuple[str, ...], str | int],
+) -> list[JsonValue]:
+    return [
+        {"key": list(key), "value": item}
+        for key, item in sorted(value.items())
+    ]
+
+
+def _load_tuple_key_mapping(
+    value: JsonValue,
+    value_type: type[str] | type[int],
+) -> Any:
+    if not isinstance(value, list):
+        raise ValueError("collector tuple-key mapping must be a list")
+    result: dict[tuple[str, ...], str | int] = {}
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError(
+                "collector tuple-key mapping entries must be objects"
+            )
+        key = item.get("key")
+        mapped = item.get("value")
+        if (
+            not isinstance(key, list)
+            or not all(isinstance(part, str) for part in key)
+            or not isinstance(mapped, value_type)
+            or isinstance(mapped, bool)
+        ):
+            raise ValueError("invalid collector tuple-key mapping entry")
+        result[tuple(str(part) for part in key)] = mapped
+    return result
 
 
 def _required_string(value: JsonValue | object, name: str) -> str:

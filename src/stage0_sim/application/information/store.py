@@ -155,6 +155,22 @@ class InformationStore:
             )
         )
 
+    def restore_documents(
+        self,
+        documents: tuple[InformationDocument, ...],
+    ) -> None:
+        if self._persistence is not None:
+            raise RuntimeError(
+                "information documents must be restored before persistence binding"
+            )
+        candidate = InformationStore()
+        for document in sorted(
+            documents,
+            key=lambda item: (item.id, item.revision),
+        ):
+            candidate.register(document)
+        self._history = candidate._history
+
     @property
     def persistence_bound(self) -> bool:
         return self._persistence is not None

@@ -291,6 +291,26 @@ def complete_drink(
         )
     else:
         context.registry.remove_component(target_id, ConsumableComponent)
+    from stage0_sim.domain.components import (
+        HomeostasisComponent,
+        HomeostasisConfiguration,
+    )
+    from stage0_sim.domain.systems.homeostasis import apply_homeostasis_deltas
+
+    if context.registry.has_component(
+        actor_id, HomeostasisComponent
+    ) and context.registry.has_resource(HomeostasisConfiguration):
+        configuration = context.registry.get_resource(HomeostasisConfiguration)
+        apply_homeostasis_deltas(
+            context,
+            actor_id,
+            source="drink",
+            deltas={"hydration": configuration.drink_hydration_delta},
+            details={
+                "target_id": target_id,
+                "item_id": consumable.item_id,
+            },
+        )
     context.events.emit(
         "drink.completed",
         simulation_tick=context.clock.tick,

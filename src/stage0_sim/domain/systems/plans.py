@@ -15,6 +15,8 @@ from stage0_sim.domain.components import (
     EngagementExecutionComponent,
     EngagementProgramComponent,
     EngagementStatus,
+    HomeostasisComponent,
+    HomeostasisConfiguration,
     InteractionExecutionComponent,
     InteractionRequestComponent,
     MovementComponent,
@@ -1748,6 +1750,27 @@ class TimedPlanActionSystem:
                 if failure is not None:
                     fail_plan_action(context, agent_id, plan, failure)
                     continue
+            if (
+                plan.current.action is ActionType.READ
+                and context.registry.has_component(
+                    agent_id, HomeostasisComponent
+                )
+                and context.registry.has_resource(HomeostasisConfiguration)
+            ):
+                from stage0_sim.domain.systems.homeostasis import (
+                    apply_homeostasis_deltas,
+                )
+
+                configuration = context.registry.get_resource(
+                    HomeostasisConfiguration
+                )
+                apply_homeostasis_deltas(
+                    context,
+                    agent_id,
+                    source="read",
+                    deltas={"happiness": configuration.read_happiness_delta},
+                    details=action_lineage_payload(plan.current),
+                )
             activity = context.registry.get_component(agent_id, ActivityComponent)
             previous_activity = activity.current
             activity.current = plan.previous_activity or ActivityType.IDLE

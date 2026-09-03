@@ -1128,18 +1128,34 @@ class HomeostasisEffectDefinition(BaseModel):
     satiety_delta: float = 0.0
     energy_delta: float = 0.0
     stress_delta: float = 0.0
+    hydration_delta: float = 0.0
+    social_connection_delta: float = 0.0
+    happiness_delta: float = 0.0
+    fear_delta: float = 0.0
     satiety_target: float | None = Field(default=None, ge=0, le=100)
     energy_target: float | None = Field(default=None, ge=0, le=100)
     stress_target: float | None = Field(default=None, ge=0, le=100)
+    hydration_target: float | None = Field(default=None, ge=0, le=100)
+    social_connection_target: float | None = Field(default=None, ge=0, le=100)
+    happiness_target: float | None = Field(default=None, ge=0, le=100)
+    fear_target: float | None = Field(default=None, ge=0, le=100)
 
     def to_domain(self) -> HomeostasisEffect:
         return HomeostasisEffect(
             satiety_delta=self.satiety_delta,
             energy_delta=self.energy_delta,
             stress_delta=self.stress_delta,
+            hydration_delta=self.hydration_delta,
+            social_connection_delta=self.social_connection_delta,
+            happiness_delta=self.happiness_delta,
+            fear_delta=self.fear_delta,
             satiety_target=self.satiety_target,
             energy_target=self.energy_target,
             stress_target=self.stress_target,
+            hydration_target=self.hydration_target,
+            social_connection_target=self.social_connection_target,
+            happiness_target=self.happiness_target,
+            fear_target=self.fear_target,
         )
 
 
@@ -1645,12 +1661,20 @@ class ActivityRatesDefinition(BaseModel):
     satiety: float
     energy: float
     stress: float
+    hydration: float = 0.0
+    social_connection: float = 0.0
+    happiness: float = 0.0
+    fear: float = 0.0
 
     def to_domain(self) -> ActivityRates:
         return ActivityRates(
             satiety=self.satiety,
             energy=self.energy,
             stress=self.stress,
+            hydration=self.hydration,
+            social_connection=self.social_connection,
+            happiness=self.happiness,
+            fear=self.fear,
         )
 
 
@@ -1660,6 +1684,13 @@ class HomeostasisSettingsDefinition(BaseModel):
     activity_coefficients: dict[ActivityType, ActivityRatesDefinition] = Field(
         default_factory=dict
     )
+    drink_hydration_delta: float = 0.0
+    read_happiness_delta: float = 0.0
+    social_connection_delta: float = 0.0
+    social_happiness_delta: float = 0.0
+    alarming_fear_delta: float = 0.0
+    calming_happiness_delta: float = 0.0
+    calming_fear_delta: float = 0.0
 
     def to_domain(self) -> HomeostasisConfiguration:
         rates = default_activity_rates()
@@ -1669,7 +1700,16 @@ class HomeostasisSettingsDefinition(BaseModel):
                 for activity, definition in self.activity_coefficients.items()
             }
         )
-        return HomeostasisConfiguration(activity_rates=rates)
+        return HomeostasisConfiguration(
+            activity_rates=rates,
+            drink_hydration_delta=self.drink_hydration_delta,
+            read_happiness_delta=self.read_happiness_delta,
+            social_connection_delta=self.social_connection_delta,
+            social_happiness_delta=self.social_happiness_delta,
+            alarming_fear_delta=self.alarming_fear_delta,
+            calming_happiness_delta=self.calming_happiness_delta,
+            calming_fear_delta=self.calming_fear_delta,
+        )
 
 
 class DriveThresholdDefinition(BaseModel):
@@ -1691,7 +1731,33 @@ class System1SettingsDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     thresholds: dict[DriveType, DriveThresholdDefinition] = Field(default_factory=dict)
-    tie_break_order: list[DriveType] = Field(default_factory=lambda: list(DriveType))
+    enabled_drives: list[DriveType] = Field(
+        default_factory=lambda: [
+            DriveType.SATIETY,
+            DriveType.ENERGY,
+            DriveType.STRESS,
+        ]
+    )
+    tie_break_order: list[DriveType] = Field(
+        default_factory=lambda: [
+            DriveType.SATIETY,
+            DriveType.ENERGY,
+            DriveType.STRESS,
+        ]
+    )
+
+    @model_validator(mode="after")
+    def enabled_drives_are_ordered_once(self) -> "System1SettingsDefinition":
+        enabled = set(self.enabled_drives)
+        if not enabled or len(enabled) != len(self.enabled_drives):
+            raise ValueError("System 1 enabled drives must be unique and non-empty")
+        if set(self.tie_break_order) != enabled or len(self.tie_break_order) != len(
+            enabled
+        ):
+            raise ValueError(
+                "System 1 tie-break order must contain every enabled drive once"
+            )
+        return self
 
     def to_domain(self) -> System1Configuration:
         thresholds = default_drive_thresholds()
@@ -1703,6 +1769,7 @@ class System1SettingsDefinition(BaseModel):
         )
         return System1Configuration(
             thresholds=thresholds,
+            enabled_drives=tuple(self.enabled_drives),
             tie_break_order=tuple(self.tie_break_order),
         )
 
@@ -2274,7 +2341,7 @@ class TextContentDefinition(BaseModel):
 class ScenarioDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[8] = SCENARIO_SCHEMA_VERSION
+    schema_version: Literal[9] = SCENARIO_SCHEMA_VERSION
     name: str = Field(min_length=1)
     seed: int = 0
     dt: float = Field(default=1.0, gt=0)
@@ -3059,6 +3126,10 @@ def create_runner(
                     satiety=homeostasis_definition.satiety,
                     energy=homeostasis_definition.energy,
                     stress=homeostasis_definition.stress,
+                    hydration=homeostasis_definition.hydration,
+                    social_connection=homeostasis_definition.social_connection,
+                    happiness=homeostasis_definition.happiness,
+                    fear=homeostasis_definition.fear,
                 ),
             )
             registry.add_component(entity_id, DriveComponent())
@@ -3640,6 +3711,10 @@ class HomeostasisComponentDefinition(BaseModel):
     satiety: float = Field(default=100.0, ge=0, le=100)
     energy: float = Field(default=100.0, ge=0, le=100)
     stress: float = Field(default=0.0, ge=0, le=100)
+    hydration: float = Field(default=100.0, ge=0, le=100)
+    social_connection: float = Field(default=50.0, ge=0, le=100)
+    happiness: float = Field(default=50.0, ge=0, le=100)
+    fear: float = Field(default=0.0, ge=0, le=100)
 
 
 class SpatialLocationDefinition(BaseModel):
@@ -4050,6 +4125,10 @@ class StateComparisonCriterionDefinition(BaseModel):
                 "satiety",
                 "energy",
                 "stress",
+                "hydration",
+                "social_connection",
+                "happiness",
+                "fear",
             },
             GoalStateComponent.ACTIVITY: {"current"},
             GoalStateComponent.CONTROLLER: {

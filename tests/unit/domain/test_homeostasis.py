@@ -19,7 +19,15 @@ def test_working_trajectory_matches_configured_coefficients() -> None:
     runner.run_for(10)
 
     state = runner.registry.get_component("agent-001", HomeostasisComponent)
-    assert state.snapshot() == {"satiety": 79.7, "energy": 74.5, "stress": 20.4}
+    assert state.snapshot() == {
+        "satiety": 79.7,
+        "energy": 74.5,
+        "stress": 20.4,
+        "hydration": 100.0,
+        "social_connection": 50.0,
+        "happiness": 50.0,
+        "fear": 0.0,
+    }
     changes = [
         event
         for event in runner.events.events
@@ -36,7 +44,15 @@ def test_custom_coefficients_use_dt_and_clamp_every_meter() -> None:
             "dt": 2.0,
             "homeostasis": {
                 "activity_coefficients": {
-                    "IDLE": {"satiety": -2.0, "energy": 3.0, "stress": 60.0}
+                    "IDLE": {
+                        "satiety": -2.0,
+                        "energy": 3.0,
+                        "stress": 60.0,
+                        "hydration": -60.0,
+                        "social_connection": 30.0,
+                        "happiness": -30.0,
+                        "fear": 60.0,
+                    }
                 }
             },
             "entities": [
@@ -47,6 +63,10 @@ def test_custom_coefficients_use_dt_and_clamp_every_meter() -> None:
                             "satiety": 1.0,
                             "energy": 99.0,
                             "stress": 10.0,
+                            "hydration": 90.0,
+                            "social_connection": 50.0,
+                            "happiness": 50.0,
+                            "fear": 10.0,
                         }
                     },
                 }
@@ -58,7 +78,15 @@ def test_custom_coefficients_use_dt_and_clamp_every_meter() -> None:
     runner.run_for(1)
 
     state = runner.registry.get_component("agent", HomeostasisComponent)
-    assert state.snapshot() == {"satiety": 0.0, "energy": 100.0, "stress": 100.0}
+    assert state.snapshot() == {
+        "satiety": 0.0,
+        "energy": 100.0,
+        "stress": 100.0,
+        "hydration": 0.0,
+        "social_connection": 100.0,
+        "happiness": 0.0,
+        "fear": 100.0,
+    }
 
 
 def test_movement_temporarily_uses_walking_activity() -> None:
@@ -116,6 +144,34 @@ def test_default_configuration_covers_all_activity_types() -> None:
     assert configuration.activity_rates[ActivityType.EATING].satiety > 0
     assert configuration.activity_rates[ActivityType.SLEEPING].energy > 0
     assert configuration.activity_rates[ActivityType.RELAXING].stress < 0
+    assert configuration.activity_rates[ActivityType.DRINKING].hydration == 0
+
+
+def test_explicit_homeostasis_deltas_clamp_all_new_factors() -> None:
+    state = HomeostasisComponent(
+        hydration=10,
+        social_connection=95,
+        happiness=5,
+        fear=95,
+    )
+
+    actual = state.apply_deltas(
+        hydration=-20,
+        social_connection=10,
+        happiness=-10,
+        fear=10,
+    )
+
+    assert actual == {
+        "hydration": -10.0,
+        "social_connection": 5.0,
+        "happiness": -5.0,
+        "fear": 5.0,
+    }
+    assert state.hydration == 0
+    assert state.social_connection == 100
+    assert state.happiness == 0
+    assert state.fear == 100
 
 
 def test_homeostasis_event_log_is_reproducible() -> None:

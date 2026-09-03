@@ -56,7 +56,14 @@
   },
   "entities": [],
   "homeostasis": {
-    "activity_coefficients": {}
+    "activity_coefficients": {},
+    "alarming_fear_delta": 0.0,
+    "calming_fear_delta": 0.0,
+    "calming_happiness_delta": 0.0,
+    "drink_hydration_delta": 0.0,
+    "read_happiness_delta": 0.0,
+    "social_connection_delta": 0.0,
+    "social_happiness_delta": 0.0
   },
   "items": [],
   "memory": {
@@ -77,10 +84,15 @@
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 8,
+  "schema_version": 9,
   "seed": 0,
   "speed": 1.0,
   "system1": {
+    "enabled_drives": [
+      "SATIETY",
+      "ENERGY",
+      "STRESS"
+    ],
     "thresholds": {},
     "tie_break_order": [
       "SATIETY",
@@ -116,7 +128,7 @@
               "y": 5.0
             },
             "element": {
-              "content_hash": "959f7c189fa7fd0b4974f6ae81eb7e1c5e74c37025c3811e476e6322dcbae8fe",
+              "content_hash": "81dd2a8aafd840790100396a0caf28af2ebe17205ec7cedfe7d153fd7d1817cc",
               "id": "legacy-building",
               "kind": "building"
             },

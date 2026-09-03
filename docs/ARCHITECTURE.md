@@ -47,7 +47,10 @@ persistence and filesystem behavior stays in adapters. Model contracts in
 - Dataset v5 is an immutable research observation with rebuildable relational
   projections, including normalized engagement, physical object, and relation
   samples.
-- SQLite/JSONL datasets are not live checkpoints and cannot restore a runner.
+- SQLite/JSONL datasets remain non-authoritative research observations.
+- Application checkpoints separately persist strict, integrity-protected live
+  state. Restoration rebuilds operational adapters through normal composition
+  before applying whitelisted ECS, resource, event, RNG, and capture state.
 
 Telemetry, raw research traces, model recordings, and UI form state must never
 be used as character perception or character-controller context.

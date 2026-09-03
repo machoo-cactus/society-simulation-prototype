@@ -9,12 +9,14 @@ page synchronized with them.
 | Contract | Current value |
 | --- | --- |
 | Package release | `0.3.0` |
-| Scenario source | `8` |
+| Scenario source | `9` |
 | Character source | `2` with template `human-v1` |
-| Reusable element source | `4` |
+| Reusable element source | `5` |
 | Dataset | `stage0.dataset.v6` |
-| SQLite | schema `12`, fresh-only; default `stage0-v12.sqlite3` |
+| SQLite | schema `13`, fresh-only; default `stage0-v13.sqlite3` |
 | Telemetry | `stage0.telemetry.v5` |
+| Checkpoint | `stage0.checkpoint.v1` |
+| Runtime checkpoint compatibility | `stage0.runtime-checkpoint.v1` |
 
 Runtime libraries accept only current character, element, and scenario sources.
 The offline migration service retains tested adjacent transforms for authored

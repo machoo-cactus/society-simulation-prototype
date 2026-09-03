@@ -7,15 +7,29 @@ action execution, perception, and determinism.
 
 Scenario authoring, staging, and execution are separate:
 
-1. A schema-version-8 source is validated.
+1. A schema-version-9 source is validated.
 2. Character assignments and element references are resolved and frozen.
 3. Optional character-situation synthesis completes transactionally.
 4. A prepared scenario is staged without starting or advancing time.
-5. Start creates a new process-local runner.
+5. Start creates a new runner.
 6. Pause, resume, single-step, speed change, and stop are explicit operations.
 
-Stopping finalizes research capture. A server restart does not restore the
-runner, although finalized records remain in SQLite.
+Stopping finalizes research capture. A manual checkpoint may be saved only
+while the runner is paused, cognition is idle, no tick is advancing, and all
+provider, memory, and engagement queues are empty. Checkpoints restore paused;
+resume remains a separate operator action.
+
+An exact persisted head checkpoint can suspend on graceful shutdown and reclaim
+the same run and dataset after restart. Restoring any historical or otherwise
+non-resumable checkpoint creates a new branch run. Branches retain root run,
+immediate parent run, and parent checkpoint provenance without truncating or
+rewriting the source dataset.
+
+Checkpoint restoration fails closed on integrity errors, unsupported
+checkpoint or runtime compatibility versions, incompatible authoritative type
+or ordered-system manifests, and persisted dataset-head mismatches. Frozen
+prepared inputs are restored directly rather than re-resolved from mutable
+libraries.
 
 ## One tick
 
@@ -127,7 +141,11 @@ controller's decision.
 
 System 1 is deterministic survival arbitration with absolute priority.
 Satiety and energy are critical when low; stress is critical when high.
-Threshold and recovery values are scenario-configurable and use hysteresis.
+Hydration may be enabled per scenario and is critical when low. Happiness,
+social connection, and fear remain non-preemptive controller context because
+the runtime does not yet define danger sources or seek-safety behavior.
+Enabled drives, threshold and recovery values, and tie-break order are
+scenario-configurable and use hysteresis.
 
 When critical, System 1:
 

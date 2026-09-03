@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "79ecf096f7a47cd3f1a7a428be1ce9d43a8d071df61c2decb75b4232c85f3116",
+        "content_hash": "f5d784052615529aa38aa2106da032259eea3df17924b9ab43f29877b2ce834a",
         "id": "hospitality.cafe-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 4
+  "schema_version": 5
 }

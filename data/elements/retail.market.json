@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "9759d7ae14e38cc5e346ddb7c3551ce5a6584e0be3c9468b668ba062e0b05782",
+        "content_hash": "d2d02ac22f3d0a2991862e68aa3b996917f6d73448cbd846d6dc5eb25b5e0307",
         "id": "retail.market-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 4
+  "schema_version": 5
 }

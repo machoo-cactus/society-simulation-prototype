@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "fabfec8242dfc4b80f5458d9cc5b5f9823b30b6057e5603739766509d99c5017",
+        "content_hash": "4f34041c11c769db49ec87e020e8b7ae8b591c07808ae04c662ea4796f2588f5",
         "id": "legacy-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 2
+  "schema_version": 5
 }

@@ -638,9 +638,17 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "satiety_delta",
             "energy_delta",
             "stress_delta",
+            "hydration_delta",
+            "social_connection_delta",
+            "happiness_delta",
+            "fear_delta",
             "satiety_target",
             "energy_target",
             "stress_target",
+            "hydration_target",
+            "social_connection_target",
+            "happiness_target",
+            "fear_target",
         ]
     ),
     scenario_models.StationActionDefinition: frozenset(["action", "duration", "effect"]),
@@ -772,12 +780,35 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "transport",
         ]
     ),
-    scenario_models.ActivityRatesDefinition: frozenset(["satiety", "energy", "stress"]),
-    scenario_models.HomeostasisSettingsDefinition: frozenset({"activity_coefficients"}),
+    scenario_models.ActivityRatesDefinition: frozenset(
+        [
+            "satiety",
+            "energy",
+            "stress",
+            "hydration",
+            "social_connection",
+            "happiness",
+            "fear",
+        ]
+    ),
+    scenario_models.HomeostasisSettingsDefinition: frozenset(
+        {
+            "activity_coefficients",
+            "drink_hydration_delta",
+            "read_happiness_delta",
+            "social_connection_delta",
+            "social_happiness_delta",
+            "alarming_fear_delta",
+            "calming_happiness_delta",
+            "calming_fear_delta",
+        }
+    ),
     scenario_models.DriveThresholdDefinition: frozenset(
         ["critical", "recovery", "critical_when_high"]
     ),
-    scenario_models.System1SettingsDefinition: frozenset(["thresholds", "tie_break_order"]),
+    scenario_models.System1SettingsDefinition: frozenset(
+        ["thresholds", "enabled_drives", "tie_break_order"]
+    ),
     scenario_models.MemorySettingsDefinition: frozenset(
         ["semantic_weight", "recency_weight", "importance_weight", "recency_half_life"]
     ),
@@ -957,7 +988,17 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     ),
     scenario_models.PositionDefinition: frozenset(["x", "y"]),
     scenario_models.MovementDefinition: frozenset({"destination"}),
-    scenario_models.HomeostasisComponentDefinition: frozenset(["satiety", "energy", "stress"]),
+    scenario_models.HomeostasisComponentDefinition: frozenset(
+        [
+            "satiety",
+            "energy",
+            "stress",
+            "hydration",
+            "social_connection",
+            "happiness",
+            "fear",
+        ]
+    ),
     scenario_models.SpatialLocationDefinition: frozenset(
         ["scale", "place_id", "local_coordinate", "network_node_id", "edge_id", "edge_progress"]
     ),

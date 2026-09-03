@@ -14,8 +14,9 @@ and versioned SQLite/JSONL research datasets.
 - Fixed-step ECS execution with stable system/entity ordering.
 - Grid worlds and sparse hierarchical cities with room grids, portals,
   transport graphs, vehicles, and deterministic multimodal navigation.
-- Continuous satiety, energy, and stress with non-bypassable System 1
-  preemption and recovery.
+- Continuous satiety, energy, stress, hydration, social connection, happiness,
+  and fear, with non-bypassable System 1 preemption and recovery for explicitly
+  enabled survival drives.
 - Typed character-controller tools, one global cognition barrier, deterministic
   intent commit, scripted/replay clients, and opt-in OpenAI-compatible clients.
 - Stable specialized-first `engage(intent, reference_ids, reason)` fallback;

@@ -114,7 +114,7 @@ Important projection groups:
 Episodic-memory, information-document, and in-world text snapshot persistence
 is separate from the analytical run projections. Text snapshots preserve
 artifact revision history, collections, addresses, groups, and unread state;
-they remain research records rather than resumable runner checkpoints.
+they remain research records rather than checkpoint authority.
 
 Derived feature contracts are independently versioned. They cover consecutive
 state transitions, choice opportunities/non-choices, terminal action/decision/
@@ -240,6 +240,9 @@ be reconciled as interrupted capture.
 Data management supports filtering, cross-page selection, compatibility
 grouping, pooled observation-weighted and per-run macro aggregation, JSON/CSV
 aggregate exports, deletion preview, and atomic permanent deletion.
+Catalog entries expose `mainline` or `branch` lineage plus denormalized root
+run, immediate parent run, and parent checkpoint identifiers. Catalog and UI
+filters can select mainline and branch runs independently.
 
 Private-derived statistics are excluded by default and require an explicit
 operator opt-in, which adds a warning. Raw private payloads are never rendered
@@ -264,9 +267,13 @@ interaction lifecycle rows are rebuildable and idempotent. Not every directly
 captured lifecycle table is rebuildable yet.
 
 `capture_complete` is true only when a run ended `completed` or `stopped` and
-recorded `run_final`. Summaries also report coverage-manifest presence,
-sequence gaps, final tick/time, and capture failure. Sink or projection errors
-are explicit and mark the run failed for research capture.
+recorded `run_final`. A paused exact-head checkpoint may instead leave capture
+`suspended`; same-run restoration reclaims the dataset and continues at the
+next sequence. Historical restoration creates a branch-local dataset at the
+restored state rather than copying or truncating parent records. Summaries also
+report coverage-manifest presence, sequence gaps, final tick/time, and capture
+failure. Sink or projection errors are explicit and mark the run failed for
+research capture.
 
 ## Current limitations
 
@@ -278,4 +285,5 @@ are explicit and mark the run failed for research capture.
   movement, relationships/reputation, and arbitrary object mutation are not
   present in the current records because the runtime does not implement them.
 - Statistical prior fitting and approximate populations are future work.
-- Datasets are not resumable checkpoints.
+- Datasets are not checkpoint authority; continuation is governed by the
+  separate strict checkpoint contract and exact persisted-head validation.

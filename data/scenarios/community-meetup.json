@@ -161,7 +161,11 @@
         },
         "homeostasis": {
           "energy": 84.0,
+          "fear": 0.0,
+          "happiness": 50.0,
+          "hydration": 50.0,
           "satiety": 76.0,
+          "social_connection": 50.0,
           "stress": 14.0
         },
         "information": {
@@ -473,7 +477,11 @@
         },
         "homeostasis": {
           "energy": 84.0,
+          "fear": 0.0,
+          "happiness": 50.0,
+          "hydration": 100.0,
           "satiety": 76.0,
+          "social_connection": 50.0,
           "stress": 14.0
         },
         "information": {
@@ -785,7 +793,11 @@
         },
         "homeostasis": {
           "energy": 84.0,
+          "fear": 0.0,
+          "happiness": 50.0,
+          "hydration": 100.0,
           "satiety": 76.0,
+          "social_connection": 50.0,
           "stress": 14.0
         },
         "information": {
@@ -997,7 +1009,60 @@
     }
   ],
   "homeostasis": {
-    "activity_coefficients": {}
+    "activity_coefficients": {
+      "ENGAGING": {
+        "energy": 0.0,
+        "fear": -0.01,
+        "happiness": 0.01,
+        "hydration": -0.01,
+        "satiety": 0.0,
+        "social_connection": 0.03,
+        "stress": 0.0
+      },
+      "IDLE": {
+        "energy": 0.0,
+        "fear": -0.005,
+        "happiness": -0.005,
+        "hydration": -0.01,
+        "satiety": 0.0,
+        "social_connection": -0.01,
+        "stress": 0.0
+      },
+      "READING": {
+        "energy": 0.0,
+        "fear": -0.01,
+        "happiness": 0.02,
+        "hydration": -0.01,
+        "satiety": 0.0,
+        "social_connection": -0.005,
+        "stress": 0.0
+      },
+      "RELAXING": {
+        "energy": 0.0,
+        "fear": -0.03,
+        "happiness": 0.02,
+        "hydration": -0.005,
+        "satiety": 0.0,
+        "social_connection": 0.0,
+        "stress": 0.0
+      },
+      "WALKING": {
+        "energy": 0.0,
+        "fear": 0.0,
+        "happiness": 0.0,
+        "hydration": -0.03,
+        "satiety": 0.0,
+        "social_connection": 0.0,
+        "stress": 0.0
+      }
+    },
+    "alarming_fear_delta": 8.0,
+    "calming_fear_delta": -4.0,
+    "calming_happiness_delta": 2.0,
+    "drink_hydration_delta": 40.0,
+    "read_happiness_delta": 2.0,
+    "social_connection_delta": 3.0,
+    "social_happiness_delta": 1.0
   },
   "items": [
     {
@@ -1079,15 +1144,28 @@
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 8,
+  "schema_version": 9,
   "seed": 20260908,
   "speed": 1.0,
   "system1": {
-    "thresholds": {},
+    "enabled_drives": [
+      "SATIETY",
+      "ENERGY",
+      "STRESS",
+      "HYDRATION"
+    ],
+    "thresholds": {
+      "HYDRATION": {
+        "critical": 15.0,
+        "critical_when_high": false,
+        "recovery": 30.0
+      }
+    },
     "tie_break_order": [
       "SATIETY",
       "ENERGY",
-      "STRESS"
+      "STRESS",
+      "HYDRATION"
     ]
   },
   "text_content": {
@@ -1365,7 +1443,7 @@
               "y": 500.0
             },
             "element": {
-              "content_hash": "97d9a730c48459cf4655bc42f04d80fe42049293badde9e5017a497238014105",
+              "content_hash": "f3db3ec53f26c5522d4ee10100eed70584a0669778e25fbfe8767aacb0f140c5",
               "id": "residential.apartment",
               "kind": "building"
             },
@@ -1387,7 +1465,7 @@
               "y": 200.0
             },
             "element": {
-              "content_hash": "c0a7c1576beba6dac63ddc64495367e16e311963123bf81e80fc857ed3ff08d6",
+              "content_hash": "707bdbec7e83eef18452062bfa4663eeaf178de65883c16197f6f45108a40770",
               "id": "residential.townhouse",
               "kind": "building"
             },
@@ -1409,7 +1487,7 @@
               "y": 150.0
             },
             "element": {
-              "content_hash": "c0a7c1576beba6dac63ddc64495367e16e311963123bf81e80fc857ed3ff08d6",
+              "content_hash": "707bdbec7e83eef18452062bfa4663eeaf178de65883c16197f6f45108a40770",
               "id": "residential.townhouse",
               "kind": "building"
             },
@@ -1431,7 +1509,7 @@
               "y": 350.0
             },
             "element": {
-              "content_hash": "df1042b923ad9420106e74d9c889f434d2109aa622fc872502de8acb72940bd1",
+              "content_hash": "c93842934121e7a518a1930e346f42daf2e77fb61a95a1bd81cb247cd8d67df6",
               "id": "hospitality.cafe",
               "kind": "building"
             },
@@ -1453,7 +1531,7 @@
               "y": 420.0
             },
             "element": {
-              "content_hash": "cb197902021db9d86414318572181cdf04585d02940d707213ac4b14f249ad3c",
+              "content_hash": "0164128b40b060c87bc73fc881f6f69b8167f22f6ef727be14a17c662b87375a",
               "id": "retail.market",
               "kind": "building"
             },
@@ -1475,7 +1553,7 @@
               "y": 180.0
             },
             "element": {
-              "content_hash": "ce89b2022628440636d565273faa4604038dc3ec2d0f19b53bc46238c91fddb6",
+              "content_hash": "98c609ac65b04eda3c011f04457b4001c4733938e51016b06017e2ee9fabfdb3",
               "id": "civic.library",
               "kind": "building"
             },
@@ -1497,7 +1575,7 @@
               "y": 650.0
             },
             "element": {
-              "content_hash": "131e8b9c72704c75a57f67ce31e69b6d885305f09430c26113f7d0e9ecc2d2d4",
+              "content_hash": "e4f1b41fedf2b89a69a8d36e1d1a4f8cc961db81860160fd49d9af1b2137e85c",
               "id": "mobility.station",
               "kind": "building"
             },

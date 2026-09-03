@@ -72,7 +72,7 @@ def scenario_ui(
     scenarios.mkdir()
     for name in ("weather-and-hours.json", "baseline.json", "grid-navigation.json"):
         payload = json.loads((CATALOG_SCENARIOS / name).read_text(encoding="utf-8"))
-        payload["schema_version"] = 8
+        payload["schema_version"] = 9
         (scenarios / name).write_text(
             json.dumps(payload),
             encoding="utf-8",
@@ -1296,11 +1296,11 @@ def test_import_search_duplicate_rename_download_and_delete(
         files={"scenario": ("legacy-scenario.json", legacy_path.read_bytes())},
         follow_redirects=True,
     )
-    assert "saved scenarios require schema version 8" in legacy.text
+    assert "saved scenarios require schema version 9" in legacy.text
     imported_path.write_text(
         json.dumps(
             {
-                "schema_version": 8,
+                "schema_version": 9,
                 "name": "Imported scenario",
                 "entities": [],
             }
@@ -1385,7 +1385,7 @@ def test_simulation_page_stages_only_the_selected_saved_scenario(
         operator_session.scenario_id
     )
     assert prepared.scenario_source is not None
-    assert prepared.scenario_source["schema_version"] == 8
+    assert prepared.scenario_source["schema_version"] == 9
 
 
 def test_saved_reference_scenario_preserves_resolved_provenance(

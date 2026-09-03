@@ -42,7 +42,7 @@ def test_element_v3_physical_schema_is_strict() -> None:
     with pytest.raises(ValidationError, match="require physical data"):
         ObjectElementDefinition.model_validate(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "id": "chair",
                 "name": "Chair",
                 "kind": "object",
@@ -51,7 +51,7 @@ def test_element_v3_physical_schema_is_strict() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         ObjectElementDefinition.model_validate(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "id": "chair",
                 "name": "Chair",
                 "kind": "object",
@@ -64,7 +64,7 @@ def test_element_v3_physical_schema_is_strict() -> None:
     with pytest.raises(ValidationError, match="initial_open requires"):
         ObjectElementDefinition.model_validate(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "id": "cabinet",
                 "name": "Cabinet",
                 "kind": "object",
@@ -83,7 +83,7 @@ def test_v5_scenario_resolves_and_materializes_physical_object(
     cabinet = library.create(
         ObjectElementDefinition.model_validate(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "id": "reading-cabinet",
                 "name": "Reading Cabinet",
                 "kind": "object",
@@ -112,7 +112,7 @@ def test_v5_scenario_resolves_and_materializes_physical_object(
     room = library.create(
         RoomElementDefinition.model_validate(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "id": "reading-room",
                 "name": "Reading Room",
                 "kind": "room",
@@ -141,7 +141,7 @@ def test_v5_scenario_resolves_and_materializes_physical_object(
     building = library.create(
         BuildingElementDefinition.model_validate(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "id": "library",
                 "name": "Library",
                 "kind": "building",
@@ -168,7 +168,7 @@ def test_v5_scenario_resolves_and_materializes_physical_object(
     )
     source = ScenarioSourceDefinition.model_validate(
         {
-            "schema_version": 8,
+            "schema_version": 9,
             "name": "Physical library",
             "world": {
                 "type": "city",
@@ -218,7 +218,7 @@ def test_v5_scenario_resolves_and_materializes_physical_object(
     )
 
     resolved = resolve_scenario(source, library)
-    assert resolved.scenario.schema_version == 8
+    assert resolved.scenario.schema_version == 9
     assert resolved.scenario.world is not None
     physical_object = resolved.scenario.world.objects[0]
     assert physical_object.id == "main-library.reading.cabinet"

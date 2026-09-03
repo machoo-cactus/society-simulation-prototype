@@ -101,6 +101,7 @@ class EventBus:
         self._wall_clock = wall_clock or (lambda: datetime.now(UTC))
         self._handlers: dict[str | None, list[EventHandler]] = defaultdict(list)
         self._events: list[DomainEvent] = []
+        self._next_event_number = 1
 
     @property
     def events(self) -> tuple[DomainEvent, ...]:
@@ -124,7 +125,7 @@ class EventBus:
             raise ValueError("event_type must not be empty")
         event = DomainEvent(
             run_id=self.run_id,
-            event_id=f"{self.run_id}:{len(self._events) + 1:08d}",
+            event_id=f"{self.run_id}:{self._next_event_number:08d}",
             simulation_tick=simulation_tick,
             simulation_time=simulation_time,
             wall_time=self._wall_clock(),
@@ -134,7 +135,28 @@ class EventBus:
             causation_id=causation_id,
             correlation_id=correlation_id,
         )
+        self._next_event_number += 1
         self._events.append(event)
         for handler in (*self._handlers[event_type], *self._handlers[None]):
             handler(event)
         return event
+
+    def restore_event_count(self, event_count: int) -> None:
+        if event_count < 0:
+            raise ValueError("event count must not be negative")
+        if any(self._handlers.values()):
+            raise RuntimeError(
+                "event count must be restored before subscribers are attached"
+            )
+        self._events = []
+        self._next_event_number = event_count + 1
+
+    def restore_events(self, events: tuple[DomainEvent, ...]) -> None:
+        if any(self._handlers.values()):
+            raise RuntimeError(
+                "events must be restored before subscribers are attached"
+            )
+        if any(event.run_id != self.run_id for event in events):
+            raise ValueError("restored events must belong to this run")
+        self._events = list(events)
+        self._next_event_number = len(events) + 1

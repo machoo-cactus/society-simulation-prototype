@@ -1,18 +1,18 @@
 # Scenario and Element Authoring
 
-**Owner:** Portable scenario source schema version 8, reusable element schema,
+**Owner:** Portable scenario source schema version 9, reusable element schema,
 and structured authoring/staging workflow.
 
 The writable, version-controlled libraries are `data\scenarios\` and
 `data\elements\`.
 
-## Scenario source version 8
+## Scenario source version 9
 
 Every accepted source has this strict root:
 
 ```json
 {
-  "schema_version": 8,
+  "schema_version": 9,
   "name": "example",
   "seed": 42,
   "dt": 1.0,
@@ -55,6 +55,14 @@ homeostasis, activity, character slot, plan, structured goals, information,
 controller, senses, memory, possessions, and conversation. Components are
 strict typed records.
 
+Homeostasis tracks satiety, energy, stress, hydration, social connection,
+happiness, and fear as independent `0..100` values. Activity coefficients
+provide deterministic drift. Scenario-configured outcome effects may change
+hydration after drinking, happiness after reading or calming activity, social
+connection after committed engagement, and fear after alarming or calming
+engagement. Only enabled System 1 drives preempt; hydration requires a reachable
+`DRINK` affordance when enabled.
+
 Plans use only the action names in [Actions, tools, and events](ACTIONS_AND_EVENTS.md).
 `NAVIGATE` requires a target and is the only navigation action. Scenario goals
 use stable IDs and one or more closed criteria:
@@ -75,8 +83,8 @@ Character slots refer to external schema-version-2 profiles. See
 
 ## Reusable elements
 
-Element files use `schema_version: 4`; scenario sources that reference them use
-version 8. Each element is one strict, hash-protected resource:
+Element files use `schema_version: 5`; scenario sources that reference them use
+version 9. Each element is one strict, hash-protected resource:
 
 | `kind` | Purpose |
 | --- | --- |
@@ -85,8 +93,8 @@ version 8. Each element is one strict, hash-protected resource:
 | `object` | Affordance or transaction point |
 | `npc_role` | Run-scoped service-character briefing, senses, and restricted tools |
 
-Version-4 objects require an explicit physical footprint, obstruction, and
-composable capability record. Version-4 rooms use the fixed metric of 9
+Version-5 objects require an explicit physical footprint, obstruction, and
+composable capability record. Version-5 rooms use the fixed metric of 9
 microcells per legacy cell. Source `width`, `height`, blocked cells, zones,
 ordinary object `position`, portal coordinates, entrance coordinates, and
 staff positions remain coarse legacy-cell authoring fields. Materialization
@@ -181,7 +189,7 @@ cross-reference failures, duplicate keys, malformed JSON, and invalid IDs are
 reported explicitly.
 
 The structured forms are generated from reviewed schema descriptors for every
-scenario-version-8 and element-version-4 field, including room metric,
+scenario-version-9 and element-version-5 field, including room metric,
 footprints, obstruction, capabilities/slots, initial state, physical anchor,
 orientation, relation/slot, and entrance/portal door links. Submitted values
 remain in the server-side draft when strict validation fails, so malformed or

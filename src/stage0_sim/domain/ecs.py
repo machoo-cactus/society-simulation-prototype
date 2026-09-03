@@ -115,6 +115,15 @@ class Registry:
             for resource_type in sorted(self._resources, key=_type_name)
         )
 
+    @property
+    def next_entity_number(self) -> int:
+        return self._next_entity_number
+
+    def restore_next_entity_number(self, value: int) -> None:
+        if value < 1:
+            raise ValueError("next entity number must be positive")
+        self._next_entity_number = value
+
     def _require_entity(self, entity_id: EntityId) -> None:
         if entity_id not in self._entities:
             raise KeyError(f"unknown entity: {entity_id}")

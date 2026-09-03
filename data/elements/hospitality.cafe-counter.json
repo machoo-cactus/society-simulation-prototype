@@ -39,7 +39,7 @@
   "kind": "object",
   "name": "Cafe Service Counter",
   "npc_role": {
-    "content_hash": "680bbd051ca05224fd5a6f0578db24c456b8a9e11c226011ec4ef451cab5ec40",
+    "content_hash": "e3238652cc5cc5e1168293dded6876319c009cefef5ab373852cb3a7cbd228e4",
     "id": "hospitality.barista",
     "kind": "npc_role"
   },
@@ -421,6 +421,6 @@
     "owner_id": null
   },
   "request_timeout": 90.0,
-  "schema_version": 4,
+  "schema_version": 5,
   "supported_actions": null
 }

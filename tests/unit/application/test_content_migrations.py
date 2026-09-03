@@ -27,30 +27,35 @@ def _read(path: Path) -> dict[str, Any]:
 def test_registry_has_one_deterministic_path_to_every_current_version() -> None:
     assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.CHARACTER, 1) == (1, 2)
     assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.CHARACTER, 2) == (2,)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 1) == (1, 2, 3, 4)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 2) == (2, 3, 4)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 3) == (3, 4)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 4) == (4,)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 1) == (1, 2, 3, 4, 5)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 2) == (2, 3, 4, 5)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 3) == (3, 4, 5)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 4) == (4, 5)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 5) == (5,)
     assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 4) == (
         4,
         5,
         6,
         7,
         8,
+        9,
     )
     assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 5) == (
         5,
         6,
         7,
         8,
+        9,
     )
     assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 6) == (
         6,
         7,
         8,
+        9,
     )
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 7) == (7, 8)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 8) == (8,)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 7) == (7, 8, 9)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 8) == (8, 9)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 9) == (9,)
     CONTENT_MIGRATION_REGISTRY.validate_integrity()
 
 
@@ -210,7 +215,7 @@ def test_scenario_v7_to_v8_adds_text_tools_only_to_previous_defaults() -> None:
 
     assert result.succeeded, result.errors
     assert result.canonical_json is not None
-    assert result.canonical_json["schema_version"] == 8
+    assert result.canonical_json["schema_version"] == 9
     assert result.canonical_json["text_content"] == {
         "artifacts": [],
         "collections": [],
@@ -224,6 +229,43 @@ def test_scenario_v7_to_v8_adds_text_tools_only_to_previous_defaults() -> None:
     assert result.canonical_json["entities"][0]["components"]["controller"][
         "tool_allowlist"
     ][-2:] == ["read_text", "write_text"]
+
+
+def test_scenario_v8_to_v9_adds_neutral_homeostasis_factors() -> None:
+    result = CONTENT_MIGRATION_REGISTRY.migrate(
+        ResourceKind.SCENARIO,
+        "homeostasis-v9",
+        {
+            "schema_version": 8,
+            "name": "Homeostasis migration",
+            "entities": [
+                {
+                    "id": "actor",
+                    "components": {
+                        "homeostasis": {
+                            "satiety": 80,
+                            "energy": 70,
+                            "stress": 20,
+                        }
+                    },
+                }
+            ],
+        },
+    )
+
+    assert result.succeeded, result.errors
+    assert result.canonical_json is not None
+    assert result.canonical_json["schema_version"] == 9
+    state = result.canonical_json["entities"][0]["components"]["homeostasis"]
+    assert state["hydration"] == 100
+    assert state["social_connection"] == 50
+    assert state["happiness"] == 50
+    assert state["fear"] == 0
+    assert result.canonical_json["system1"]["enabled_drives"] == [
+        "SATIETY",
+        "ENERGY",
+        "STRESS",
+    ]
 
 
 def test_current_version_check_is_a_canonical_noop() -> None:

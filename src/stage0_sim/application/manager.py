@@ -14,6 +14,13 @@ from stage0_sim.application.characters import (
     PreparedScenario,
     prepare_scenario,
 )
+from stage0_sim.application.checkpoints import (
+    CheckpointRestoreResult,
+    CheckpointSummary,
+    checkpoint_created_at,
+    create_checkpoint_state,
+    restore_checkpoint_state,
+)
 from stage0_sim.application.collection import RunDataCollector
 from stage0_sim.application.data_management import (
     AggregateDatasetSummary,
@@ -58,6 +65,7 @@ class ManagedRun:
     runner: SimulationRunner
     broker: TelemetryBroker
     collector: RunDataCollector
+    prepared: PreparedScenario
     realtime_task: asyncio.Task[None] | None = None
     telemetry_task: asyncio.Task[None] | None = None
 
@@ -265,6 +273,7 @@ class SimulationManager:
             runner=runner,
             broker=broker,
             collector=collector,
+            prepared=prepared,
         )
         self._runs[run_id] = managed
         runner.start()
@@ -286,6 +295,156 @@ class SimulationManager:
             return self._runs[run_id]
         except KeyError as error:
             raise SimulationNotFoundError(f"unknown run: {run_id}") from error
+
+    def list_checkpoints(
+        self,
+        run_id: str | None = None,
+    ) -> tuple[CheckpointSummary, ...]:
+        try:
+            checkpoints = self.dataset_store.list_checkpoints(run_id)
+            return tuple(
+                checkpoint.model_copy(
+                    update={
+                        "restore_mode": (
+                            "continue"
+                            if self.dataset_store.can_resume_checkpoint(
+                                checkpoint.checkpoint_id
+                            )
+                            else "branch"
+                        )
+                    }
+                )
+                for checkpoint in checkpoints
+            )
+        except KeyError as error:
+            raise SimulationNotFoundError(str(error)) from error
+
+    def save_checkpoint(
+        self,
+        run_id: str,
+        *,
+        label: str | None = None,
+    ) -> CheckpointSummary:
+        managed = self.get_run(run_id)
+        managed.runner.require_checkpoint_boundary()
+        normalized_label = label.strip() if label is not None else None
+        if normalized_label == "":
+            normalized_label = None
+        if normalized_label is not None and len(normalized_label) > 120:
+            raise ValueError("checkpoint label must not exceed 120 characters")
+        self.dataset_store.flush()
+        collector_state = managed.collector.checkpoint_state()
+        state = create_checkpoint_state(
+            managed.runner,
+            managed.prepared,
+            collector_state,
+        )
+        checkpoint_id = f"checkpoint-{uuid4()}"
+        return self.dataset_store.save_checkpoint(
+            checkpoint_id=checkpoint_id,
+            run_id=run_id,
+            label=normalized_label,
+            simulation_tick=managed.runner.clock.tick,
+            simulation_time=managed.runner.clock.simulation_time,
+            speed=managed.runner.speed,
+            event_count=len(managed.runner.events.events),
+            dataset_sequence=managed.collector._sequence,
+            created_at=checkpoint_created_at(),
+            state=state,
+        )
+
+    async def restore_checkpoint(
+        self,
+        checkpoint_id: str,
+    ) -> CheckpointRestoreResult:
+        try:
+            summary, state = self.dataset_store.load_checkpoint(
+                checkpoint_id
+            )
+        except KeyError as error:
+            raise SimulationNotFoundError(str(error)) from error
+        continue_identity = self.dataset_store.can_resume_checkpoint(
+            checkpoint_id
+        )
+        if continue_identity and summary.run_id in self._runs:
+            raise SimulationConflictError(
+                "checkpoint source run is already loaded in this process"
+            )
+        prepared_payload = state.prepared_scenario
+        prepared = PreparedScenario.from_checkpoint_payload(prepared_payload)
+        source_run = self.dataset_store.get_persisted_runs(
+            (summary.run_id,)
+        )[0]
+        run_id = summary.run_id if continue_identity else f"run-{uuid4()}"
+        requested_npc_mode = state.runner.get("npc_control_mode")
+        runner = create_runner(
+            prepared.scenario,
+            resolved_characters=prepared.runtime_characters(),
+            resolved_situations=prepared.runtime_situations(),
+            run_id=run_id,
+            speed=summary.speed,
+            model_client=self.model_client,
+            model_max_output_tokens=self.model_max_output_tokens,
+            model_max_concurrency=self.model_max_concurrency,
+            npc_control_mode=(
+                str(requested_npc_mode)
+                if requested_npc_mode is not None
+                else None
+            ),
+        )
+        restore_checkpoint_state(
+            runner,
+            state,
+            continue_identity=continue_identity,
+        )
+        if continue_identity:
+            self.dataset_store.reclaim_suspended_run(run_id)
+        dataset_scenario = prepared.dataset_payload()
+        dataset_scenario["runtime_configuration"] = {
+            "npc_control_mode": runner.configuration.npc_control_mode.value,
+            "effective_npc_control_mode": (
+                runner.configuration.effective_npc_control_mode.value
+            ),
+        }
+        collector = RunDataCollector(
+            store=self.dataset_store,
+            runner=runner,
+            scenario=dataset_scenario,
+            private_provenance=prepared.private_research_provenance(),
+            resume_state=state.collector,
+            continue_dataset=continue_identity,
+            lineage_kind="mainline" if continue_identity else "branch",
+            root_run_id=source_run.root_run_id,
+            parent_run_id=None if continue_identity else summary.run_id,
+            parent_checkpoint_id=(
+                None if continue_identity else checkpoint_id
+            ),
+        )
+        broker = TelemetryBroker(runner)
+        managed = ManagedRun(
+            runner=runner,
+            broker=broker,
+            collector=collector,
+            prepared=prepared,
+        )
+        self._runs[run_id] = managed
+        runner.announce_restore(
+            checkpoint_id=checkpoint_id,
+            source_run_id=summary.run_id,
+            branched=not continue_identity,
+        )
+        broker.publish_status()
+        broker.publish_snapshot()
+        managed.telemetry_task = asyncio.create_task(
+            self._telemetry_loop(managed),
+            name=f"{run_id}-telemetry",
+        )
+        return CheckpointRestoreResult(
+            checkpoint_id=checkpoint_id,
+            source_run_id=summary.run_id,
+            run_id=run_id,
+            branched=not continue_identity,
+        )
 
     def pause(self, run_id: str) -> None:
         managed = self.get_run(run_id)
@@ -382,6 +541,28 @@ class SimulationManager:
         failures: list[BaseException] = []
         for managed in tuple(self._runs.values()):
             try:
+                if (
+                    managed.runner.status is RunnerStatus.PAUSED
+                    and managed.runner.cognition_phase is CognitionPhase.IDLE
+                    and not managed.runner.advancing
+                ):
+                    head = next(
+                        (
+                            checkpoint
+                            for checkpoint in self.dataset_store.list_checkpoints(
+                                managed.runner.events.run_id
+                            )
+                            if checkpoint.is_head
+                        ),
+                        None,
+                    )
+                    if head is not None:
+                        self.dataset_store.suspend_run(
+                            managed.runner.events.run_id,
+                            head.checkpoint_id,
+                        )
+                        await self._cancel_tasks(managed)
+                        continue
                 task = managed.realtime_task
                 if (
                     task is not None

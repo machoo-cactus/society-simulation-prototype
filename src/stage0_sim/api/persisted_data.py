@@ -25,6 +25,7 @@ class PersistedRunCatalogParameters(BaseModel):
     scenario_name: str | None = None
     dataset_schema_version: str | None = None
     capture_complete: bool | None = None
+    lineage_kind: list[str] = Field(default_factory=list)
     started_at_or_after: datetime | None = None
     started_before: datetime | None = None
     completed_at_or_after: datetime | None = None
@@ -40,6 +41,7 @@ class PersistedRunCatalogParameters(BaseModel):
             scenario_name=self.scenario_name,
             dataset_schema_version=self.dataset_schema_version,
             capture_complete=self.capture_complete,
+            lineage_kinds=tuple(self.lineage_kind),
             started_at_or_after=self.started_at_or_after,
             started_before=self.started_before,
             completed_at_or_after=self.completed_at_or_after,
@@ -58,6 +60,7 @@ class RunSelectionFilters(BaseModel):
     scenario_name: str | None = None
     dataset_schema_version: str | None = None
     capture_complete: bool | None = None
+    lineage_kinds: list[str] = Field(default_factory=list)
     started_at_or_after: datetime | None = None
     started_before: datetime | None = None
     completed_at_or_after: datetime | None = None
@@ -71,6 +74,7 @@ class RunSelectionFilters(BaseModel):
             scenario_name=self.scenario_name,
             dataset_schema_version=self.dataset_schema_version,
             capture_complete=self.capture_complete,
+            lineage_kinds=tuple(self.lineage_kinds),
             started_at_or_after=self.started_at_or_after,
             started_before=self.started_before,
             completed_at_or_after=self.completed_at_or_after,
@@ -301,4 +305,3 @@ async def delete_persisted_runs(
     if callable(cleanup):
         cleanup(result.run_ids)
     return result.to_dict()
-

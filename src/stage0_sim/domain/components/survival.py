@@ -10,6 +10,7 @@ class DriveType(StrEnum):
     SATIETY = "SATIETY"
     ENERGY = "ENERGY"
     STRESS = "STRESS"
+    HYDRATION = "HYDRATION"
 
 
 class System1State(StrEnum):
@@ -64,6 +65,7 @@ def default_drive_thresholds() -> dict[DriveType, DriveThreshold]:
             recovery=70.0,
             critical_when_high=True,
         ),
+        DriveType.HYDRATION: DriveThreshold(critical=15.0, recovery=30.0),
     }
 
 
@@ -75,7 +77,13 @@ class System1Configuration:
             DriveType.SATIETY: ActionType.EAT,
             DriveType.ENERGY: ActionType.SLEEP,
             DriveType.STRESS: ActionType.RELAX,
+            DriveType.HYDRATION: ActionType.DRINK,
         }
+    )
+    enabled_drives: tuple[DriveType, ...] = (
+        DriveType.SATIETY,
+        DriveType.ENERGY,
+        DriveType.STRESS,
     )
     tie_break_order: tuple[DriveType, ...] = (
         DriveType.SATIETY,
@@ -84,13 +92,15 @@ class System1Configuration:
     )
 
     def __post_init__(self) -> None:
-        drives = set(DriveType)
-        if set(self.thresholds) != drives:
-            raise ValueError("System 1 thresholds must cover every drive")
-        if set(self.corrective_actions) != drives:
-            raise ValueError("System 1 corrective actions must cover every drive")
-        if set(self.tie_break_order) != drives or len(self.tie_break_order) != len(drives):
-            raise ValueError("System 1 tie-break order must contain every drive once")
+        enabled = set(self.enabled_drives)
+        if not enabled or len(enabled) != len(self.enabled_drives):
+            raise ValueError("System 1 enabled drives must be unique and non-empty")
+        if not enabled <= set(self.thresholds):
+            raise ValueError("System 1 thresholds must cover every enabled drive")
+        if not enabled <= set(self.corrective_actions):
+            raise ValueError("System 1 corrective actions must cover every enabled drive")
+        if set(self.tie_break_order) != enabled or len(self.tie_break_order) != len(enabled):
+            raise ValueError("System 1 tie-break order must contain every enabled drive once")
 
 
 @dataclass(slots=True)

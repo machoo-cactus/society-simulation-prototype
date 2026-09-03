@@ -81,7 +81,7 @@ class ElementReference(BaseModel):
 class ElementDefinitionBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[4] = ELEMENT_SCHEMA_VERSION
+    schema_version: Literal[5] = ELEMENT_SCHEMA_VERSION
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     description: str = ""
@@ -595,7 +595,7 @@ class CityWorldSourceDefinition(BaseModel):
 class ScenarioSourceDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[8] = SCENARIO_SCHEMA_VERSION
+    schema_version: Literal[9] = SCENARIO_SCHEMA_VERSION
     name: str = Field(min_length=1)
     seed: int = 0
     dt: float = Field(default=1.0, gt=0)

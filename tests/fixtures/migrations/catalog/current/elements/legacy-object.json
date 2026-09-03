@@ -53,6 +53,6 @@
     "owner_id": null
   },
   "request_timeout": 60.0,
-  "schema_version": 4,
+  "schema_version": 5,
   "supported_actions": null
 }

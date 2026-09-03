@@ -46,6 +46,13 @@
           <option value="false" {% if filter_values.capture_complete == "false" %}selected{% endif %}>Incomplete</option>
         </select>
       </label>
+      <label>Run lineage
+        <select name="lineage">
+          <option value="">Mainline and branches</option>
+          <option value="mainline" {% if filter_values.lineage == "mainline" %}selected{% endif %}>Mainline only</option>
+          <option value="branch" {% if filter_values.lineage == "branch" %}selected{% endif %}>Branches only</option>
+        </select>
+      </label>
       <label>Started on or after
         <input type="date" name="started_after" value="{{ filter_values.started_after }}">
       </label>
@@ -73,7 +80,7 @@
 
     <form method="post" action="/ui/data/selection" class="data-catalog-form" data-ui-targets="#notice-region,#data-catalog-region,#data-selection-region,#aggregate-data-region,#deletion-region">
       <input type="hidden" name="return_to" value="{{ return_to }}">
-      {% for name in ("search", "persisted_status", "status", "scenario", "schema", "capture_complete", "started_after", "started_before", "completed_after", "completed_before", "limit") %}
+      {% for name in ("search", "persisted_status", "status", "scenario", "schema", "capture_complete", "lineage", "started_after", "started_before", "completed_after", "completed_before", "limit") %}
         <input type="hidden" name="{{ name }}" value="{{ filter_values[name] }}">
       {% endfor %}
       <div class="data-table-scroll">
@@ -98,7 +105,13 @@
                   <input id="catalog-run-{{ loop.index }}" type="checkbox" name="run_id" value="{{ run.run_id }}" {% if run.run_id in selected_run_ids %}checked{% endif %}>
                   <label for="catalog-run-{{ loop.index }}">Select {{ run.run_id }}</label>
                 </td>
-                <td><strong>{{ run.scenario_name }}</strong><br><code>{{ run.run_id }}</code></td>
+                <td>
+                  <strong>{{ run.scenario_name }}</strong><br><code>{{ run.run_id }}</code>
+                  <br>{{ run.lineage_kind }}
+                  {% if run.parent_checkpoint_id %}
+                    from <code>{{ run.parent_checkpoint_id }}</code>
+                  {% endif %}
+                </td>
                 <td>
                   <span class="status-chip status-chip--{{ run.effective_status }}">{{ run.effective_status }}</span>
                   <small>
@@ -185,7 +198,7 @@
     </header>
     {% if aggregate %}
       <form class="private-derived-control" method="get" action="/ui/data/" data-ui-targets="#aggregate-data-region,#data-selection-region,#deletion-region">
-        {% for name in ("search", "persisted_status", "status", "scenario", "schema", "capture_complete", "started_after", "started_before", "completed_after", "completed_before", "cursor", "limit") %}
+        {% for name in ("search", "persisted_status", "status", "scenario", "schema", "capture_complete", "lineage", "started_after", "started_before", "completed_after", "completed_before", "cursor", "limit") %}
           <input type="hidden" name="{{ name }}" value="{{ filter_values[name] }}">
         {% endfor %}
         <input type="hidden" name="privacy_setting" value="1">

@@ -38,6 +38,7 @@ class PersistedRunFilter:
     scenario_name: str | None = None
     dataset_schema_version: str | None = None
     capture_complete: bool | None = None
+    lineage_kinds: tuple[str, ...] = ()
     started_at_or_after: datetime | None = None
     started_before: datetime | None = None
     completed_at_or_after: datetime | None = None
@@ -60,6 +61,11 @@ class PersistedRunFilter:
             and self.completed_at_or_after >= self.completed_before
         ):
             raise ValueError("completed_at_or_after must precede completed_before")
+        if any(
+            lineage_kind not in {"mainline", "branch"}
+            for lineage_kind in self.lineage_kinds
+        ):
+            raise ValueError("lineage kinds must be mainline or branch")
 
     def without_page(self) -> PersistedRunFilter:
         return replace(self, cursor=None, limit=500)
@@ -72,6 +78,7 @@ class PersistedRunFilter:
             "scenario_name": self.scenario_name,
             "dataset_schema_version": self.dataset_schema_version,
             "capture_complete": self.capture_complete,
+            "lineage_kinds": list(self.lineage_kinds),
             "started_at_or_after": _datetime_text(self.started_at_or_after),
             "started_before": _datetime_text(self.started_before),
             "completed_at_or_after": _datetime_text(self.completed_at_or_after),
@@ -105,6 +112,10 @@ class PersistedRunSummary:
     cognition_execution_mode: str | None
     requested_npc_control_mode: str | None
     effective_npc_control_mode: str | None
+    lineage_kind: str
+    root_run_id: str
+    parent_run_id: str | None
+    parent_checkpoint_id: str | None
     feature_schema_versions: Mapping[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, JsonValue]:
@@ -135,6 +146,10 @@ class PersistedRunSummary:
             "cognition_execution_mode": self.cognition_execution_mode,
             "requested_npc_control_mode": self.requested_npc_control_mode,
             "effective_npc_control_mode": self.effective_npc_control_mode,
+            "lineage_kind": self.lineage_kind,
+            "root_run_id": self.root_run_id,
+            "parent_run_id": self.parent_run_id,
+            "parent_checkpoint_id": self.parent_checkpoint_id,
             "feature_schema_versions": dict(
                 sorted(self.feature_schema_versions.items())
             ),

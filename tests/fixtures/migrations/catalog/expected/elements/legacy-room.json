@@ -8,7 +8,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "2fedecee6380b82382f45e44151be275d1e4a84a71d60853bb668bfb47b655bd",
+        "content_hash": "4aa43f0a48be97b79152593e9ada52b7c6cd654b370edebca7010dcf6ed2bd75",
         "id": "legacy-object",
         "kind": "object"
       },
@@ -34,7 +34,7 @@
     }
   ],
   "room_type": "TEST",
-  "schema_version": 2,
+  "schema_version": 5,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

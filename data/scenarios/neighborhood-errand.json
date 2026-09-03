@@ -160,7 +160,11 @@
         },
         "homeostasis": {
           "energy": 82.0,
+          "fear": 0.0,
+          "happiness": 50.0,
+          "hydration": 100.0,
           "satiety": 68.0,
+          "social_connection": 50.0,
           "stress": 18.0
         },
         "information": {
@@ -317,7 +321,14 @@
     }
   ],
   "homeostasis": {
-    "activity_coefficients": {}
+    "activity_coefficients": {},
+    "alarming_fear_delta": 0.0,
+    "calming_fear_delta": 0.0,
+    "calming_happiness_delta": 0.0,
+    "drink_hydration_delta": 0.0,
+    "read_happiness_delta": 0.0,
+    "social_connection_delta": 0.0,
+    "social_happiness_delta": 0.0
   },
   "items": [
     {
@@ -399,10 +410,15 @@
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 8,
+  "schema_version": 9,
   "seed": 20260907,
   "speed": 1.0,
   "system1": {
+    "enabled_drives": [
+      "SATIETY",
+      "ENERGY",
+      "STRESS"
+    ],
     "thresholds": {},
     "tie_break_order": [
       "SATIETY",
@@ -442,7 +458,7 @@
               "y": 100.0
             },
             "element": {
-              "content_hash": "97d9a730c48459cf4655bc42f04d80fe42049293badde9e5017a497238014105",
+              "content_hash": "f3db3ec53f26c5522d4ee10100eed70584a0669778e25fbfe8767aacb0f140c5",
               "id": "residential.apartment",
               "kind": "building"
             },
@@ -464,7 +480,7 @@
               "y": 100.0
             },
             "element": {
-              "content_hash": "cb197902021db9d86414318572181cdf04585d02940d707213ac4b14f249ad3c",
+              "content_hash": "0164128b40b060c87bc73fc881f6f69b8167f22f6ef727be14a17c662b87375a",
               "id": "retail.market",
               "kind": "building"
             },
@@ -509,7 +525,7 @@
               "y": 100.0
             },
             "element": {
-              "content_hash": "df1042b923ad9420106e74d9c889f434d2109aa622fc872502de8acb72940bd1",
+              "content_hash": "c93842934121e7a518a1930e346f42daf2e77fb61a95a1bd81cb247cd8d67df6",
               "id": "hospitality.cafe",
               "kind": "building"
             },

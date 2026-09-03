@@ -523,6 +523,28 @@ class SpatialIndex:
         self._revision = 0
         self._topology_revision = 0
 
+    @classmethod
+    def from_checkpoint(
+        cls,
+        entries: tuple[SpatialIndexEntry, ...],
+        *,
+        revision: int,
+        topology_revision: int,
+    ) -> SpatialIndex:
+        if revision < 0 or topology_revision < 0:
+            raise ValueError("spatial revisions must not be negative")
+        index = cls()
+        for entry in sorted(entries, key=lambda item: item.entity_id):
+            if entry.entity_id in index._entries:
+                raise ValueError(
+                    f"duplicate checkpoint spatial entity: {entry.entity_id}"
+                )
+            index._entries[entry.entity_id] = entry
+            index._add_topology(entry)
+        index._revision = revision
+        index._topology_revision = topology_revision
+        return index
+
     @property
     def revision(self) -> int:
         return self._revision

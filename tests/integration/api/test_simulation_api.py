@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from stage0_sim.adapters.persistence.sqlite_schema import DATABASE_SCHEMA_VERSION
 from stage0_sim.api.app import app
 from stage0_sim.application.data_management import selection_fingerprint
 from stage0_sim.application.elements import (
@@ -107,7 +108,7 @@ def _physical_api_source() -> tuple[
 ]:
     display = ObjectElementDefinition.model_validate(
         {
-            "schema_version": 4,
+            "schema_version": 5,
             "id": "physical-api-display",
             "name": "Display Stand",
             "kind": "object",
@@ -118,7 +119,7 @@ def _physical_api_source() -> tuple[
     )
     cabinet = ObjectElementDefinition.model_validate(
         {
-            "schema_version": 4,
+            "schema_version": 5,
             "id": "physical-api-cabinet",
             "name": "Opaque Cabinet",
             "kind": "object",
@@ -163,7 +164,7 @@ def _physical_api_source() -> tuple[
     )
     secret = ObjectElementDefinition.model_validate(
         {
-            "schema_version": 4,
+            "schema_version": 5,
             "id": "physical-api-secret",
             "name": "Private Letter",
             "kind": "object",
@@ -184,7 +185,7 @@ def _physical_api_source() -> tuple[
     )
     room = RoomElementDefinition.model_validate(
         {
-            "schema_version": 4,
+            "schema_version": 5,
             "id": "physical-api-room",
             "name": "Physical API Room",
             "kind": "room",
@@ -230,7 +231,7 @@ def _physical_api_source() -> tuple[
     )
     building = BuildingElementDefinition.model_validate(
         {
-            "schema_version": 4,
+            "schema_version": 5,
             "id": "physical-api-building",
             "name": "Physical API Building",
             "kind": "building",
@@ -251,7 +252,7 @@ def _physical_api_source() -> tuple[
     )
     source = ScenarioSourceDefinition.model_validate(
         {
-            "schema_version": 8,
+            "schema_version": 9,
             "name": "Physical API snapshot",
             "character_situation_synthesis": {"enabled": False},
             "world": {
@@ -360,7 +361,7 @@ def test_simulation_api_rejects_schema_v2_scenario_input() -> None:
         )
 
     assert response.status_code == 422
-    assert "Input should be 8" in response.text
+    assert "Input should be 9" in response.text
 
 
 def test_rest_lifecycle_step_speed_agent_and_event_history() -> None:
@@ -509,10 +510,11 @@ def test_controlled_vital_mutation_triggers_survival_on_next_step() -> None:
 
         mutation = client.patch(
             f"/simulation/runs/{run_id}/agents/agent-001/vitals",
-            json={"satiety": 10},
+            json={"satiety": 10, "happiness": 25},
         )
         assert mutation.status_code == 200
         assert mutation.json()["agent"]["homeostasis"]["satiety"] == 10
+        assert mutation.json()["agent"]["homeostasis"]["happiness"] == 25
 
         client.post(f"/simulation/runs/{run_id}/step")
         agent = client.get(
@@ -551,6 +553,98 @@ def test_telemetry_clock_does_not_advance_paused_simulation() -> None:
         assert after["simulation_time"] == before["simulation_time"] == 0.0
         assert after["latest_sequence"] == before["latest_sequence"]
         assert after["snapshot_revision"] > before["snapshot_revision"]
+
+
+def test_checkpoint_api_saves_lists_and_resumes_after_restart() -> None:
+    with TestClient(app) as client:
+        run_id = create_run(client)
+        running_save = client.post(
+            f"/simulation/runs/{run_id}/checkpoints",
+            json={"label": "too-early"},
+        )
+        assert running_save.status_code == 409
+        assert client.post(f"/simulation/runs/{run_id}/pause").status_code == 200
+        saved = client.post(
+            f"/simulation/runs/{run_id}/checkpoints",
+            json={"label": "restart-point"},
+        )
+        assert saved.status_code == 201
+        checkpoint_id = saved.json()["checkpoint_id"]
+        listed = client.get(
+            f"/simulation/runs/{run_id}/checkpoints"
+        ).json()["checkpoints"]
+        assert listed[0]["checkpoint_id"] == checkpoint_id
+        assert listed[0]["is_head"] is True
+
+    with TestClient(app) as client:
+        restored = client.post(
+            f"/simulation/checkpoints/{checkpoint_id}/restore"
+        )
+        assert restored.status_code == 201
+        assert restored.json() == {
+            "checkpoint_id": checkpoint_id,
+            "source_run_id": run_id,
+            "run_id": run_id,
+            "branched": False,
+            "status": "paused",
+        }
+        stepped = client.post(f"/simulation/runs/{run_id}/step")
+        assert stepped.status_code == 200
+        assert stepped.json()["tick"] == 1
+        assert client.post(
+            f"/simulation/runs/{run_id}/stop"
+        ).status_code == 200
+
+
+def test_checkpoint_api_branches_from_history_and_filters_lineage() -> None:
+    with TestClient(app) as client:
+        run_id = create_run(client)
+        assert client.post(f"/simulation/runs/{run_id}/pause").status_code == 200
+        historical = client.post(
+            f"/simulation/runs/{run_id}/checkpoints",
+            json={"label": "fork-point"},
+        ).json()
+        assert client.post(f"/simulation/runs/{run_id}/step").status_code == 200
+        assert client.post(
+            f"/simulation/runs/{run_id}/checkpoints",
+            json={"label": "new-head"},
+        ).status_code == 201
+
+        restored = client.post(
+            f"/simulation/checkpoints/{historical['checkpoint_id']}/restore"
+        )
+        assert restored.status_code == 201
+        branch_run_id = restored.json()["run_id"]
+        assert branch_run_id != run_id
+        assert restored.json()["branched"] is True
+
+        branch_catalog = client.get(
+            "/simulation/data/runs",
+            params={"lineage_kind": "branch"},
+        ).json()["runs"]
+        assert [run["run_id"] for run in branch_catalog] == [branch_run_id]
+        assert branch_catalog[0]["root_run_id"] == run_id
+        assert branch_catalog[0]["parent_run_id"] == run_id
+        assert (
+            branch_catalog[0]["parent_checkpoint_id"]
+            == historical["checkpoint_id"]
+        )
+
+        mainline_catalog = client.get(
+            "/simulation/data/runs",
+            params={"lineage_kind": "mainline"},
+        ).json()["runs"]
+        assert run_id in {run["run_id"] for run in mainline_catalog}
+        assert branch_run_id not in {
+            run["run_id"] for run in mainline_catalog
+        }
+
+        assert client.post(
+            f"/simulation/runs/{branch_run_id}/stop"
+        ).status_code == 200
+        assert client.post(
+            f"/simulation/runs/{run_id}/stop"
+        ).status_code == 200
 
 
 def test_websocket_stream_has_ordered_sequences_and_authoritative_snapshot() -> None:
@@ -1416,5 +1510,8 @@ def test_physical_dataset_routes_filters_privacy_and_export_headers() -> None:
     assert private_bundle.headers["X-Stage0-Private-Included"] == "true"
     with zipfile.ZipFile(io.BytesIO(private_bundle.content)) as archive:
         bundle_manifest = json.loads(archive.read("manifest.json"))
-        assert bundle_manifest["sqlite_schema_version"] == 12
+        assert (
+            bundle_manifest["sqlite_schema_version"]
+            == DATABASE_SCHEMA_VERSION
+        )
         assert bundle_manifest["private_records_included"] is True

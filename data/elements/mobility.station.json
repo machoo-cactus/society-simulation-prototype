@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "e226833a8b9a6680b0caed79bc355ede783d008e8d683f39f17645808f9b941a",
+        "content_hash": "5b0f11987f22c93e8ace87cf399230a2defafb73c4022feb1f9391bf24dda0a4",
         "id": "mobility.station-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 4
+  "schema_version": 5
 }

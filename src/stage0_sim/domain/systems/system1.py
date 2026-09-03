@@ -81,7 +81,9 @@ def system1_meter_value(
         return homeostasis.satiety
     if drive is DriveType.ENERGY:
         return homeostasis.energy
-    return homeostasis.stress
+    if drive is DriveType.STRESS:
+        return homeostasis.stress
+    return homeostasis.hydration
 
 
 def resolve_system1(
@@ -768,7 +770,7 @@ class System1ArbitrationSystem:
     ) -> frozenset[DriveType]:
         return frozenset(
             drive
-            for drive in DriveType
+            for drive in configuration.enabled_drives
             if configuration.thresholds[drive].is_critical(
                 System1ArbitrationSystem._meter_value(homeostasis, drive)
             )

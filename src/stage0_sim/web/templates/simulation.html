@@ -155,7 +155,34 @@
         </select>
         <button type="submit" {% if not controls.speed %}disabled{% endif %}>Set speed</button>
       </form>
+      <form method="post" action="/ui/run/checkpoints" data-ui-targets="#notice-region,#simulation-controls">
+        <label for="checkpoint-label">Checkpoint label</label>
+        <input id="checkpoint-label" name="label" maxlength="120" {% if not controls.checkpoint %}disabled{% endif %}>
+        <button type="submit" {% if not controls.checkpoint %}disabled{% endif %}>Save checkpoint</button>
+      </form>
     </div>
+    {% if checkpoints %}
+      <details>
+        <summary>Saved checkpoints ({{ checkpoints|length }})</summary>
+        <table>
+          <thead><tr><th>Checkpoint</th><th>Run</th><th>State</th><th>Action</th></tr></thead>
+          <tbody>
+            {% for checkpoint in checkpoints %}
+              <tr>
+                <td>{{ checkpoint.label or checkpoint.checkpoint_id }}<br><code>{{ checkpoint.checkpoint_id }}</code></td>
+                <td><code>{{ checkpoint.run_id }}</code></td>
+                <td>Tick {{ checkpoint.simulation_tick }}, {{ "%.1f"|format(checkpoint.simulation_time) }}s<br>{{ "Head" if checkpoint.is_head else "Historical branch point" }}<br>{{ "Continues mainline" if checkpoint.restore_mode == "continue" else "Creates branch" }}</td>
+                <td>
+                  <form method="post" action="/ui/checkpoints/{{ checkpoint.checkpoint_id }}/restore" data-ui-targets="#notice-region,#simulation-controls,#world-panel,#inspector-panel,#events-panel,#transcript-panel,#dataset-panel">
+                    <button type="submit" {% if managed and managed.runner.status.value != "stopped" %}disabled{% endif %}>{{ "Continue" if checkpoint.restore_mode == "continue" else "Restore as branch" }}</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    {% endif %}
     <div id="run-summary-region">
       {% if managed %}
         <dl class="run-summary">
@@ -547,7 +574,7 @@
         {% set homeostasis = selected_agent.get("homeostasis", {}) %}
         {% if homeostasis %}
         <div class="gauges">
-        {% for vital in ("satiety", "energy", "stress") %}
+        {% for vital in ("satiety", "energy", "stress", "hydration", "social_connection", "happiness", "fear") %}
           <label>
             <span>{{ vital|title }} <strong>{{ "%.1f"|format(homeostasis.get(vital, 0)) }}</strong></span>
             <progress max="100" value="{{ percent(homeostasis.get(vital, 0)) }}">{{ percent(homeostasis.get(vital, 0)) }}%</progress>
@@ -700,7 +727,7 @@
         <form class="vitals-form" method="post" action="/ui/run/vitals" data-ui-targets="#notice-region,#inspector-live,#event-live,#event-summary">
         <fieldset {% if not controls.vitals or not homeostasis %}disabled{% endif %}>
           <legend>Controlled vital mutation</legend>
-          {% for vital in ("satiety", "energy", "stress") %}
+          {% for vital in ("satiety", "energy", "stress", "hydration", "social_connection", "happiness", "fear") %}
             <label>{{ vital|title }} <input name="{{ vital }}" type="number" min="0" max="100" step="0.1"></label>
           {% endfor %}
           <button type="submit">Apply supplied values</button>

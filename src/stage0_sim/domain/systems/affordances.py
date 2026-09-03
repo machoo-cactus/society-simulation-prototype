@@ -182,6 +182,10 @@ class AffordanceExecutionSystem:
                 starting_satiety=homeostasis.satiety,
                 starting_energy=homeostasis.energy,
                 starting_stress=homeostasis.stress,
+                starting_hydration=homeostasis.hydration,
+                starting_social_connection=homeostasis.social_connection,
+                starting_happiness=homeostasis.happiness,
+                starting_fear=homeostasis.fear,
                 previous_activity=previous_activity,
                 correlation_id=(
                     action_instance.root_correlation_id
@@ -236,21 +240,66 @@ class AffordanceExecutionSystem:
         before = homeostasis.snapshot()
         remaining = execution.definition.duration - execution.elapsed
         step = min(context.clock.dt, remaining)
+        previous_progress = execution.elapsed / execution.definition.duration
         execution.elapsed = round(execution.elapsed + step, 12)
         progress = execution.elapsed / execution.definition.duration
         final_values = execution.definition.effect.final_values(
             execution.starting_satiety,
             execution.starting_energy,
             execution.starting_stress,
+            execution.starting_hydration,
+            execution.starting_social_connection,
+            execution.starting_happiness,
+            execution.starting_fear,
         )
-        homeostasis.satiety = _interpolate(
-            execution.starting_satiety, final_values[0], progress
+        homeostasis.satiety = _apply_progress_delta(
+            homeostasis.satiety,
+            execution.starting_satiety,
+            final_values[0],
+            previous_progress,
+            progress,
         )
-        homeostasis.energy = _interpolate(
-            execution.starting_energy, final_values[1], progress
+        homeostasis.energy = _apply_progress_delta(
+            homeostasis.energy,
+            execution.starting_energy,
+            final_values[1],
+            previous_progress,
+            progress,
         )
-        homeostasis.stress = _interpolate(
-            execution.starting_stress, final_values[2], progress
+        homeostasis.stress = _apply_progress_delta(
+            homeostasis.stress,
+            execution.starting_stress,
+            final_values[2],
+            previous_progress,
+            progress,
+        )
+        homeostasis.hydration = _apply_progress_delta(
+            homeostasis.hydration,
+            execution.starting_hydration,
+            final_values[3],
+            previous_progress,
+            progress,
+        )
+        homeostasis.social_connection = _apply_progress_delta(
+            homeostasis.social_connection,
+            execution.starting_social_connection,
+            final_values[4],
+            previous_progress,
+            progress,
+        )
+        homeostasis.happiness = _apply_progress_delta(
+            homeostasis.happiness,
+            execution.starting_happiness,
+            final_values[5],
+            previous_progress,
+            progress,
+        )
+        homeostasis.fear = _apply_progress_delta(
+            homeostasis.fear,
+            execution.starting_fear,
+            final_values[6],
+            previous_progress,
+            progress,
         )
         after = homeostasis.snapshot()
         context.events.emit(
@@ -267,21 +316,11 @@ class AffordanceExecutionSystem:
                 "before": before,
                 "after": after,
                 "derivative": {
-                    "satiety": round(
-                        (homeostasis.satiety - execution.starting_satiety)
-                        / execution.elapsed,
+                    name: round(
+                        (float(after[name]) - float(before[name])) / step,
                         12,
-                    ),
-                    "energy": round(
-                        (homeostasis.energy - execution.starting_energy)
-                        / execution.elapsed,
-                        12,
-                    ),
-                    "stress": round(
-                        (homeostasis.stress - execution.starting_stress)
-                        / execution.elapsed,
-                        12,
-                    ),
+                    )
+                    for name in before
                 },
                 **action_lineage_payload(execution.action_instance),
             },
@@ -494,6 +533,7 @@ def _activity_for_action(action: ActionType) -> ActivityType:
         ActionType.EAT: ActivityType.EATING,
         ActionType.SLEEP: ActivityType.SLEEPING,
         ActionType.RELAX: ActivityType.RELAXING,
+        ActionType.DRINK: ActivityType.DRINKING,
         ActionType.WORK: ActivityType.WORKING,
     }
     return mapping.get(action, ActivityType.IDLE)
@@ -501,3 +541,15 @@ def _activity_for_action(action: ActionType) -> ActivityType:
 
 def _interpolate(start: float, end: float, progress: float) -> float:
     return round(min(100.0, max(0.0, start + (end - start) * progress)), 12)
+
+
+def _apply_progress_delta(
+    current: float,
+    start: float,
+    end: float,
+    previous_progress: float,
+    progress: float,
+) -> float:
+    previous_value = _interpolate(start, end, previous_progress)
+    next_value = _interpolate(start, end, progress)
+    return _interpolate(current, current + next_value - previous_value, 1.0)

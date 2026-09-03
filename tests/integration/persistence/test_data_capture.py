@@ -675,7 +675,7 @@ def test_physical_capture_interactions_privacy_and_rebuild(
     collector = RunDataCollector(
         store=store,
         runner=runner,
-        scenario={"name": "physical-capture", "schema_version": 8},
+        scenario={"name": "physical-capture", "schema_version": 9},
     )
     runner.start()
     registry = runner.registry

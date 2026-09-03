@@ -41,7 +41,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "8f01659b7c7d2c78e83315178f49afcbbddd4789320cc336f1cb729929553a2d",
+        "content_hash": "c595317b53c736d712f77ee58e23e53945d31d54fb626faab6143d610068aaed",
         "id": "common.exterior-door",
         "kind": "object"
       },
@@ -64,7 +64,7 @@
     },
     {
       "element": {
-        "content_hash": "4a1a44a9018c001c4150be5933a614f3f1071dfbc99cb1cef5bafd2479921955",
+        "content_hash": "45bf9cf5e9c209422cd48a0a917a1ac23dc95689903f557850321a8b130f7556",
         "id": "common.interior-door",
         "kind": "object"
       },
@@ -87,7 +87,7 @@
     },
     {
       "element": {
-        "content_hash": "4a1a44a9018c001c4150be5933a614f3f1071dfbc99cb1cef5bafd2479921955",
+        "content_hash": "45bf9cf5e9c209422cd48a0a917a1ac23dc95689903f557850321a8b130f7556",
         "id": "common.interior-door",
         "kind": "object"
       },
@@ -110,7 +110,7 @@
     },
     {
       "element": {
-        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "content_hash": "102a05246f5f7f0179e88f14bd0c1287e6aeb2c09912e37859a85d4984394017",
         "id": "common.window",
         "kind": "object"
       },
@@ -133,7 +133,7 @@
     },
     {
       "element": {
-        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "content_hash": "102a05246f5f7f0179e88f14bd0c1287e6aeb2c09912e37859a85d4984394017",
         "id": "common.window",
         "kind": "object"
       },
@@ -156,7 +156,7 @@
     },
     {
       "element": {
-        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "content_hash": "102a05246f5f7f0179e88f14bd0c1287e6aeb2c09912e37859a85d4984394017",
         "id": "common.window",
         "kind": "object"
       },
@@ -179,7 +179,7 @@
     },
     {
       "element": {
-        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "content_hash": "102a05246f5f7f0179e88f14bd0c1287e6aeb2c09912e37859a85d4984394017",
         "id": "common.window",
         "kind": "object"
       },
@@ -202,7 +202,7 @@
     },
     {
       "element": {
-        "content_hash": "cdaa9d4531007551b403e38c681f561ecdd6eed6cefc1b0acfbb5849d617f3c7",
+        "content_hash": "f5b761d57ddbb26d7b782be522b3b41c8f83f6f5bb630def6cc5227576b3d26e",
         "id": "residential.kitchen-counter",
         "kind": "object"
       },
@@ -225,7 +225,7 @@
     },
     {
       "element": {
-        "content_hash": "e28cfc0a50a3b1fddc70a6f93b75f4b5ece01de69fa8160fc18f5ecd752af29e",
+        "content_hash": "09d94462120a0c9c5b72a0bcde62ae28156b6f713d6b53e4361007794b560705",
         "id": "common.cabinet",
         "kind": "object"
       },
@@ -248,7 +248,7 @@
     },
     {
       "element": {
-        "content_hash": "e79ace734c3c9e558884a1e804ef5dbcf26133ba075682ed0c928f45f9c85959",
+        "content_hash": "f7ee04c4a36f017921fff79cf3c7500fb54504f490e2068de00d0e399149bfd5",
         "id": "residential.dining-table",
         "kind": "object"
       },
@@ -271,7 +271,7 @@
     },
     {
       "element": {
-        "content_hash": "ec8c6c60b13cc9b1186ea2d95e905a080a2028a29af6a496dd0932e000c6317c",
+        "content_hash": "5e3b213315023b8dc056960bc116aa38706d8bb446831b531e1054976acb5e4a",
         "id": "common.dining-chair",
         "kind": "object"
       },
@@ -294,7 +294,7 @@
     },
     {
       "element": {
-        "content_hash": "ec8c6c60b13cc9b1186ea2d95e905a080a2028a29af6a496dd0932e000c6317c",
+        "content_hash": "5e3b213315023b8dc056960bc116aa38706d8bb446831b531e1054976acb5e4a",
         "id": "common.dining-chair",
         "kind": "object"
       },
@@ -317,7 +317,7 @@
     },
     {
       "element": {
-        "content_hash": "4c1cbda8ac2c03fa32c424895c6828b69824561ba5839b2ab7ef0e884d08422b",
+        "content_hash": "060b5d4eb021122d17d19ad41c3825a43db2f26472bc1e344d3108fa0b54b372",
         "id": "common.mug",
         "kind": "object"
       },
@@ -340,7 +340,7 @@
     },
     {
       "element": {
-        "content_hash": "4d27ea93f35e8840cafe7986cc5021ba05dd368219b7195bb9733ff5488214e4",
+        "content_hash": "08a646af1017534302e8816d85a6beeb7e3d2357a96d302566b6b2975b7e3eef",
         "id": "common.bottle",
         "kind": "object"
       },
@@ -363,7 +363,7 @@
     },
     {
       "element": {
-        "content_hash": "e28cfc0a50a3b1fddc70a6f93b75f4b5ece01de69fa8160fc18f5ecd752af29e",
+        "content_hash": "09d94462120a0c9c5b72a0bcde62ae28156b6f713d6b53e4361007794b560705",
         "id": "common.cabinet",
         "kind": "object"
       },
@@ -386,7 +386,7 @@
     },
     {
       "element": {
-        "content_hash": "5ae404a29592e4dd2017629451ce193a9975859c82308badb05b80d73589b508",
+        "content_hash": "80e192738d068d3c644e45efe0e4c314750cca052118dd4bc07ff162e5a33517",
         "id": "common.phone",
         "kind": "object"
       },
@@ -409,7 +409,7 @@
     },
     {
       "element": {
-        "content_hash": "20999e2b0b24b4d34d63e7caa6d6ba61c85850cfc0bed96054d2db21191576b5",
+        "content_hash": "e72a8f1aa3c595dbdc631482188d10a8a1ec88990c902f54fa63595f15f30342",
         "id": "residential.desk",
         "kind": "object"
       },
@@ -432,7 +432,7 @@
     },
     {
       "element": {
-        "content_hash": "8baec68f50759ee2e07954e31835ab58ccf48ef7b5ff1535601f4a4dc3e2095c",
+        "content_hash": "423aa16a2ed215d5c3186001deb75dcf85f9ffe2598c36442a0512fc21472f94",
         "id": "common.office-chair",
         "kind": "object"
       },
@@ -455,7 +455,7 @@
     },
     {
       "element": {
-        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "content_hash": "e76db100ade704503ad98c71733da23cafa3ac00063ab8e812b155ad9300a1ae",
         "id": "common.book",
         "kind": "object"
       },
@@ -478,7 +478,7 @@
     },
     {
       "element": {
-        "content_hash": "5ae404a29592e4dd2017629451ce193a9975859c82308badb05b80d73589b508",
+        "content_hash": "80e192738d068d3c644e45efe0e4c314750cca052118dd4bc07ff162e5a33517",
         "id": "common.phone",
         "kind": "object"
       },
@@ -501,7 +501,7 @@
     },
     {
       "element": {
-        "content_hash": "9056ba1b9ca1735f0dc1252e4cc377f7fd536eec29a444cab504001c19fcda03",
+        "content_hash": "a50731f99a9617c80f42c6df022647755cb315741ab5385500dd1e98347ceca8",
         "id": "common.bookcase",
         "kind": "object"
       },
@@ -524,7 +524,7 @@
     },
     {
       "element": {
-        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "content_hash": "e76db100ade704503ad98c71733da23cafa3ac00063ab8e812b155ad9300a1ae",
         "id": "common.book",
         "kind": "object"
       },
@@ -547,7 +547,7 @@
     },
     {
       "element": {
-        "content_hash": "aa5474694d81b796a788b22d91b721c5f618b9c5661af37eaf84c1644fc2a1b3",
+        "content_hash": "a2828ffe791bf91be33c5e9af59b3b726dcf9bfa3485f2e93831558884043583",
         "id": "residential.bed",
         "kind": "object"
       },
@@ -570,7 +570,7 @@
     },
     {
       "element": {
-        "content_hash": "f5b1d019c3486ee92a517b3252f0d3666f4de8d50d6b9324833f78b64e8bedbc",
+        "content_hash": "4bb2f8cc4cfabb4391a27098ee33ec97b4857e605a4af9ab6a00e6f72b81b078",
         "id": "residential.bedside-table",
         "kind": "object"
       },
@@ -593,7 +593,7 @@
     },
     {
       "element": {
-        "content_hash": "500fc1a0565341abc5f0b6161cc2bbfba5578b679cf2572c6a246262615afb0b",
+        "content_hash": "c079e134ee5d2bec90b6bbd2d548946788d0402ae148e4b9aa1e6dbc2053483e",
         "id": "common.lamp",
         "kind": "object"
       },
@@ -616,7 +616,7 @@
     },
     {
       "element": {
-        "content_hash": "4d27ea93f35e8840cafe7986cc5021ba05dd368219b7195bb9733ff5488214e4",
+        "content_hash": "08a646af1017534302e8816d85a6beeb7e3d2357a96d302566b6b2975b7e3eef",
         "id": "common.bottle",
         "kind": "object"
       },
@@ -639,7 +639,7 @@
     },
     {
       "element": {
-        "content_hash": "5090c95d7d0283e63bd152a88affdcb2e5c871cc320e8e788087b43b97ac8385",
+        "content_hash": "b64c07075c492ae1a4a67a323dba14394eb388485a56f73a4435d5f2dd212a80",
         "id": "residential.sofa",
         "kind": "object"
       },
@@ -662,7 +662,7 @@
     },
     {
       "element": {
-        "content_hash": "f5b1d019c3486ee92a517b3252f0d3666f4de8d50d6b9324833f78b64e8bedbc",
+        "content_hash": "4bb2f8cc4cfabb4391a27098ee33ec97b4857e605a4af9ab6a00e6f72b81b078",
         "id": "residential.bedside-table",
         "kind": "object"
       },
@@ -685,7 +685,7 @@
     },
     {
       "element": {
-        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "content_hash": "e76db100ade704503ad98c71733da23cafa3ac00063ab8e812b155ad9300a1ae",
         "id": "common.book",
         "kind": "object"
       },
@@ -708,7 +708,7 @@
     },
     {
       "element": {
-        "content_hash": "9056ba1b9ca1735f0dc1252e4cc377f7fd536eec29a444cab504001c19fcda03",
+        "content_hash": "a50731f99a9617c80f42c6df022647755cb315741ab5385500dd1e98347ceca8",
         "id": "common.bookcase",
         "kind": "object"
       },
@@ -731,7 +731,7 @@
     },
     {
       "element": {
-        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "content_hash": "e76db100ade704503ad98c71733da23cafa3ac00063ab8e812b155ad9300a1ae",
         "id": "common.book",
         "kind": "object"
       },
@@ -754,7 +754,7 @@
     }
   ],
   "room_type": "RESIDENTIAL",
-  "schema_version": 4,
+  "schema_version": 5,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

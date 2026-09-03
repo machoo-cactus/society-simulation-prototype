@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "f89bc9dae64260f6fae42a9e11b3204ac96d359a588df9d2b4822d6094f5ecae",
+        "content_hash": "64de29b60f4430847ab607740bc10973d99d6ed1bd2ecc1dcd7acdad093f2152",
         "id": "civic.library-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 4
+  "schema_version": 5
 }

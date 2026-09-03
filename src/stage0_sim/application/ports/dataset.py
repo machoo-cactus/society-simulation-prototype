@@ -10,6 +10,7 @@ from stage0_sim.application.data_capture import (
 from stage0_sim.application.data_management import DatasetManagementRepository
 from stage0_sim.application.data_query import DatasetQueryRepository
 from stage0_sim.application.memory import MemoryPersistence
+from stage0_sim.application.ports.checkpoint import CheckpointRepository
 from stage0_sim.domain.events import JsonValue
 
 
@@ -22,6 +23,10 @@ class DatasetCaptureRepository(MemoryPersistence, Protocol):
         dt: float,
         initial_speed: float,
         scenario: dict[str, JsonValue],
+        lineage_kind: str = "mainline",
+        root_run_id: str | None = None,
+        parent_run_id: str | None = None,
+        parent_checkpoint_id: str | None = None,
     ) -> None: ...
 
     def save_text_content_snapshot(
@@ -646,6 +651,7 @@ class DatasetStore(
     DatasetCaptureRepository,
     DatasetQueryRepository,
     DatasetManagementRepository,
+    CheckpointRepository,
     Protocol,
 ):
     path: Path

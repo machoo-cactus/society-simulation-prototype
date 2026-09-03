@@ -108,6 +108,33 @@ def test_goal_schema_is_strict_and_rejects_textual_lists() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "field",
+    ["hydration", "social_connection", "happiness", "fear"],
+)
+def test_goal_schema_accepts_expanded_homeostasis_fields(field: str) -> None:
+    scenario = _scenario(
+        [
+            {
+                "id": f"track-{field}",
+                "description": f"Track {field}",
+                "criteria": [
+                    {
+                        "type": "state_comparison",
+                        "component": "homeostasis",
+                        "field": field,
+                        "comparator": "gte",
+                        "value": 50,
+                    }
+                ],
+            }
+        ]
+    )
+
+    criterion = scenario.entities[0].components["goals"]["goals"][0]["criteria"][0]
+    assert criterion["field"] == field
+
+
 def test_scenario_attaches_only_structured_goals() -> None:
     scenario = _scenario(
         [{"id": "report", "description": "Finish the report", "priority": 8}]

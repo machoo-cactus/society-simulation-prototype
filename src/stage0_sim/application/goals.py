@@ -33,7 +33,17 @@ from stage0_sim.domain.world import CityWorld
 
 _MISSING = object()
 _STATE_FIELDS = {
-    "homeostasis": frozenset({"satiety", "energy", "stress"}),
+    "homeostasis": frozenset(
+        {
+            "satiety",
+            "energy",
+            "stress",
+            "hydration",
+            "social_connection",
+            "happiness",
+            "fear",
+        }
+    ),
     "activity": frozenset({"current"}),
     "controller": frozenset(
         {"enabled", "state_revision", "last_outcome", "request_pending"}

@@ -6,7 +6,7 @@
   "kind": "npc_role",
   "name": "Legacy Role",
   "recognition_range": 4,
-  "schema_version": 4,
+  "schema_version": 5,
   "smell_range": 0,
   "tool_allowlist": [
     "serve_transaction",

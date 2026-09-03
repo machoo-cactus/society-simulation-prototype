@@ -18,6 +18,10 @@ from stage0_sim.adapters.persistence.sqlite_schema import (
     initialize_schema,
     schema_initialization_lock,
 )
+from stage0_sim.application.checkpoints import (
+    CheckpointState,
+    CheckpointSummary,
+)
 from stage0_sim.application.data_capture import (
     DATASET_SCHEMA_VERSION,
     DatasetQueryFilter,
@@ -243,13 +247,21 @@ class SQLiteDatasetStore:
         dt: float,
         initial_speed: float,
         scenario: dict[str, JsonValue],
+        lineage_kind: str = "mainline",
+        root_run_id: str | None = None,
+        parent_run_id: str | None = None,
+        parent_checkpoint_id: str | None = None,
     ) -> None:
+        if lineage_kind not in {"mainline", "branch"}:
+            raise ValueError("lineage_kind must be mainline or branch")
         self._connection.execute(
             """
             INSERT INTO runs (
                 run_id, schema_version, seed, dt, initial_speed,
-                scenario_json, started_at, owner_instance_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                scenario_json, started_at, owner_instance_id,
+                lineage_kind, root_run_id, parent_run_id,
+                parent_checkpoint_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run_id,
@@ -260,9 +272,238 @@ class SQLiteDatasetStore:
                 _json(scenario),
                 datetime.now(UTC).isoformat(),
                 self.instance_id,
+                lineage_kind,
+                root_run_id or run_id,
+                parent_run_id,
+                parent_checkpoint_id,
             ),
         )
         self._commit()
+
+    def save_checkpoint(
+        self,
+        *,
+        checkpoint_id: str,
+        run_id: str,
+        label: str | None,
+        simulation_tick: int,
+        simulation_time: float,
+        speed: float,
+        event_count: int,
+        dataset_sequence: int,
+        created_at: datetime,
+        state: CheckpointState,
+    ) -> CheckpointSummary:
+        self._require_run_write_ownership(run_id)
+        head = self._connection.execute(
+            """
+            SELECT COALESCE(MAX(sequence), 0) AS dataset_sequence
+            FROM records WHERE run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+        if (
+            int(head["dataset_sequence"]) != dataset_sequence
+        ):
+            self._connection.rollback()
+            raise RuntimeError(
+                "checkpoint state does not match the persisted run head"
+            )
+        self._connection.execute(
+            """
+            INSERT INTO run_checkpoints (
+                checkpoint_id, run_id, label, simulation_tick,
+                simulation_time, speed, event_count, dataset_sequence,
+                schema_version, runtime_compatibility_version,
+                application_version, integrity, state_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                checkpoint_id,
+                run_id,
+                label,
+                simulation_tick,
+                simulation_time,
+                speed,
+                event_count,
+                dataset_sequence,
+                state.schema_version,
+                state.runtime_compatibility_version,
+                state.application_version,
+                state.integrity,
+                _json(state.model_dump(mode="json")),
+                created_at.isoformat(),
+            ),
+        )
+        self._commit()
+        return CheckpointSummary(
+            checkpoint_id=checkpoint_id,
+            run_id=run_id,
+            label=label,
+            simulation_tick=simulation_tick,
+            simulation_time=simulation_time,
+            speed=speed,
+            event_count=event_count,
+            dataset_sequence=dataset_sequence,
+            created_at=created_at,
+            is_head=True,
+        )
+
+    def list_checkpoints(
+        self,
+        run_id: str | None = None,
+    ) -> tuple[CheckpointSummary, ...]:
+        if run_id is None:
+            run_ids = tuple(
+                str(row["run_id"])
+                for row in self._connection.execute(
+                    """
+                    SELECT DISTINCT run_id FROM run_checkpoints
+                    ORDER BY run_id
+                    """
+                )
+            )
+            checkpoints = [
+                checkpoint
+                for candidate_run_id in run_ids
+                for checkpoint in self.list_checkpoints(candidate_run_id)
+            ]
+            return tuple(
+                sorted(
+                    checkpoints,
+                    key=lambda item: (
+                        item.created_at,
+                        item.checkpoint_id,
+                    ),
+                    reverse=True,
+                )
+            )
+        self._require_run(run_id)
+        head = self._connection.execute(
+            """
+            SELECT COALESCE(MAX(sequence), 0) AS dataset_sequence
+            FROM records WHERE run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+        rows = self._connection.execute(
+            """
+            SELECT checkpoint_id, run_id, label, simulation_tick,
+                   simulation_time, speed, event_count, dataset_sequence,
+                   created_at
+            FROM run_checkpoints
+            WHERE run_id = ?
+            ORDER BY created_at DESC, checkpoint_id DESC
+            """,
+            (run_id,),
+        ).fetchall()
+        return tuple(
+            CheckpointSummary(
+                checkpoint_id=str(row["checkpoint_id"]),
+                run_id=str(row["run_id"]),
+                label=(
+                    str(row["label"])
+                    if row["label"] is not None
+                    else None
+                ),
+                simulation_tick=int(row["simulation_tick"]),
+                simulation_time=float(row["simulation_time"]),
+                speed=float(row["speed"]),
+                event_count=int(row["event_count"]),
+                dataset_sequence=int(row["dataset_sequence"]),
+                created_at=datetime.fromisoformat(str(row["created_at"])),
+                is_head=(
+                    int(row["dataset_sequence"])
+                    == int(head["dataset_sequence"])
+                ),
+            )
+            for row in rows
+        )
+
+    def load_checkpoint(
+        self,
+        checkpoint_id: str,
+    ) -> tuple[CheckpointSummary, CheckpointState]:
+        row = self._connection.execute(
+            """
+            SELECT checkpoint_id, run_id, label, simulation_tick,
+                   simulation_time, speed, event_count, dataset_sequence,
+                   created_at, state_json
+            FROM run_checkpoints
+            WHERE checkpoint_id = ?
+            """,
+            (checkpoint_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"unknown checkpoint: {checkpoint_id}")
+        summary = next(
+            checkpoint
+            for checkpoint in self.list_checkpoints(str(row["run_id"]))
+            if checkpoint.checkpoint_id == checkpoint_id
+        )
+        return summary, CheckpointState.model_validate_json(
+            str(row["state_json"])
+        )
+
+    def suspend_run(
+        self,
+        run_id: str,
+        checkpoint_id: str,
+    ) -> None:
+        checkpoint, _state = self.load_checkpoint(checkpoint_id)
+        if checkpoint.run_id != run_id or not checkpoint.is_head:
+            raise RuntimeError(
+                "only the current head checkpoint can suspend a run"
+            )
+        self._require_run_write_ownership(run_id)
+        cursor = self._connection.execute(
+            """
+            UPDATE runs
+            SET status = 'suspended', owner_instance_id = NULL,
+                completed_at = NULL, interruption_reason = NULL
+            WHERE run_id = ? AND owner_instance_id = ?
+            """,
+            (run_id, self.instance_id),
+        )
+        if cursor.rowcount != 1:
+            self._connection.rollback()
+            raise RuntimeError(f"run could not be suspended: {run_id}")
+        self._commit()
+
+    def reclaim_suspended_run(self, run_id: str) -> None:
+        cursor = self._connection.execute(
+            """
+            UPDATE runs
+            SET status = 'paused', owner_instance_id = ?,
+                completed_at = NULL, interruption_reason = NULL
+            WHERE run_id = ? AND status = 'suspended'
+            """,
+            (self.instance_id, run_id),
+        )
+        if cursor.rowcount != 1:
+            self._connection.rollback()
+            raise RuntimeError(f"run is not suspended: {run_id}")
+        self._commit()
+
+    def can_resume_checkpoint(self, checkpoint_id: str) -> bool:
+        row = self._connection.execute(
+            """
+            SELECT c.run_id, c.dataset_sequence, c.event_count,
+                   r.status,
+                   COALESCE(MAX(records.sequence), 0) AS head_sequence
+            FROM run_checkpoints AS c
+            JOIN runs AS r ON r.run_id = c.run_id
+            LEFT JOIN records ON records.run_id = c.run_id
+            WHERE c.checkpoint_id = ?
+            GROUP BY c.checkpoint_id
+            """,
+            (checkpoint_id,),
+        ).fetchone()
+        return (
+            row is not None
+            and str(row["status"]) == "suspended"
+            and int(row["dataset_sequence"]) == int(row["head_sequence"])
+        )
 
     def append(self, record: DatasetRecord) -> None:
         self._require_run_write_ownership(record.run_id)
@@ -2247,6 +2488,10 @@ class SQLiteDatasetStore:
         if filters.capture_complete is not None:
             clauses.append("capture_complete = ?")
             parameters.append(int(filters.capture_complete))
+        if filters.lineage_kinds:
+            placeholders = ", ".join("?" for _ in filters.lineage_kinds)
+            clauses.append(f"lineage_kind IN ({placeholders})")
+            parameters.extend(filters.lineage_kinds)
         for column, operator, value in (
             ("started_at", ">=", filters.started_at_or_after),
             ("started_at", "<", filters.started_before),
@@ -2603,6 +2848,18 @@ class SQLiteDatasetStore:
             ),
             effective_npc_control_mode=_first_text(
                 runtime_configuration.get("effective_npc_control_mode"),
+            ),
+            lineage_kind=str(row["lineage_kind"]),
+            root_run_id=str(row["root_run_id"]),
+            parent_run_id=(
+                str(row["parent_run_id"])
+                if row["parent_run_id"] is not None
+                else None
+            ),
+            parent_checkpoint_id=(
+                str(row["parent_checkpoint_id"])
+                if row["parent_checkpoint_id"] is not None
+                else None
             ),
             feature_schema_versions=feature_versions,
         )

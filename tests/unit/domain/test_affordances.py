@@ -52,6 +52,13 @@ from tests.helpers.paths import CATALOG_SCENARIOS
             {"satiety": 80.0, "energy": 80.0, "stress": 70.0},
             {"satiety": 80.0, "energy": 80.0, "stress": 50.0},
         ),
+        (
+            "DRINK",
+            {"satiety": 80, "energy": 80, "stress": 20, "hydration": 10},
+            {"hydration_delta": 60},
+            {"hydration": 40.0},
+            {"hydration": 70.0},
+        ),
     ],
 )
 def test_corrective_affordances_apply_time_based_exact_outcomes(
@@ -64,6 +71,14 @@ def test_corrective_affordances_apply_time_based_exact_outcomes(
     scenario = ScenarioDefinition.model_validate(
         {
             "name": f"{action.lower()}-recovery",
+            "system1": (
+                {
+                    "enabled_drives": ["HYDRATION"],
+                    "tie_break_order": ["HYDRATION"],
+                }
+                if action == "DRINK"
+                else {}
+            ),
             "homeostasis": {
                 "activity_coefficients": {
                     "IDLE": {"satiety": 0, "energy": 0, "stress": 0}
@@ -98,11 +113,11 @@ def test_corrective_affordances_apply_time_based_exact_outcomes(
     state = runner.registry.get_component("agent", HomeostasisComponent)
 
     runner.run_for(1)
-    assert state.snapshot() == midpoint
+    assert {name: state.snapshot()[name] for name in midpoint} == midpoint
     assert runner.registry.has_component("agent", AffordanceExecutionComponent)
 
     runner.run_for(1)
-    assert state.snapshot() == final
+    assert {name: state.snapshot()[name] for name in final} == final
     assert not runner.registry.has_component("agent", AffordanceExecutionComponent)
     assert (
         runner.registry.get_component("agent", DriveComponent).state
@@ -120,6 +135,57 @@ def test_corrective_affordances_apply_time_based_exact_outcomes(
         and event.payload.get("source") == "affordance"
     ]
     assert len(affordance_changes) == 2
+
+
+def test_affordance_progress_preserves_unrelated_committed_meter_changes() -> None:
+    scenario = ScenarioDefinition.model_validate(
+        {
+            "name": "preserve-concurrent-homeostasis",
+            "system1": {
+                "enabled_drives": ["HYDRATION"],
+                "tie_break_order": ["HYDRATION"],
+            },
+            "world": {
+                "width": 1,
+                "height": 1,
+                "stations": [
+                    {
+                        "id": "water",
+                        "name": "Water",
+                        "position": {"x": 0, "y": 0},
+                        "actions": [
+                            {
+                                "action": "DRINK",
+                                "duration": 3,
+                                "effect": {"hydration_delta": 60},
+                            }
+                        ],
+                    }
+                ],
+            },
+            "entities": [
+                {
+                    "id": "agent",
+                    "components": {
+                        "position": {"x": 0, "y": 0},
+                        "homeostasis": {
+                            "hydration": 10,
+                            "happiness": 50,
+                        },
+                    },
+                }
+            ],
+        }
+    )
+    runner = create_runner(scenario)
+    state = runner.registry.get_component("agent", HomeostasisComponent)
+
+    runner.run_for(1)
+    state.apply_deltas(happiness=10)
+    runner.run_for(1)
+
+    assert state.hydration == 50
+    assert state.happiness == 60
 
 
 def test_unavailable_station_fails_explicit_precondition() -> None:

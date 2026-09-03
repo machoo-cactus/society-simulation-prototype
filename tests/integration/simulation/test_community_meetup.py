@@ -133,7 +133,7 @@ def _create_community_runner():
 
 def test_community_meetup_source_is_current_and_character_neutral() -> None:
     scenario = _load_scenario()
-    assert scenario.schema_version == 8
+    assert scenario.schema_version == 9
     assert scenario.calendar is not None
     assert scenario.calendar.start_datetime.weekday() == 5
     assert scenario.character_situation_synthesis.enabled is False
@@ -157,6 +157,11 @@ def test_community_meetup_source_is_current_and_character_neutral() -> None:
     assert cafe_point.staffing is not None
     assert cafe_point.staffing.role_id == "hospitality.barista"
     assert len(cafe_room.world.stations) == 6
+    assert any(
+        action.action == "DRINK"
+        for station in cafe_room.world.stations
+        for action in station.actions
+    )
 
     for entity in scenario.entities:
         assert "plan" not in entity.components
@@ -244,7 +249,7 @@ def test_community_catalog_uses_reusable_physical_object_families() -> None:
     }
     for element_id in expected:
         element = library.get(element_id, ElementKind.OBJECT)
-        assert element.schema_version == 4
+        assert element.schema_version == 5
         assert element.physical is not None
         assert len(element.physical.footprint.cells) > 1
         assert len(element_content_hash(element)) == 64

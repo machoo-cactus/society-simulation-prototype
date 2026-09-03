@@ -329,7 +329,7 @@ def test_element_library_crud_is_accessible_and_hash_protected(
 ) -> None:
     page.goto("/ui/elements/?kind=npc_role")
     expect(page.get_by_role("heading", name="Element Library")).to_be_visible()
-    expect(page.get_by_text("schema version 4", exact=False)).to_be_visible()
+    expect(page.get_by_text("schema version 5", exact=False)).to_be_visible()
     page.get_by_label("Element resource ID").fill("playwright-server")
     page.get_by_label("Name", exact=True).fill("Playwright Server")
     page.get_by_label("Description", exact=True).fill(

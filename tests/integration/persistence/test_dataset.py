@@ -668,7 +668,15 @@ def test_projector_ignores_new_components_without_breaking_stable_state() -> Non
     projected = AgentStateProjector().project(registry, "agent")
 
     assert projected == {
-        "homeostasis": {"satiety": 70, "energy": 80, "stress": 20}
+        "homeostasis": {
+            "satiety": 70,
+            "energy": 80,
+            "stress": 20,
+            "hydration": 100.0,
+            "social_connection": 50.0,
+            "happiness": 50.0,
+            "fear": 0.0,
+        }
     }
 
 
@@ -885,7 +893,7 @@ def test_text_content_snapshot_round_trips_and_exports_privately(
         seed=1,
         dt=1,
         initial_speed=1,
-        scenario={"schema_version": 8, "name": "text-content"},
+        scenario={"schema_version": 9, "name": "text-content"},
     )
     registry = TextContentRegistry(
         collections=(

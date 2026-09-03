@@ -87,14 +87,14 @@ def test_catalog_ids_filenames_and_current_schemas_are_coherent() -> None:
         path.stem for path in CATALOG_ELEMENTS.glob("*.json")
     }
     assert {item.schema_version for item in characters} == {2}
-    assert {item.schema_version for item in elements} == {4}
+    assert {item.schema_version for item in elements} == {5}
 
     character_ids = {item.id for item in characters}
     for path in CATALOG_SCENARIOS.glob("*.json"):
         source = ScenarioSourceDefinition.model_validate_json(
             path.read_text(encoding="utf-8")
         )
-        assert source.schema_version == 8
+        assert source.schema_version == 9
         assert source.name == path.stem
         for entity in source.entities:
             slot = entity.components.get("character_slot")
@@ -108,13 +108,13 @@ def test_catalog_ids_filenames_and_current_schemas_are_coherent() -> None:
             encoding="utf-8"
         )
     )
-    assert fixture.schema_version == 8
+    assert fixture.schema_version == 9
     assert fixture.name == "scripted-tool-cognition"
 
     demo = ScenarioSourceDefinition.model_validate_json(
         PACKAGED_DEMO.read_text(encoding="utf-8")
     )
-    assert demo.schema_version == 8
+    assert demo.schema_version == 9
     demo_character = CharacterDefinition.model_validate_json(
         PACKAGED_DEMO.with_name("demo-character.json").read_text(
             encoding="utf-8"

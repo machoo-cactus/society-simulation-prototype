@@ -65,7 +65,11 @@
         },
         "homeostasis": {
           "energy": 85.0,
+          "fear": 0.0,
+          "happiness": 50.0,
+          "hydration": 100.0,
           "satiety": 80.0,
+          "social_connection": 50.0,
           "stress": 15.0
         },
         "known_text_addresses": {
@@ -104,7 +108,11 @@
         },
         "homeostasis": {
           "energy": 82.0,
+          "fear": 0.0,
+          "happiness": 50.0,
+          "hydration": 100.0,
           "satiety": 78.0,
+          "social_connection": 50.0,
           "stress": 18.0
         },
         "known_text_addresses": {
@@ -266,7 +274,14 @@
     }
   ],
   "homeostasis": {
-    "activity_coefficients": {}
+    "activity_coefficients": {},
+    "alarming_fear_delta": 0.0,
+    "calming_fear_delta": 0.0,
+    "calming_happiness_delta": 0.0,
+    "drink_hydration_delta": 0.0,
+    "read_happiness_delta": 0.0,
+    "social_connection_delta": 0.0,
+    "social_happiness_delta": 0.0
   },
   "items": [],
   "memory": {
@@ -287,10 +302,15 @@
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 8,
+  "schema_version": 9,
   "seed": 8,
   "speed": 1.0,
   "system1": {
+    "enabled_drives": [
+      "SATIETY",
+      "ENERGY",
+      "STRESS"
+    ],
     "thresholds": {},
     "tie_break_order": [
       "SATIETY",

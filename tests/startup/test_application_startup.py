@@ -1,5 +1,6 @@
 import json
 import os
+import signal
 import socket
 import sqlite3
 import subprocess
@@ -10,6 +11,8 @@ import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+
+from tests.helpers.paths import CATALOG_SCENARIOS
 
 from stage0_sim import __version__
 from stage0_sim.adapters.persistence.sqlite_schema import DATABASE_SCHEMA_VERSION
@@ -38,6 +41,28 @@ def _request(url: str) -> tuple[int, bytes]:
         return response.status, response.read()
 
 
+def _json_request(
+    url: str,
+    *,
+    method: str = "GET",
+    payload: dict[str, object] | None = None,
+) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(
+        url,
+        method=method,
+        data=(
+            json.dumps(payload).encode("utf-8")
+            if payload is not None
+            else None
+        ),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        body = json.loads(response.read())
+        assert isinstance(body, dict)
+        return response.status, body
+
+
 def _start_server(
     work_directory: Path,
     *,
@@ -62,6 +87,9 @@ def _start_server(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        creationflags=(
+            subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        ),
     )
     return process, f"http://127.0.0.1:{port}"
 
@@ -69,7 +97,10 @@ def _start_server(
 def _stop_server(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
-    process.terminate()
+    if os.name == "nt":
+        process.send_signal(signal.CTRL_BREAK_EVENT)
+    else:
+        process.terminate()
     try:
         process.wait(timeout=10)
     except subprocess.TimeoutExpired:
@@ -201,3 +232,69 @@ def test_explicit_incompatible_database_fails_startup(
     assert "unsupported SQLite schema version 8" in output
     assert f"expected {DATABASE_SCHEMA_VERSION}" in output
     assert _schema_version(database) == 8
+
+
+def test_paused_checkpoint_restores_after_process_restart(
+    tmp_path: Path,
+) -> None:
+    environment = _environment(
+        STAGE0_DATA_DIRECTORY=str(tmp_path / "runs"),
+        STAGE0_CHARACTER_DIRECTORY=str(CATALOG_SCENARIOS.parent / "characters"),
+        STAGE0_ELEMENT_DIRECTORY=str(CATALOG_SCENARIOS.parent / "elements"),
+        STAGE0_SCENARIO_DIRECTORY=str(CATALOG_SCENARIOS),
+    )
+    process, base_url = _start_server(tmp_path, environment=environment)
+    try:
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            try:
+                if _request(f"{base_url}/health")[0] == 200:
+                    break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise AssertionError("application did not become healthy")
+        scenario = json.loads(
+            (
+                CATALOG_SCENARIOS / "grid-navigation.json"
+            ).read_text(encoding="utf-8")
+        )
+        _, staged = _json_request(
+            f"{base_url}/simulation/scenarios",
+            method="POST",
+            payload={"scenario": scenario, "character_assignments": {}},
+        )
+        _, started = _json_request(
+            f"{base_url}/simulation/runs",
+            method="POST",
+            payload={
+                "scenario_id": staged["scenario_id"],
+                "realtime": False,
+            },
+        )
+        run_id = str(started["run_id"])
+        _json_request(
+            f"{base_url}/simulation/runs/{run_id}/pause",
+            method="POST",
+        )
+        _, checkpoint = _json_request(
+            f"{base_url}/simulation/runs/{run_id}/checkpoints",
+            method="POST",
+            payload={"label": "restart"},
+        )
+        checkpoint_id = str(checkpoint["checkpoint_id"])
+    finally:
+        _stop_server(process)
+
+    with _healthy_server(tmp_path, environment=environment) as base_url:
+        _, restored = _json_request(
+            f"{base_url}/simulation/checkpoints/{checkpoint_id}/restore",
+            method="POST",
+        )
+        assert restored["run_id"] == run_id
+        assert restored["branched"] is False
+        _, stepped = _json_request(
+            f"{base_url}/simulation/runs/{run_id}/step",
+            method="POST",
+        )
+        assert stepped["tick"] == 1

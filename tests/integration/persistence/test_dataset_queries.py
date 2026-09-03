@@ -111,7 +111,7 @@ def _physical_query_store(path: Path) -> SQLiteDatasetStore:
         seed=9,
         dt=1,
         initial_speed=1,
-        scenario={"name": "physical-query", "schema_version": 8},
+        scenario={"name": "physical-query", "schema_version": 9},
     )
     sequence = 0
     for tick, phase, is_open, relation_kind in (

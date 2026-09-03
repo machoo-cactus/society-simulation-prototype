@@ -4,7 +4,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol, cast
 
 from pydantic import Field, model_validator
 
@@ -153,6 +153,82 @@ class PreparedScenario:
     situations: Mapping[str, "CharacterSituationArtifact"]
     scenario_source: Mapping[str, JsonValue] | None = None
     resolved_elements: Mapping[str, JsonValue] = field(default_factory=dict)
+
+    def to_checkpoint_payload(self) -> dict[str, JsonValue]:
+        return {
+            "scenario": self.scenario.model_dump(mode="json"),
+            "assignments": dict(sorted(self.assignments.items())),
+            "characters": {
+                character_id: character.model_dump(mode="json")
+                for character_id, character in sorted(self.characters.items())
+            },
+            "situations": {
+                entity_id: artifact.model_dump(mode="json")
+                for entity_id, artifact in sorted(self.situations.items())
+            },
+            "scenario_source": (
+                dict(self.scenario_source)
+                if self.scenario_source is not None
+                else None
+            ),
+            "resolved_elements": dict(sorted(self.resolved_elements.items())),
+        }
+
+    @classmethod
+    def from_checkpoint_payload(
+        cls,
+        payload: Mapping[str, JsonValue],
+    ) -> "PreparedScenario":
+        from stage0_sim.application.character_synthesis import (
+            CharacterSituationArtifact,
+        )
+
+        scenario = payload.get("scenario")
+        assignments = payload.get("assignments")
+        characters = payload.get("characters")
+        situations = payload.get("situations")
+        scenario_source = payload.get("scenario_source")
+        resolved_elements = payload.get("resolved_elements")
+        if not isinstance(scenario, dict):
+            raise ValueError("checkpoint scenario must be an object")
+        if not isinstance(assignments, dict):
+            raise ValueError("checkpoint assignments must be an object")
+        if not isinstance(characters, dict):
+            raise ValueError("checkpoint characters must be an object")
+        if not isinstance(situations, dict):
+            raise ValueError("checkpoint situations must be an object")
+        if scenario_source is not None and not isinstance(
+            scenario_source,
+            dict,
+        ):
+            raise ValueError("checkpoint scenario source must be an object")
+        if not isinstance(resolved_elements, dict):
+            raise ValueError("checkpoint resolved elements must be an object")
+        return cls(
+            scenario=ScenarioDefinition.model_validate(scenario),
+            assignments={
+                str(entity_id): str(character_id)
+                for entity_id, character_id in assignments.items()
+            },
+            characters={
+                str(character_id): CharacterDefinition.model_validate(character)
+                for character_id, character in characters.items()
+                if isinstance(character, dict)
+            },
+            situations={
+                str(entity_id): CharacterSituationArtifact.model_validate(artifact)
+                for entity_id, artifact in situations.items()
+                if isinstance(artifact, dict)
+            },
+            scenario_source=cast(
+                Mapping[str, JsonValue] | None,
+                scenario_source,
+            ),
+            resolved_elements=cast(
+                Mapping[str, JsonValue],
+                resolved_elements,
+            ),
+        )
 
     def dataset_payload(self) -> dict[str, JsonValue]:
         scenario_payload = self.scenario.model_dump(mode="json")

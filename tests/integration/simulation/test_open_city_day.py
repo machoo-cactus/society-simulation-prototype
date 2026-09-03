@@ -86,7 +86,7 @@ def test_open_city_catalog_materializes_current_city_contract() -> None:
     scenario = resolved.scenario
     world = scenario.world
     assert world is not None
-    assert scenario.schema_version == 8
+    assert scenario.schema_version == 9
     assert world.type == "city"
     assert world.city.id == "city-open-day"
     assert len(world.districts) == 3

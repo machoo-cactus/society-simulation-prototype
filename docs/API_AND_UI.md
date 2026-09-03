@@ -10,16 +10,18 @@ provider routes in the simulation process.
 
 1. Manage reusable source resources through `/characters`, `/scenarios`, and
    `/elements`.
-2. `POST /simulation/scenarios` with a schema-version-8 source plus assignment
+2. `POST /simulation/scenarios` with a schema-version-9 source plus assignment
    choices as applicable. References are validated, resolved, and frozen.
 3. `POST /simulation/runs` with the prepared scenario ID.
 4. Inspect `/simulation/runs/{run_id}` or `/snapshot`.
 5. Control with `/pause`, `/resume`, `/step`, `/speed`, and `/stop`.
-6. Read event history, world views, character state, and persisted data.
-7. Export research data or use `/simulation/data/*` for cross-run management.
+6. While paused and settled, create or restore immutable checkpoints as needed.
+7. Read event history, world views, character state, and persisted data.
+8. Export research data or use `/simulation/data/*` for cross-run management.
 
-Prepared scenarios and live runners are process-local. Persisted datasets
-survive restart but do not restore those objects.
+Prepared scenarios and authoritative live state are embedded in checkpoints.
+Persisted datasets survive restart but remain observations rather than restore
+authority.
 
 ## Physical snapshot contract
 
@@ -71,9 +73,15 @@ The same shape applies to characters, scenarios, and elements:
 | Prepare/start | `POST /simulation/scenarios`, `POST /simulation/runs` |
 | Run state | `GET /simulation/runs/{run_id}`, `GET /simulation/runs/{run_id}/snapshot` |
 | Lifecycle | `POST /simulation/runs/{run_id}/pause`, `/resume`, `/step`, `/speed`, `/stop` |
+| Checkpoints | `GET /simulation/checkpoints`, `GET` or `POST /simulation/runs/{run_id}/checkpoints`, `POST /simulation/checkpoints/{checkpoint_id}/restore` |
 | Character inspection | `GET /simulation/runs/{run_id}/agents/{agent_id}`, `GET /simulation/runs/{run_id}/agents/{agent_id}/spatial-context`, `PATCH /simulation/runs/{run_id}/agents/{agent_id}/vitals` |
 | Event history | `GET /simulation/runs/{run_id}/events` |
 | World inspection | `GET /simulation/runs/{run_id}/world/city`, `/city-zones/{id}`, `/buildings/{id}`, `/rooms/{id}`, `/objects/{id}`, `/neighborhoods/{id}` |
+
+The vitals mutation endpoint and operator inspector expose satiety, energy,
+stress, hydration, social connection, happiness, and fear for administrative
+control. These values remain private character state and are not disclosed
+through observer perception.
 | External telemetry | `WS /simulation/runs/{run_id}/stream` |
 | Engagement research | `GET /simulation/runs/{run_id}/data/engagements`, `/engagement-groups`, `/engagement-invocations` |
 | Other research/export | `/data*` and `/exports/*` as documented in [Research data](DATA_COLLECTION.md) |
@@ -104,9 +112,11 @@ row.
 | `/ui/data/` | Cross-run catalog, selection, aggregation, export, deletion |
 
 The simulation page can stage the packaged example, upload JSON, or stage a
-saved library scenario. Staging never starts a run. Start, pause, resume,
-single-step, speed, vital mutation, stop, map/view changes, and event clearing
-remain distinct labeled forms.
+saved library scenario. Staging never starts a run. Start, pause, resume, single-step, speed, checkpoint save/restore, vital
+mutation, stop, map/view changes, and event clearing remain distinct labeled
+forms. Checkpoint controls remain native forms without JavaScript. The page
+labels head checkpoints as same-run continuation and historical checkpoints as
+branch restores.
 
 The operator event filter has an `Engagement` family for all `engagement.*`
 events. Event rows and the selected-character engagement inspector show only
@@ -120,7 +130,7 @@ The authoring pages use content hashes for optimistic concurrency. Scenario and
 element drafts are server-side and tab-scoped; malformed or incomplete values
 survive validation redirects without becoming global state.
 
-The descriptor-driven scenario-version-8 and element-version-4 forms cover
+The descriptor-driven scenario-version-9 and element-version-5 forms cover
 physical footprints, semantic intrinsics, movement and per-sense obstruction,
 wearable/scent capabilities and slots, initial
 open/locked/ownership/custody state, room metric, placement

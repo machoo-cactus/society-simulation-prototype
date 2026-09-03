@@ -105,7 +105,7 @@ multiple slots. Resolution freezes the complete profile, source hash, and
 assignment into the prepared scenario and dataset; later library edits do not
 alter a staged composition or active run.
 
-Scenario source version 8 rejects embedded character catalogs, inline profiles,
+Scenario source version 9 rejects embedded character catalogs, inline profiles,
 `profile_ref`, and reusable profile fields. Goals and initial memories are
 scenario-owned components, not dossier fields.
 

@@ -17,6 +17,7 @@ from stage0_sim.domain.components import (
     EngagementProgramComponent,
     EngagementStatus,
     HomeostasisComponent,
+    HomeostasisConfiguration,
     PendingEngagementComponent,
     PlanComponent,
     System1State,
@@ -27,6 +28,7 @@ from stage0_sim.domain.perception.auditory import (
     resolve_auditory_recipients,
 )
 from stage0_sim.domain.systems import SystemContext
+from stage0_sim.domain.systems.homeostasis import apply_homeostasis_deltas
 
 EXPRESSIVE_BEHAVIOR = "expressive_behavior"
 AUDITORY_EXPRESSION = "auditory_expression"
@@ -194,15 +196,18 @@ class AuditoryExpressionHandler:
         invocation: EngagementCapabilityInvocation,
     ) -> None:
         arguments = _argument_map(invocation)
-        homeostasis = context.registry.get_component(
-            actor_id,
-            HomeostasisComponent,
-        )
         energy_cost = _float_value(arguments["energy_cost"])
-        before_energy = homeostasis.energy
-        homeostasis.energy = _clamp(homeostasis.energy - energy_cost)
-        if homeostasis.energy != before_energy:
-            _bump_state_revision(context, actor_id)
+        configuration = context.registry.get_resource(HomeostasisConfiguration)
+        apply_homeostasis_deltas(
+            context,
+            actor_id,
+            source="engagement.auditory",
+            deltas={
+                "energy": -energy_cost,
+                "social_connection": configuration.social_connection_delta,
+                "happiness": configuration.social_happiness_delta,
+            },
+        )
         sound_range = _int_value(arguments["sound_range"])
         recipients = resolve_auditory_recipients(
             context.registry,
@@ -241,21 +246,48 @@ class AuditoryExpressionHandler:
                     HomeostasisComponent,
                 )
                 stress_before = listener_homeostasis.stress
-                stress_after = _clamp(
-                    stress_before + listener_stress_delta
+                social_effects = apply_homeostasis_deltas(
+                    context,
+                    recipient.entity_id,
+                    source="engagement.auditory",
+                    deltas={
+                        "stress": listener_stress_delta,
+                        "social_connection": configuration.social_connection_delta,
+                        "happiness": configuration.social_happiness_delta,
+                        "fear": configuration.alarming_fear_delta,
+                    },
                 )
-                listener_homeostasis.stress = stress_after
-                actual_delta = round(stress_after - stress_before, 12)
-                if actual_delta:
-                    _bump_state_revision(context, recipient.entity_id)
-                recipient_effects.append(
-                    {
-                        "recipient_id": recipient.entity_id,
-                        "stress_before": stress_before,
-                        "stress_after": stress_after,
-                        "stress_delta": actual_delta,
-                    }
-                )
+                stress_after = listener_homeostasis.stress
+                actual_delta = social_effects["stress"]
+                effect_evidence: dict[str, JsonValue] = {
+                    "recipient_id": recipient.entity_id,
+                    "stress_before": stress_before,
+                    "stress_after": stress_after,
+                    "stress_delta": actual_delta,
+                }
+                configured_effects = {
+                    name: value
+                    for name, value in social_effects.items()
+                    if name != "stress" and value
+                }
+                if configured_effects:
+                    effect_evidence["homeostasis_delta"] = configured_effects
+                recipient_effects.append(effect_evidence)
+        else:
+            for recipient in recipients:
+                if context.registry.has_component(
+                    recipient.entity_id,
+                    HomeostasisComponent,
+                ):
+                    apply_homeostasis_deltas(
+                        context,
+                        recipient.entity_id,
+                        source="engagement.auditory",
+                        deltas={
+                            "social_connection": configuration.social_connection_delta,
+                            "happiness": configuration.social_happiness_delta,
+                        },
+                    )
         recipient_ids: list[JsonValue] = [
             recipient.entity_id for recipient in recipients
         ]
@@ -350,17 +382,23 @@ class BoundedActivityHandler:
         invocation: EngagementCapabilityInvocation,
     ) -> None:
         arguments = _argument_map(invocation)
-        homeostasis = context.registry.get_component(
-            actor_id,
-            HomeostasisComponent,
-        )
         energy_cost = _float_value(arguments["energy_cost"])
         stress_delta = _float_value(arguments["stress_delta"])
-        before = (homeostasis.energy, homeostasis.stress)
-        homeostasis.energy = _clamp(homeostasis.energy - energy_cost)
-        homeostasis.stress = _clamp(homeostasis.stress + stress_delta)
-        if before != (homeostasis.energy, homeostasis.stress):
-            _bump_state_revision(context, actor_id)
+        configuration = context.registry.get_resource(HomeostasisConfiguration)
+        calming = str(arguments["stress_effect"]) == "calming"
+        apply_homeostasis_deltas(
+            context,
+            actor_id,
+            source="engagement.bounded_activity",
+            deltas={
+                "energy": -energy_cost,
+                "stress": stress_delta,
+                "happiness": (
+                    configuration.calming_happiness_delta if calming else 0.0
+                ),
+                "fear": configuration.calming_fear_delta if calming else 0.0,
+            },
+        )
         _emit_capability_committed(
             context,
             actor_id,
@@ -993,16 +1031,6 @@ def _nonnegative_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def _clamp(value: float) -> float:
-    return round(min(100.0, max(0.0, value)), 12)
-
-
-def _bump_state_revision(context: SystemContext, actor_id: str) -> None:
-    if context.registry.has_component(actor_id, ControllerComponent):
-        context.registry.get_component(
-            actor_id,
-            ControllerComponent,
-        ).state_revision += 1
 
 
 def _float_value(value: EngagementScalar) -> float:

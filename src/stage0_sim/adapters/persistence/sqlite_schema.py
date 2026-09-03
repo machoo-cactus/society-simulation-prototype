@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-DATABASE_SCHEMA_VERSION = 12
+DATABASE_SCHEMA_VERSION = 13
 @contextmanager
 def schema_initialization_lock(path: Path) -> Iterator[None]:
     lock_path = path.with_name(f"{path.name}.schema.lock")
@@ -90,6 +90,7 @@ RUN_SCOPED_TABLES = (
     "episodic_memories",
     "information_documents",
     "text_content_snapshots",
+    "run_checkpoints",
     "runs",
 )
 
@@ -900,7 +901,12 @@ CREATE TABLE runs (
     completed_at TEXT,
     owner_instance_id TEXT,
     capture_complete INTEGER NOT NULL DEFAULT 0,
-    interruption_reason TEXT
+    interruption_reason TEXT,
+    lineage_kind TEXT NOT NULL DEFAULT 'mainline'
+        CHECK (lineage_kind IN ('mainline', 'branch')),
+    root_run_id TEXT NOT NULL,
+    parent_run_id TEXT,
+    parent_checkpoint_id TEXT
 );
 CREATE INDEX runs_status_started
 ON runs(status, started_at DESC, run_id DESC);
@@ -910,6 +916,28 @@ CREATE INDEX runs_schema_started
 ON runs(schema_version, started_at DESC, run_id DESC);
 CREATE INDEX runs_capture_started
 ON runs(capture_complete, started_at DESC, run_id DESC);
+CREATE INDEX runs_lineage_started
+ON runs(lineage_kind, started_at DESC, run_id DESC);
+
+CREATE TABLE run_checkpoints (
+    checkpoint_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    label TEXT,
+    simulation_tick INTEGER NOT NULL,
+    simulation_time REAL NOT NULL,
+    speed REAL NOT NULL,
+    event_count INTEGER NOT NULL,
+    dataset_sequence INTEGER NOT NULL,
+    schema_version TEXT NOT NULL,
+    runtime_compatibility_version TEXT NOT NULL,
+    application_version TEXT NOT NULL,
+    integrity TEXT NOT NULL,
+    state_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+);
+CREATE INDEX run_checkpoints_run_created
+ON run_checkpoints(run_id, created_at DESC, checkpoint_id DESC);
 
 CREATE TABLE records (
     run_id TEXT NOT NULL,

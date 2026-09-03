@@ -99,6 +99,73 @@ class SimulationRunner:
     def context(self) -> SystemContext:
         return SystemContext(self.clock, self.registry, self.events, self.rng)
 
+    @property
+    def advancing(self) -> bool:
+        return self._advancing
+
+    def require_checkpoint_boundary(self) -> None:
+        if self.status is not RunnerStatus.PAUSED:
+            raise RuntimeError("checkpoint creation requires a paused simulation")
+        if self.cognition_phase is not CognitionPhase.IDLE or self._advancing:
+            raise RuntimeError(
+                "checkpoint creation requires a settled tick boundary"
+            )
+        if self.cognition_pending_count:
+            raise RuntimeError(
+                "checkpoint creation requires empty cognition work queues"
+            )
+
+    def restore_paused(
+        self,
+        *,
+        tick: int,
+        speed: float,
+        rng_state: tuple[object, ...],
+        event_count: int,
+        event_history: tuple[DomainEvent, ...],
+        research_next_sequence: int,
+    ) -> None:
+        if self.status is not RunnerStatus.CREATED:
+            raise RuntimeError("only a newly constructed runner can be restored")
+        if tick < 0:
+            raise ValueError("restored tick must not be negative")
+        if speed <= 0:
+            raise ValueError("restored speed must be positive")
+        self.clock.tick = tick
+        self.speed = speed
+        self.rng.setstate(rng_state)
+        if event_history:
+            if len(event_history) != event_count:
+                raise ValueError(
+                    "restored event history does not match event count"
+                )
+            self.events.restore_events(event_history)
+        else:
+            self.events.restore_event_count(event_count)
+        self.research_recorder.restore_next_sequence(research_next_sequence)
+        self.status = RunnerStatus.PAUSED
+        self.cognition_phase = CognitionPhase.IDLE
+
+    def announce_restore(
+        self,
+        *,
+        checkpoint_id: str,
+        source_run_id: str,
+        branched: bool,
+    ) -> None:
+        if self.status is not RunnerStatus.PAUSED:
+            raise RuntimeError("restored runner must be paused")
+        if branched:
+            self._notify_phase(RunnerPhase.RUN_INITIAL)
+        self._emit(
+            "simulation.branched" if branched else "simulation.restored",
+            {
+                "checkpoint_id": checkpoint_id,
+                "source_run_id": source_run_id,
+                "branched": branched,
+            },
+        )
+
     def start(self) -> None:
         if self.status is RunnerStatus.STOPPED:
             raise RuntimeError("a stopped simulation cannot be restarted")

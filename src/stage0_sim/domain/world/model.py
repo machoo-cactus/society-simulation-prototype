@@ -70,22 +70,41 @@ class HomeostasisEffect:
     satiety_delta: float = 0.0
     energy_delta: float = 0.0
     stress_delta: float = 0.0
+    hydration_delta: float = 0.0
+    social_connection_delta: float = 0.0
+    happiness_delta: float = 0.0
+    fear_delta: float = 0.0
     satiety_target: float | None = None
     energy_target: float | None = None
     stress_target: float | None = None
+    hydration_target: float | None = None
+    social_connection_target: float | None = None
+    happiness_target: float | None = None
+    fear_target: float | None = None
 
     def __post_init__(self) -> None:
         for name, target in (
             ("satiety_target", self.satiety_target),
             ("energy_target", self.energy_target),
             ("stress_target", self.stress_target),
+            ("hydration_target", self.hydration_target),
+            ("social_connection_target", self.social_connection_target),
+            ("happiness_target", self.happiness_target),
+            ("fear_target", self.fear_target),
         ):
             if target is not None and not 0 <= target <= 100:
                 raise ValueError(f"{name} must be between 0 and 100")
 
     def final_values(
-        self, satiety: float, energy: float, stress: float
-    ) -> tuple[float, float, float]:
+        self,
+        satiety: float,
+        energy: float,
+        stress: float,
+        hydration: float,
+        social_connection: float,
+        happiness: float,
+        fear: float,
+    ) -> tuple[float, float, float, float, float, float, float]:
         return (
             self.satiety_target
             if self.satiety_target is not None
@@ -96,6 +115,18 @@ class HomeostasisEffect:
             self.stress_target
             if self.stress_target is not None
             else _clamp_meter(stress + self.stress_delta),
+            self.hydration_target
+            if self.hydration_target is not None
+            else _clamp_meter(hydration + self.hydration_delta),
+            self.social_connection_target
+            if self.social_connection_target is not None
+            else _clamp_meter(social_connection + self.social_connection_delta),
+            self.happiness_target
+            if self.happiness_target is not None
+            else _clamp_meter(happiness + self.happiness_delta),
+            self.fear_target
+            if self.fear_target is not None
+            else _clamp_meter(fear + self.fear_delta),
         )
 
 
@@ -253,6 +284,12 @@ def default_affordance_action(action: str) -> AffordanceAction:
             action=action,
             duration=10.0,
             effect=HomeostasisEffect(stress_delta=-40.0),
+        )
+    if action == "DRINK":
+        return AffordanceAction(
+            action=action,
+            duration=5.0,
+            effect=HomeostasisEffect(hydration_delta=60.0),
         )
     return AffordanceAction(action=action, duration=1.0)
 

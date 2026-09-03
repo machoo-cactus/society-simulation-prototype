@@ -4,11 +4,50 @@ from stage0_sim.domain.components import (
     ActivityComponent,
     ActivityType,
     AffordanceExecutionComponent,
+    ControllerComponent,
     HomeostasisComponent,
     HomeostasisConfiguration,
     MovementComponent,
 )
 from stage0_sim.domain.systems import SystemContext
+
+
+def apply_homeostasis_deltas(
+    context: SystemContext,
+    agent_id: str,
+    *,
+    source: str,
+    deltas: dict[str, float],
+    details: dict[str, object] | None = None,
+) -> dict[str, float]:
+    homeostasis = context.registry.get_component(agent_id, HomeostasisComponent)
+    before = homeostasis.snapshot()
+    actual = homeostasis.apply_deltas(**deltas)
+    if not any(actual.values()):
+        return actual
+    if context.registry.has_component(agent_id, ControllerComponent):
+        context.registry.get_component(
+            agent_id,
+            ControllerComponent,
+        ).state_revision += 1
+    activity = context.registry.get_component(agent_id, ActivityComponent)
+    payload: dict[str, object] = {
+        "activity": activity.current.value,
+        "source": source,
+        "before": before,
+        "after": homeostasis.snapshot(),
+        "delta": actual,
+    }
+    if details:
+        payload.update(details)
+    context.events.emit(
+        "homeostasis.changed",
+        simulation_tick=context.clock.tick,
+        simulation_time=context.clock.simulation_time,
+        agent_id=agent_id,
+        payload=payload,
+    )
+    return actual
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +126,10 @@ class HomeostasisSystem:
                         "satiety": rates.satiety,
                         "energy": rates.energy,
                         "stress": rates.stress,
+                        "hydration": rates.hydration,
+                        "social_connection": rates.social_connection,
+                        "happiness": rates.happiness,
+                        "fear": rates.fear,
                     },
                 },
             )

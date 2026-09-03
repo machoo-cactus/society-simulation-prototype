@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "fc3600cf88843a48b4eba4f87d07664b2af3231f3131d7a6caa3749d1bd4e7a8",
+        "content_hash": "1f492e6492b3fcb64079d632ef4f2786fbe2a9219b0c9b8d0e8f2f2ef67f67cc",
         "id": "residential.apartment-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 4
+  "schema_version": 5
 }

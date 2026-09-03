@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "c0f65f8bfd933aa2291c0c668df6c995361f322b4d22fe117d28f004812f486c",
+        "content_hash": "03e15505a28b8f5a2f1eb2e252c7e1ef94fe9f33b9d51d2d32269166a205b822",
         "id": "residential.townhouse-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 4
+  "schema_version": 5
 }

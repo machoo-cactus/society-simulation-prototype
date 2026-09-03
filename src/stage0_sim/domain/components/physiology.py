@@ -4,6 +4,16 @@ from enum import StrEnum
 
 from stage0_sim.domain.events import JsonValue
 
+HOMEOSTASIS_FIELDS = (
+    "satiety",
+    "energy",
+    "stress",
+    "hydration",
+    "social_connection",
+    "happiness",
+    "fear",
+)
+
 
 class ActivityType(StrEnum):
     IDLE = "IDLE"
@@ -23,6 +33,10 @@ class ActivityRates:
     satiety: float
     energy: float
     stress: float
+    hydration: float = 0.0
+    social_connection: float = 0.0
+    happiness: float = 0.0
+    fear: float = 0.0
 
 
 def default_activity_rates() -> dict[ActivityType, ActivityRates]:
@@ -59,6 +73,13 @@ def default_activity_rates() -> dict[ActivityType, ActivityRates]:
 @dataclass(frozen=True, slots=True)
 class HomeostasisConfiguration:
     activity_rates: Mapping[ActivityType, ActivityRates]
+    drink_hydration_delta: float = 0.0
+    read_happiness_delta: float = 0.0
+    social_connection_delta: float = 0.0
+    social_happiness_delta: float = 0.0
+    alarming_fear_delta: float = 0.0
+    calming_happiness_delta: float = 0.0
+    calming_fear_delta: float = 0.0
 
     def __post_init__(self) -> None:
         missing = set(ActivityType) - set(self.activity_rates)
@@ -72,6 +93,10 @@ class HomeostasisComponent:
     satiety: float = 100.0
     energy: float = 100.0
     stress: float = 0.0
+    hydration: float = 100.0
+    social_connection: float = 50.0
+    happiness: float = 50.0
+    fear: float = 0.0
 
     def __post_init__(self) -> None:
         for name, value in self.snapshot().items():
@@ -84,12 +109,36 @@ class HomeostasisComponent:
         self.satiety = _clamp(self.satiety + rates.satiety * dt)
         self.energy = _clamp(self.energy + rates.energy * dt)
         self.stress = _clamp(self.stress + rates.stress * dt)
+        self.hydration = _clamp(self.hydration + rates.hydration * dt)
+        self.social_connection = _clamp(
+            self.social_connection + rates.social_connection * dt
+        )
+        self.happiness = _clamp(self.happiness + rates.happiness * dt)
+        self.fear = _clamp(self.fear + rates.fear * dt)
+
+    def apply_deltas(self, **deltas: float) -> dict[str, float]:
+        unknown = set(deltas) - set(HOMEOSTASIS_FIELDS)
+        if unknown:
+            raise ValueError(f"unknown homeostasis fields: {sorted(unknown)}")
+        actual: dict[str, float] = {}
+        for name in HOMEOSTASIS_FIELDS:
+            if name not in deltas:
+                continue
+            before = float(getattr(self, name))
+            after = _clamp(before + deltas[name])
+            setattr(self, name, after)
+            actual[name] = round(after - before, 12)
+        return actual
 
     def snapshot(self) -> dict[str, JsonValue]:
         return {
             "satiety": self.satiety,
             "energy": self.energy,
             "stress": self.stress,
+            "hydration": self.hydration,
+            "social_connection": self.social_connection,
+            "happiness": self.happiness,
+            "fear": self.fear,
         }
 
 

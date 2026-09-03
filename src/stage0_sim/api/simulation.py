@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.background import BackgroundTask
 
 from stage0_sim.api.persisted_data import router as persisted_data_router
+from stage0_sim.application.checkpoints import CheckpointCompatibilityError
 from stage0_sim.application.data_capture import (
     DatasetQueryFilter,
     DatasetRecordFilter,
@@ -82,16 +83,26 @@ class SpeedRequest(BaseModel):
     speed: float = Field(gt=0)
 
 
+class CheckpointCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str | None = Field(default=None, max_length=120)
+
+
 class VitalsMutationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     satiety: float | None = Field(default=None, ge=0, le=100)
     energy: float | None = Field(default=None, ge=0, le=100)
     stress: float | None = Field(default=None, ge=0, le=100)
+    hydration: float | None = Field(default=None, ge=0, le=100)
+    social_connection: float | None = Field(default=None, ge=0, le=100)
+    happiness: float | None = Field(default=None, ge=0, le=100)
+    fear: float | None = Field(default=None, ge=0, le=100)
 
     @model_validator(mode="after")
     def has_value(self) -> "VitalsMutationRequest":
-        if self.satiety is None and self.energy is None and self.stress is None:
+        if all(value is None for value in self.model_dump().values()):
             raise ValueError("at least one vital must be supplied")
         return self
 
@@ -320,6 +331,67 @@ async def get_snapshot(run_id: str, request: Request) -> dict[str, object]:
         "snapshot_revision": managed.broker.snapshot_revision,
         "snapshot": build_world_snapshot(managed.runner),
     }
+
+
+@router.get("/checkpoints")
+async def list_checkpoints(
+    request: Request,
+    run_id: str | None = None,
+) -> dict[str, object]:
+    manager = get_manager(request)
+    try:
+        checkpoints = manager.list_checkpoints(run_id)
+    except SimulationNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return {
+        "checkpoints": [
+            checkpoint.model_dump(mode="json")
+            for checkpoint in checkpoints
+        ]
+    }
+
+
+@router.get("/runs/{run_id}/checkpoints")
+async def list_run_checkpoints(
+    run_id: str,
+    request: Request,
+) -> dict[str, object]:
+    return await list_checkpoints(request, run_id)
+
+
+@router.post("/runs/{run_id}/checkpoints", status_code=201)
+async def save_run_checkpoint(
+    run_id: str,
+    body: CheckpointCreateRequest,
+    request: Request,
+) -> dict[str, object]:
+    manager = get_manager(request)
+    try:
+        checkpoint = manager.save_checkpoint(run_id, label=body.label)
+    except SimulationNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return checkpoint.model_dump(mode="json")
+
+
+@router.post("/checkpoints/{checkpoint_id}/restore", status_code=201)
+async def restore_run_checkpoint(
+    checkpoint_id: str,
+    request: Request,
+) -> dict[str, object]:
+    manager = get_manager(request)
+    try:
+        result = await manager.restore_checkpoint(checkpoint_id)
+    except SimulationNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except SimulationConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except (CheckpointCompatibilityError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return result.model_dump(mode="json")
 
 
 @router.get("/runs/{run_id}/world/city")

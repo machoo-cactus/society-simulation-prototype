@@ -45,7 +45,7 @@ def _completed_runner(*, run_id: str):
 
 def test_neighborhood_errand_materializes_reusable_physical_places() -> None:
     scenario = _load_scenario()
-    assert scenario.schema_version == 8
+    assert scenario.schema_version == 9
     assert scenario.world is not None
     assert [building.id for building in scenario.world.buildings] == [
         "building-riverbend-home",

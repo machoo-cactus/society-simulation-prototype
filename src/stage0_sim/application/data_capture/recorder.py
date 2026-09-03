@@ -94,6 +94,21 @@ class BufferedResearchRecorder:
         with self._lock:
             return tuple(self._failures)
 
+    @property
+    def next_sequence(self) -> int:
+        with self._lock:
+            return self._next_sequence
+
+    def restore_next_sequence(self, value: int) -> None:
+        if value < 1:
+            raise ValueError("research next sequence must be positive")
+        with self._lock:
+            if self._traces:
+                raise RuntimeError(
+                    "research sequence can only be restored with an empty buffer"
+                )
+            self._next_sequence = value
+
     def subscribe(self, handler: Callable[[ResearchTrace], None]) -> None:
         with self._lock:
             self._subscribers.append(handler)

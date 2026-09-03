@@ -35,7 +35,7 @@ ceilings where both exist.
 
 ## Controller and engagement compiler settings
 
-Scenario source version 8 separates ordinary controller limits from
+Scenario source version 9 separates ordinary controller limits from
 `cognition.engagement_compiler`:
 
 | Scenario field | Default | Purpose |

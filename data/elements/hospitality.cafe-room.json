@@ -29,7 +29,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "8f01659b7c7d2c78e83315178f49afcbbddd4789320cc336f1cb729929553a2d",
+        "content_hash": "c595317b53c736d712f77ee58e23e53945d31d54fb626faab6143d610068aaed",
         "id": "common.exterior-door",
         "kind": "object"
       },
@@ -52,7 +52,7 @@
     },
     {
       "element": {
-        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "content_hash": "102a05246f5f7f0179e88f14bd0c1287e6aeb2c09912e37859a85d4984394017",
         "id": "common.window",
         "kind": "object"
       },
@@ -75,7 +75,7 @@
     },
     {
       "element": {
-        "content_hash": "7a4a70b2cf9f35211859079f4ec9b5ab1cb80a9559affa135e715af8e4157665",
+        "content_hash": "102a05246f5f7f0179e88f14bd0c1287e6aeb2c09912e37859a85d4984394017",
         "id": "common.window",
         "kind": "object"
       },
@@ -98,7 +98,7 @@
     },
     {
       "element": {
-        "content_hash": "feb85de1e89ee551dd300bc105bed5fc56b3cbd811be8a4a342a220af5ebce1d",
+        "content_hash": "c0a6411caf069f2ff563df86c35e0139fa56aa39e742912f4b399a4ef737c9ca",
         "id": "hospitality.cafe-counter",
         "kind": "object"
       },
@@ -124,7 +124,7 @@
     },
     {
       "element": {
-        "content_hash": "9056ba1b9ca1735f0dc1252e4cc377f7fd536eec29a444cab504001c19fcda03",
+        "content_hash": "a50731f99a9617c80f42c6df022647755cb315741ab5385500dd1e98347ceca8",
         "id": "common.bookcase",
         "kind": "object"
       },
@@ -147,7 +147,7 @@
     },
     {
       "element": {
-        "content_hash": "e28cfc0a50a3b1fddc70a6f93b75f4b5ece01de69fa8160fc18f5ecd752af29e",
+        "content_hash": "09d94462120a0c9c5b72a0bcde62ae28156b6f713d6b53e4361007794b560705",
         "id": "common.cabinet",
         "kind": "object"
       },
@@ -170,7 +170,7 @@
     },
     {
       "element": {
-        "content_hash": "4c1cbda8ac2c03fa32c424895c6828b69824561ba5839b2ab7ef0e884d08422b",
+        "content_hash": "060b5d4eb021122d17d19ad41c3825a43db2f26472bc1e344d3108fa0b54b372",
         "id": "common.mug",
         "kind": "object"
       },
@@ -193,7 +193,7 @@
     },
     {
       "element": {
-        "content_hash": "4c1cbda8ac2c03fa32c424895c6828b69824561ba5839b2ab7ef0e884d08422b",
+        "content_hash": "060b5d4eb021122d17d19ad41c3825a43db2f26472bc1e344d3108fa0b54b372",
         "id": "common.mug",
         "kind": "object"
       },
@@ -216,7 +216,7 @@
     },
     {
       "element": {
-        "content_hash": "4d27ea93f35e8840cafe7986cc5021ba05dd368219b7195bb9733ff5488214e4",
+        "content_hash": "08a646af1017534302e8816d85a6beeb7e3d2357a96d302566b6b2975b7e3eef",
         "id": "common.bottle",
         "kind": "object"
       },
@@ -239,7 +239,7 @@
     },
     {
       "element": {
-        "content_hash": "d3d8d4add6788d9267a632d3cda3c042c0dec362367295ae16452d24ac35ba3d",
+        "content_hash": "01742c6fef5eee63cfdb8527ae04d36db237119d8dd32fe08ba17797082f85f6",
         "id": "hospitality.table",
         "kind": "object"
       },
@@ -262,7 +262,7 @@
     },
     {
       "element": {
-        "content_hash": "7e53191886723ee5dcc71198b2f54d5740be2641408217b1baa0d81ce9d01289",
+        "content_hash": "bca332a53bb2aa8d4abfaa374bf55f59b8a9abafb7649dc397c45aa3042b7b37",
         "id": "hospitality.seat",
         "kind": "object"
       },
@@ -285,7 +285,7 @@
     },
     {
       "element": {
-        "content_hash": "7e53191886723ee5dcc71198b2f54d5740be2641408217b1baa0d81ce9d01289",
+        "content_hash": "bca332a53bb2aa8d4abfaa374bf55f59b8a9abafb7649dc397c45aa3042b7b37",
         "id": "hospitality.seat",
         "kind": "object"
       },
@@ -308,7 +308,7 @@
     },
     {
       "element": {
-        "content_hash": "4c1cbda8ac2c03fa32c424895c6828b69824561ba5839b2ab7ef0e884d08422b",
+        "content_hash": "060b5d4eb021122d17d19ad41c3825a43db2f26472bc1e344d3108fa0b54b372",
         "id": "common.mug",
         "kind": "object"
       },
@@ -331,7 +331,7 @@
     },
     {
       "element": {
-        "content_hash": "5ae404a29592e4dd2017629451ce193a9975859c82308badb05b80d73589b508",
+        "content_hash": "80e192738d068d3c644e45efe0e4c314750cca052118dd4bc07ff162e5a33517",
         "id": "common.phone",
         "kind": "object"
       },
@@ -354,7 +354,7 @@
     },
     {
       "element": {
-        "content_hash": "d3d8d4add6788d9267a632d3cda3c042c0dec362367295ae16452d24ac35ba3d",
+        "content_hash": "01742c6fef5eee63cfdb8527ae04d36db237119d8dd32fe08ba17797082f85f6",
         "id": "hospitality.table",
         "kind": "object"
       },
@@ -377,7 +377,7 @@
     },
     {
       "element": {
-        "content_hash": "7e53191886723ee5dcc71198b2f54d5740be2641408217b1baa0d81ce9d01289",
+        "content_hash": "bca332a53bb2aa8d4abfaa374bf55f59b8a9abafb7649dc397c45aa3042b7b37",
         "id": "hospitality.seat",
         "kind": "object"
       },
@@ -400,7 +400,7 @@
     },
     {
       "element": {
-        "content_hash": "7e53191886723ee5dcc71198b2f54d5740be2641408217b1baa0d81ce9d01289",
+        "content_hash": "bca332a53bb2aa8d4abfaa374bf55f59b8a9abafb7649dc397c45aa3042b7b37",
         "id": "hospitality.seat",
         "kind": "object"
       },
@@ -423,7 +423,7 @@
     },
     {
       "element": {
-        "content_hash": "4c1cbda8ac2c03fa32c424895c6828b69824561ba5839b2ab7ef0e884d08422b",
+        "content_hash": "060b5d4eb021122d17d19ad41c3825a43db2f26472bc1e344d3108fa0b54b372",
         "id": "common.mug",
         "kind": "object"
       },
@@ -446,7 +446,7 @@
     },
     {
       "element": {
-        "content_hash": "d3d8d4add6788d9267a632d3cda3c042c0dec362367295ae16452d24ac35ba3d",
+        "content_hash": "01742c6fef5eee63cfdb8527ae04d36db237119d8dd32fe08ba17797082f85f6",
         "id": "hospitality.table",
         "kind": "object"
       },
@@ -469,7 +469,7 @@
     },
     {
       "element": {
-        "content_hash": "7e53191886723ee5dcc71198b2f54d5740be2641408217b1baa0d81ce9d01289",
+        "content_hash": "bca332a53bb2aa8d4abfaa374bf55f59b8a9abafb7649dc397c45aa3042b7b37",
         "id": "hospitality.seat",
         "kind": "object"
       },
@@ -492,7 +492,7 @@
     },
     {
       "element": {
-        "content_hash": "7e53191886723ee5dcc71198b2f54d5740be2641408217b1baa0d81ce9d01289",
+        "content_hash": "bca332a53bb2aa8d4abfaa374bf55f59b8a9abafb7649dc397c45aa3042b7b37",
         "id": "hospitality.seat",
         "kind": "object"
       },
@@ -515,7 +515,7 @@
     },
     {
       "element": {
-        "content_hash": "4c1cbda8ac2c03fa32c424895c6828b69824561ba5839b2ab7ef0e884d08422b",
+        "content_hash": "060b5d4eb021122d17d19ad41c3825a43db2f26472bc1e344d3108fa0b54b372",
         "id": "common.mug",
         "kind": "object"
       },
@@ -538,7 +538,7 @@
     },
     {
       "element": {
-        "content_hash": "fd7435e8b06193bd45186a470ef65f3c2fd1a91eb942da6204a591a60d3e5b03",
+        "content_hash": "e76db100ade704503ad98c71733da23cafa3ac00063ab8e812b155ad9300a1ae",
         "id": "common.book",
         "kind": "object"
       },
@@ -561,7 +561,7 @@
     }
   ],
   "room_type": "CAFE",
-  "schema_version": 4,
+  "schema_version": 5,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

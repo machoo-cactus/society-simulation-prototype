@@ -619,6 +619,40 @@ def test_server_rendered_ui_stages_then_controls_a_run() -> None:
     assert ">Start run</button>" in stopped.text
 
 
+def test_server_rendered_ui_saves_and_restores_checkpoint() -> None:
+    with TestClient(app) as client:
+        client.post("/ui/scenario/example", follow_redirects=True)
+        client.post(
+            "/ui/run/start",
+            data={"speed": "1"},
+            follow_redirects=True,
+        )
+        client.post("/ui/run/control/pause", follow_redirects=True)
+        saved = client.post(
+            "/ui/run/checkpoints",
+            data={"label": "UI restart"},
+            follow_redirects=True,
+        )
+        checkpoint = client.get(
+            "/simulation/checkpoints"
+        ).json()["checkpoints"][0]
+
+    assert "Saved checkpoint at tick" in saved.text
+    assert "UI restart" in saved.text
+    assert "Head" in saved.text
+
+    with TestClient(app) as client:
+        listed = client.get("/ui/")
+        restored = client.post(
+            f"/ui/checkpoints/{checkpoint['checkpoint_id']}/restore",
+            follow_redirects=True,
+        )
+
+    assert "UI restart" in listed.text
+    assert "Restored checkpoint into the paused mainline run." in restored.text
+    assert f"<code>{checkpoint['run_id']}</code>" in restored.text
+
+
 def test_operator_view_allows_no_inspected_character_and_optional_follow() -> None:
     with TestClient(app) as client:
         staged = client.post("/ui/scenario/example", follow_redirects=True)

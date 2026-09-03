@@ -878,6 +878,31 @@ def test_alarming_listener_stress_clamps_with_explicit_effect_evidence() -> None
     runner.stop()
 
 
+def test_configured_social_and_fear_effects_apply_on_committed_engagement() -> None:
+    payload = _scenario(blair_x=1).model_dump(mode="json")
+    payload["homeostasis"].update(
+        {
+            "social_connection_delta": 3,
+            "social_happiness_delta": 1,
+            "alarming_fear_delta": 8,
+        }
+    )
+    runner = create_runner(
+        ScenarioDefinition.model_validate(payload),
+        model_client=ScriptedModelClient(
+            (_engage_turn(), _compiled_turn(_auditory_group()))
+        ),
+    )
+
+    runner.run_for(2)
+
+    alex = runner.registry.get_component("alex", HomeostasisComponent)
+    blair = runner.registry.get_component("blair", HomeostasisComponent)
+    assert (alex.social_connection, alex.happiness, alex.fear) == (53, 51, 0)
+    assert (blair.social_connection, blair.happiness, blair.fear) == (53, 51, 8)
+    runner.stop()
+
+
 def test_rejected_engage_arguments_do_not_expose_private_input() -> None:
     private_intent = "PRIVATE ENGAGEMENT INTENT"
     private_reason = "PRIVATE CONTROLLER REASON"

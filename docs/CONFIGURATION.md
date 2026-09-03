@@ -33,6 +33,40 @@ Scenario cognition settings can impose stricter per-run timeout, concurrency,
 request, input-token, and output-token limits, but cannot exceed deployment
 ceilings where both exist.
 
+## Controller and engagement compiler settings
+
+Scenario source version 8 separates ordinary controller limits from
+`cognition.engagement_compiler`:
+
+| Scenario field | Default | Purpose |
+| --- | ---: | --- |
+| `cognition.engagement_compiler.model_profile` | `default` | Model profile for `engagement_compilation` |
+| `timeout_seconds` | `30` | Compiler request timeout |
+| `max_output_tokens` | `768` | Per-response compiler limit |
+| `max_concurrency` | `2` | Concurrent compiler work |
+| `max_requests` | unset | Per-run compiler request budget |
+| `max_input_tokens` | unset | Per-run compiler input-token budget |
+| `max_total_output_tokens` | unset | Per-run compiler output-token budget |
+
+These counters are independent from the controller's corresponding cognition
+budgets. Both operations use the same configured `ModelClient`, provider
+endpoint, deployment output-token ceiling, and deployment concurrency ceiling.
+Changing the compiler model profile does not create a second provider client.
+`STAGE0_LLM_RECORD_PATH` records both operations, and the `replay` provider
+replays both by request hash. Provider failure, timeout, or budget exhaustion
+fails compilation explicitly.
+
+Top-level scenario `engagement` settings configure validation bands and domain
+effects: group/invocation/public-text limits; short/medium/long activity
+durations; low/medium/high effort energy costs; calming/activating stress
+deltas; quiet/normal/loud sound ranges; and the bounded alarming-listener
+stress delta. They are simulation policy, not model-supplied numeric writes.
+
+The bundled `stage0-fake-llm` endpoint distinguishes ordinary character
+controller requests from `engagement_compilation` requests and returns strict
+deterministic `compile_engagement` calls for expressive, auditory, and bounded
+activity examples. See `examples\scenarios\engagement-demo.json`.
+
 ## Catalogs and examples
 
 The `data\` libraries are writable and ignored by Git. Tracked examples under
@@ -50,3 +84,6 @@ python -m uvicorn stage0_sim.api.app:app --host 0.0.0.0 --port 8080
 The application provides no authentication layer. Do not expose operator,
 dataset, or private-export routes to untrusted networks without an appropriate
 deployment boundary.
+
+See [LLM operations and smoke testing](LLM_OPERATIONS.md) for bounded live
+provider checks, recording/replay, and local or rented endpoint guidance.

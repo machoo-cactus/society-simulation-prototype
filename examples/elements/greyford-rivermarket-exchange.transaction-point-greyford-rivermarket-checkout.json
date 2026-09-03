@@ -15,7 +15,7 @@
   "kind": "object",
   "name": "Bottle Return and Checkout Counter",
   "npc_role": {
-    "content_hash": "541d35d699e2fe49c155e069b3b1399486ee38e616b9f267431bdf789c1a6dfb",
+    "content_hash": "2b7d6cdc420c82cf9d09913e1f5bdfb7731d94cbc137fcd79fd35267a30e92cf",
     "id": "rivermarket-cashier",
     "kind": "npc_role"
   },
@@ -61,6 +61,7 @@
     "capabilities": {
       "consumable": null,
       "container": null,
+      "content_endpoints": [],
       "openable": null,
       "portable": null,
       "readable": null,
@@ -94,6 +95,6 @@
     "owner_id": null
   },
   "request_timeout": 60.0,
-  "schema_version": 3,
+  "schema_version": 4,
   "supported_actions": null
 }

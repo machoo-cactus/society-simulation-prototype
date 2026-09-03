@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "f8d953b8aa1419acfc3b03fbb4459cec0edeb4487f373c70480c05c95eb5ac87",
+        "content_hash": "85e40319b6794f404760d8c3d33e1a23ea643ee7989a14e1ce2eb96240652693",
         "id": "greyford-office-evening.station-greyford-river-library-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

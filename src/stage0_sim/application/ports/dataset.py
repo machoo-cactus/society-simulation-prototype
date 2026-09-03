@@ -24,6 +24,17 @@ class DatasetCaptureRepository(MemoryPersistence, Protocol):
         scenario: dict[str, JsonValue],
     ) -> None: ...
 
+    def save_text_content_snapshot(
+        self,
+        run_id: str,
+        snapshot: dict[str, JsonValue],
+    ) -> None: ...
+
+    def load_text_content_snapshot(
+        self,
+        run_id: str,
+    ) -> dict[str, JsonValue] | None: ...
+
     def append(self, record: DatasetRecord) -> None: ...
 
     def add_record_relation(self, relation: RecordRelation) -> None: ...
@@ -354,7 +365,82 @@ class DatasetCaptureRepository(MemoryPersistence, Protocol):
         action_id: str | None = None,
         decision_id: str | None = None,
         tool_call_id: str | None = None,
+        engagement_id: str | None = None,
         correlation_id: str | None = None,
+    ) -> None: ...
+
+    def append_engagement(
+        self,
+        *,
+        run_id: str,
+        engagement_id: str,
+        record_id: str,
+        actor_id: str,
+        action_id: str | None,
+        plan_id: str | None,
+        plan_revision: int | None,
+        decision_id: str | None,
+        tool_call_id: str | None,
+        compiler_request_id: str | None,
+        root_correlation_id: str | None,
+        referenced_ids: tuple[str, ...] | None,
+        scene_hash: str | None,
+        scene_version: str | None,
+        catalog_version: str | None,
+        prompt_version: str | None,
+        status: str,
+        compiler_status: str | None,
+        private_intent: str | None,
+        private_controller_reason: str | None,
+        private_compiler_summary: str | None,
+        private_proposal: dict[str, JsonValue] | None,
+        private_result: dict[str, JsonValue] | None,
+        requested_tick: int,
+        requested_at: float,
+        started_tick: int | None,
+        started_at: float | None,
+        terminal_tick: int | None,
+        terminal_at: float | None,
+        terminal_outcome: str | None,
+    ) -> None: ...
+
+    def append_engagement_group(
+        self,
+        *,
+        run_id: str,
+        engagement_id: str,
+        engagement_group_id: str,
+        record_id: str,
+        ordinal: int | None,
+        required_atomic: bool | None,
+        validation_status: str,
+        execution_status: str,
+        status: str,
+        private_rejection_reason: str | None,
+        failure_reason: str | None,
+        private_issues: list[JsonValue] | None,
+        private_proposal: dict[str, JsonValue] | None,
+        grounded_outcome: dict[str, JsonValue],
+    ) -> None: ...
+
+    def append_engagement_invocation(
+        self,
+        *,
+        run_id: str,
+        engagement_id: str,
+        engagement_group_id: str,
+        engagement_invocation_id: str,
+        record_id: str,
+        ordinal: int | None,
+        capability: str | None,
+        consequence_tier: int | None,
+        subject_id: str | None,
+        target_id: str | None,
+        status: str,
+        private_proposal_arguments: dict[str, JsonValue] | None,
+        private_normalized_arguments: dict[str, JsonValue] | None,
+        private_result: dict[str, JsonValue] | None,
+        grounded_outcome: dict[str, JsonValue],
     ) -> None: ...
 
     def append_interaction_participant(
@@ -397,6 +483,7 @@ class DatasetCaptureRepository(MemoryPersistence, Protocol):
         initiating_decision_id: str | None,
         initiating_action_id: str | None,
         initiating_tool_call_id: str | None,
+        initiating_engagement_id: str | None,
         content_visibility: str,
         episode: dict[str, JsonValue],
         interaction_verb: str | None = None,

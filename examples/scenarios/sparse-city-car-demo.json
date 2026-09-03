@@ -5,6 +5,15 @@
   },
   "cognition": {
     "decision_timeout_seconds": 30.0,
+    "engagement_compiler": {
+      "max_concurrency": 2,
+      "max_input_tokens": null,
+      "max_output_tokens": 768,
+      "max_requests": null,
+      "max_total_output_tokens": null,
+      "model_profile": "default",
+      "timeout_seconds": 30.0
+    },
     "max_concurrency": 4,
     "max_input_tokens": null,
     "max_output_tokens": 512,
@@ -18,13 +27,33 @@
       "navigate_to",
       "perform",
       "say",
+      "engage",
       "wait",
       "skip",
       "transact",
-      "check_environment"
+      "check_environment",
+      "read_text",
+      "write_text"
     ]
   },
   "dt": 1.0,
+  "engagement": {
+    "activating_stress_delta": 2.0,
+    "alarming_listener_stress_delta": 2.0,
+    "calming_stress_delta": -2.0,
+    "high_effort_energy_cost": 6.0,
+    "long_activity_seconds": 30.0,
+    "loud_sound_range": 20,
+    "low_effort_energy_cost": 1.0,
+    "max_groups": 4,
+    "max_invocations_per_group": 4,
+    "max_public_text_chars": 280,
+    "medium_activity_seconds": 15.0,
+    "medium_effort_energy_cost": 3.0,
+    "normal_sound_range": 10,
+    "quiet_sound_range": 2,
+    "short_activity_seconds": 5.0
+  },
   "entities": [
     {
       "components": {
@@ -144,7 +173,7 @@
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 6,
+  "schema_version": 8,
   "seed": 20260830,
   "speed": 20.0,
   "system1": {
@@ -154,6 +183,12 @@
       "ENERGY",
       "STRESS"
     ]
+  },
+  "text_content": {
+    "addresses": [],
+    "artifacts": [],
+    "collections": [],
+    "groups": []
   },
   "weather": null,
   "world": {
@@ -180,7 +215,7 @@
               "y": 1400.0
             },
             "element": {
-              "content_hash": "45e5271ba11bb01f7e690b6caae0d7c97e13ba16707f08db713c8b743a6a9604",
+              "content_hash": "0f18716d4701eecded00d67aa1e9ef275e938ea667498f75c356db6ab6347f7d",
               "id": "sparse-city-car-demo.building-home",
               "kind": "building"
             },
@@ -238,7 +273,7 @@
               "y": 1400.0
             },
             "element": {
-              "content_hash": "48b6d524c467093205c13c8bc38971689c6350dd40c6eb49c738dbc00d7eb569",
+              "content_hash": "be5261fdcf3a77a4b11ddb10a9cecd5d618a09c8985f262fb201289d78672554",
               "id": "sparse-city-car-demo.building-office",
               "kind": "building"
             },

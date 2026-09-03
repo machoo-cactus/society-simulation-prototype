@@ -71,6 +71,9 @@ _ANALYSIS_TABLES = (
     "tool_executions",
     "action_instances",
     "action_transitions",
+    "engagements",
+    "engagement_groups",
+    "engagement_invocations",
     "interactions",
     "interaction_participants",
     "interaction_events",
@@ -97,6 +100,9 @@ _DOMAIN_ID_COLUMNS = (
     "model_request_id",
     "tool_call_id",
     "interaction_id",
+    "engagement_id",
+    "engagement_group_id",
+    "engagement_invocation_id",
     "perception_fact_id",
     "memory_id",
     "transaction_request_id",
@@ -106,7 +112,8 @@ _FEATURE_SCHEMA_VERSIONS = {
     "stage0.feature.action_episode": "1",
     "stage0.feature.decision_episode": "1",
     "stage0.feature.goal_episode": "1",
-    "stage0.feature.interaction_episode": "1",
+    "stage0.feature.engagement": "1",
+    "stage0.feature.interaction_episode": "2",
     "stage0.feature.opportunity_sample": "1",
     "stage0.feature.character_physical_state": "2",
     "stage0.feature.physical_object_state": "2",
@@ -115,6 +122,38 @@ _FEATURE_SCHEMA_VERSIONS = {
     "stage0.feature.resource_flow": "1",
     "stage0.feature.resource_sample": "1",
     "stage0.feature.transition_sample": "1",
+}
+_PRIVATE_TABLE_COLUMNS = {
+    "engagements": frozenset(
+        {
+            "referenced_ids_json",
+            "scene_hash",
+            "scene_version",
+            "catalog_version",
+            "prompt_version",
+            "compiler_request_id",
+            "private_intent",
+            "private_controller_reason",
+            "private_compiler_summary",
+            "private_proposal_json",
+            "private_result_json",
+        }
+    ),
+    "engagement_groups": frozenset(
+        {
+            "private_rejection_reason",
+            "private_issues_json",
+            "private_proposal_json",
+        }
+    ),
+    "engagement_invocations": frozenset(
+        {
+            "target_id",
+            "private_proposal_arguments_json",
+            "private_normalized_arguments_json",
+            "private_result_json",
+        }
+    ),
 }
 
 class SQLiteDatasetStore:
@@ -236,11 +275,12 @@ class SQLiteDatasetStore:
                 related_entity_ids_json, source_event_id, causation_id,
                 correlation_id, goal_id, plan_id, action_id, decision_id,
                 model_request_id, tool_call_id, interaction_id,
+                engagement_id, engagement_group_id, engagement_invocation_id,
                 perception_fact_id, memory_id, transaction_request_id,
                 operator_intervention_id, source_metadata_json, payload_json
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -269,6 +309,9 @@ class SQLiteDatasetStore:
                 record.joins.model_request_id,
                 record.joins.tool_call_id,
                 record.joins.interaction_id,
+                record.joins.engagement_id,
+                record.joins.engagement_group_id,
+                record.joins.engagement_invocation_id,
                 record.joins.perception_fact_id,
                 record.joins.memory_id,
                 record.joins.transaction_request_id,
@@ -1182,6 +1225,7 @@ class SQLiteDatasetStore:
         action_id: str | None = None,
         decision_id: str | None = None,
         tool_call_id: str | None = None,
+        engagement_id: str | None = None,
         correlation_id: str | None = None,
     ) -> None:
         self._connection.execute(
@@ -1190,10 +1234,10 @@ class SQLiteDatasetStore:
                 run_id, interaction_id, record_id, interaction_type,
                 interaction_verb, actor_id, target_id, destination_id,
                 slot_id, goal_id, action_id, decision_id, tool_call_id,
-                correlation_id, start_tick, end_tick, status, context_json,
-                outcome_json
+                engagement_id, correlation_id, start_tick, end_tick, status,
+                context_json, outcome_json
             ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -1210,12 +1254,364 @@ class SQLiteDatasetStore:
                 action_id,
                 decision_id,
                 tool_call_id,
+                engagement_id,
                 correlation_id,
                 start_tick,
                 end_tick,
                 status,
                 _json(context),
                 _json(outcome or {}),
+            ),
+        )
+
+    def append_engagement(
+        self,
+        *,
+        run_id: str,
+        engagement_id: str,
+        record_id: str,
+        actor_id: str,
+        action_id: str | None,
+        plan_id: str | None,
+        plan_revision: int | None,
+        decision_id: str | None,
+        tool_call_id: str | None,
+        compiler_request_id: str | None,
+        root_correlation_id: str | None,
+        referenced_ids: tuple[str, ...] | None,
+        scene_hash: str | None,
+        scene_version: str | None,
+        catalog_version: str | None,
+        prompt_version: str | None,
+        status: str,
+        compiler_status: str | None,
+        private_intent: str | None,
+        private_controller_reason: str | None,
+        private_compiler_summary: str | None,
+        private_proposal: dict[str, JsonValue] | None,
+        private_result: dict[str, JsonValue] | None,
+        requested_tick: int,
+        requested_at: float,
+        started_tick: int | None,
+        started_at: float | None,
+        terminal_tick: int | None,
+        terminal_at: float | None,
+        terminal_outcome: str | None,
+    ) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO engagements (
+                run_id, engagement_id, record_id, actor_id, action_id,
+                plan_id, plan_revision, decision_id, tool_call_id,
+                compiler_request_id, root_correlation_id, referenced_ids_json,
+                scene_hash, scene_version, catalog_version, prompt_version,
+                status, compiler_status, private_intent,
+                private_controller_reason, private_compiler_summary,
+                private_proposal_json, private_result_json, requested_tick,
+                requested_at, started_tick, started_at, terminal_tick,
+                terminal_at, terminal_outcome
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ON CONFLICT(run_id, engagement_id) DO UPDATE SET
+                record_id = excluded.record_id,
+                actor_id = excluded.actor_id,
+                action_id = COALESCE(excluded.action_id, engagements.action_id),
+                plan_id = COALESCE(excluded.plan_id, engagements.plan_id),
+                plan_revision = COALESCE(
+                    excluded.plan_revision, engagements.plan_revision
+                ),
+                decision_id = COALESCE(
+                    excluded.decision_id, engagements.decision_id
+                ),
+                tool_call_id = COALESCE(
+                    excluded.tool_call_id, engagements.tool_call_id
+                ),
+                compiler_request_id = COALESCE(
+                    excluded.compiler_request_id,
+                    engagements.compiler_request_id
+                ),
+                root_correlation_id = COALESCE(
+                    excluded.root_correlation_id,
+                    engagements.root_correlation_id
+                ),
+                referenced_ids_json = COALESCE(
+                    excluded.referenced_ids_json,
+                    engagements.referenced_ids_json
+                ),
+                scene_hash = COALESCE(
+                    excluded.scene_hash, engagements.scene_hash
+                ),
+                scene_version = COALESCE(
+                    excluded.scene_version, engagements.scene_version
+                ),
+                catalog_version = COALESCE(
+                    excluded.catalog_version, engagements.catalog_version
+                ),
+                prompt_version = COALESCE(
+                    excluded.prompt_version, engagements.prompt_version
+                ),
+                status = excluded.status,
+                compiler_status = COALESCE(
+                    excluded.compiler_status, engagements.compiler_status
+                ),
+                private_intent = COALESCE(
+                    excluded.private_intent, engagements.private_intent
+                ),
+                private_controller_reason = COALESCE(
+                    excluded.private_controller_reason,
+                    engagements.private_controller_reason
+                ),
+                private_compiler_summary = COALESCE(
+                    excluded.private_compiler_summary,
+                    engagements.private_compiler_summary
+                ),
+                private_proposal_json = COALESCE(
+                    excluded.private_proposal_json,
+                    engagements.private_proposal_json
+                ),
+                private_result_json = COALESCE(
+                    excluded.private_result_json,
+                    engagements.private_result_json
+                ),
+                requested_tick = MIN(
+                    excluded.requested_tick, engagements.requested_tick
+                ),
+                requested_at = MIN(
+                    excluded.requested_at, engagements.requested_at
+                ),
+                started_tick = COALESCE(
+                    engagements.started_tick, excluded.started_tick
+                ),
+                started_at = COALESCE(
+                    engagements.started_at, excluded.started_at
+                ),
+                terminal_tick = COALESCE(
+                    excluded.terminal_tick, engagements.terminal_tick
+                ),
+                terminal_at = COALESCE(
+                    excluded.terminal_at, engagements.terminal_at
+                ),
+                terminal_outcome = COALESCE(
+                    excluded.terminal_outcome,
+                    engagements.terminal_outcome
+                )
+            """,
+            (
+                run_id,
+                engagement_id,
+                record_id,
+                actor_id,
+                action_id,
+                plan_id,
+                plan_revision,
+                decision_id,
+                tool_call_id,
+                compiler_request_id,
+                root_correlation_id,
+                (
+                    _json(list(referenced_ids))
+                    if referenced_ids is not None
+                    else None
+                ),
+                scene_hash,
+                scene_version,
+                catalog_version,
+                prompt_version,
+                status,
+                compiler_status,
+                private_intent,
+                private_controller_reason,
+                private_compiler_summary,
+                _json(private_proposal) if private_proposal is not None else None,
+                _json(private_result) if private_result is not None else None,
+                requested_tick,
+                requested_at,
+                started_tick,
+                started_at,
+                terminal_tick,
+                terminal_at,
+                terminal_outcome,
+            ),
+        )
+
+    def append_engagement_group(
+        self,
+        *,
+        run_id: str,
+        engagement_id: str,
+        engagement_group_id: str,
+        record_id: str,
+        ordinal: int | None,
+        required_atomic: bool | None,
+        validation_status: str,
+        execution_status: str,
+        status: str,
+        private_rejection_reason: str | None,
+        failure_reason: str | None,
+        private_issues: list[JsonValue] | None,
+        private_proposal: dict[str, JsonValue] | None,
+        grounded_outcome: dict[str, JsonValue],
+    ) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO engagement_groups (
+                run_id, engagement_id, engagement_group_id, record_id,
+                ordinal, required_atomic, validation_status,
+                execution_status, status, private_rejection_reason,
+                failure_reason, private_issues_json, private_proposal_json,
+                grounded_outcome_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id, engagement_id, engagement_group_id) DO UPDATE SET
+                record_id = excluded.record_id,
+                ordinal = COALESCE(
+                    excluded.ordinal, engagement_groups.ordinal
+                ),
+                required_atomic = COALESCE(
+                    excluded.required_atomic,
+                    engagement_groups.required_atomic
+                ),
+                validation_status = excluded.validation_status,
+                execution_status = excluded.execution_status,
+                status = excluded.status,
+                private_rejection_reason = COALESCE(
+                    excluded.private_rejection_reason,
+                    engagement_groups.private_rejection_reason
+                ),
+                failure_reason = COALESCE(
+                    excluded.failure_reason,
+                    engagement_groups.failure_reason
+                ),
+                private_issues_json = COALESCE(
+                    excluded.private_issues_json,
+                    engagement_groups.private_issues_json
+                ),
+                private_proposal_json = COALESCE(
+                    excluded.private_proposal_json,
+                    engagement_groups.private_proposal_json
+                ),
+                grounded_outcome_json = CASE
+                    WHEN excluded.grounded_outcome_json = '{}'
+                    THEN engagement_groups.grounded_outcome_json
+                    ELSE excluded.grounded_outcome_json
+                END
+            """,
+            (
+                run_id,
+                engagement_id,
+                engagement_group_id,
+                record_id,
+                ordinal,
+                (
+                    int(required_atomic)
+                    if required_atomic is not None
+                    else None
+                ),
+                validation_status,
+                execution_status,
+                status,
+                private_rejection_reason,
+                failure_reason,
+                _json(private_issues) if private_issues is not None else None,
+                _json(private_proposal) if private_proposal is not None else None,
+                _json(grounded_outcome),
+            ),
+        )
+
+    def append_engagement_invocation(
+        self,
+        *,
+        run_id: str,
+        engagement_id: str,
+        engagement_group_id: str,
+        engagement_invocation_id: str,
+        record_id: str,
+        ordinal: int | None,
+        capability: str | None,
+        consequence_tier: int | None,
+        subject_id: str | None,
+        target_id: str | None,
+        status: str,
+        private_proposal_arguments: dict[str, JsonValue] | None,
+        private_normalized_arguments: dict[str, JsonValue] | None,
+        private_result: dict[str, JsonValue] | None,
+        grounded_outcome: dict[str, JsonValue],
+    ) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO engagement_invocations (
+                run_id, engagement_id, engagement_group_id,
+                engagement_invocation_id, record_id, ordinal, capability,
+                consequence_tier, subject_id, target_id, status,
+                private_proposal_arguments_json,
+                private_normalized_arguments_json, private_result_json,
+                grounded_outcome_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(
+                run_id, engagement_id, engagement_group_id,
+                engagement_invocation_id
+            ) DO UPDATE SET
+                record_id = excluded.record_id,
+                ordinal = COALESCE(
+                    excluded.ordinal, engagement_invocations.ordinal
+                ),
+                capability = COALESCE(
+                    excluded.capability, engagement_invocations.capability
+                ),
+                consequence_tier = COALESCE(
+                    excluded.consequence_tier,
+                    engagement_invocations.consequence_tier
+                ),
+                subject_id = COALESCE(
+                    excluded.subject_id, engagement_invocations.subject_id
+                ),
+                target_id = COALESCE(
+                    excluded.target_id, engagement_invocations.target_id
+                ),
+                status = excluded.status,
+                private_proposal_arguments_json = COALESCE(
+                    excluded.private_proposal_arguments_json,
+                    engagement_invocations.private_proposal_arguments_json
+                ),
+                private_normalized_arguments_json = COALESCE(
+                    excluded.private_normalized_arguments_json,
+                    engagement_invocations.private_normalized_arguments_json
+                ),
+                private_result_json = COALESCE(
+                    excluded.private_result_json,
+                    engagement_invocations.private_result_json
+                ),
+                grounded_outcome_json = CASE
+                    WHEN excluded.grounded_outcome_json = '{}'
+                    THEN engagement_invocations.grounded_outcome_json
+                    ELSE excluded.grounded_outcome_json
+                END
+            """,
+            (
+                run_id,
+                engagement_id,
+                engagement_group_id,
+                engagement_invocation_id,
+                record_id,
+                ordinal,
+                capability,
+                consequence_tier,
+                subject_id,
+                target_id,
+                status,
+                (
+                    _json(private_proposal_arguments)
+                    if private_proposal_arguments is not None
+                    else None
+                ),
+                (
+                    _json(private_normalized_arguments)
+                    if private_normalized_arguments is not None
+                    else None
+                ),
+                _json(private_result) if private_result is not None else None,
+                _json(grounded_outcome),
             ),
         )
 
@@ -1285,6 +1681,7 @@ class SQLiteDatasetStore:
         initiating_decision_id: str | None,
         initiating_action_id: str | None,
         initiating_tool_call_id: str | None,
+        initiating_engagement_id: str | None,
         content_visibility: str,
         episode: dict[str, JsonValue],
         interaction_verb: str | None = None,
@@ -1302,11 +1699,11 @@ class SQLiteDatasetStore:
                 slot_id, status, start_tick, terminal_tick, started_at,
                 terminal_at, duration, initiating_goal_id,
                 initiating_decision_id, initiating_action_id,
-                initiating_tool_call_id, correlation_id, content_visibility,
-                episode_json
+                initiating_tool_call_id, initiating_engagement_id,
+                correlation_id, content_visibility, episode_json
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?
+                ?, ?, ?, ?
             )
             """,
             (
@@ -1329,6 +1726,7 @@ class SQLiteDatasetStore:
                 initiating_decision_id,
                 initiating_action_id,
                 initiating_tool_call_id,
+                initiating_engagement_id,
                 correlation_id,
                 content_visibility,
                 _json(episode),
@@ -2427,6 +2825,11 @@ class SQLiteDatasetStore:
                 clauses.append(f"r.{column} = ?")
                 parameters.append(value)
         if query.primary_entity_id is not None:
+            private_columns = (
+                _PRIVATE_TABLE_COLUMNS.get(table, frozenset())
+                if not query.include_private
+                else frozenset()
+            )
             entity_clauses = [
                 f"p.{column} = ?"
                 for column in (
@@ -2438,7 +2841,7 @@ class SQLiteDatasetStore:
                     "target_id",
                     "destination_id",
                 )
-                if column in columns
+                if column in columns and column not in private_columns
             ]
             entity_parameters = [query.primary_entity_id] * len(entity_clauses)
             entity_clauses.append("r.subject_id = ?")
@@ -2616,7 +3019,15 @@ class SQLiteDatasetStore:
         ).fetchall()
         has_more = len(rows) > query.limit
         page_rows = rows[: query.limit]
-        result = tuple(_json_safe_row(row) for row in page_rows)
+        result_rows: list[dict[str, JsonValue]] = []
+        private_columns = _PRIVATE_TABLE_COLUMNS.get(table, frozenset())
+        for row in page_rows:
+            item = _json_safe_row(row)
+            if not query.include_private:
+                for column in private_columns:
+                    item.pop(column.removesuffix("_json"), None)
+            result_rows.append(item)
+        result = tuple(result_rows)
         next_cursor = None
         if has_more and page_rows:
             last = page_rows[-1]
@@ -2760,6 +3171,11 @@ class SQLiteDatasetStore:
             table_fields: list[JsonValue] = []
             for row in self._connection.execute(f"PRAGMA table_info({table})"):
                 name = str(row["name"])
+                if (
+                    not include_private
+                    and name in _PRIVATE_TABLE_COLUMNS.get(table, frozenset())
+                ):
+                    continue
                 table_fields.append(
                     {
                         "name": name,
@@ -2806,6 +3222,10 @@ class SQLiteDatasetStore:
             "feature_schema_versions": dict(sorted(_FEATURE_SCHEMA_VERSIONS.items())),
             "normalized_and_derived_tables": tables,
             "observed_record_schemas": observed_schemas,
+            "retention": {
+                "policy": "explicit_guarded_run_deletion_only",
+                "run_scoped_tables": list(RUN_SCOPED_TABLES),
+            },
         }
 
     def write_analysis_bundle(
@@ -2930,6 +3350,9 @@ class SQLiteDatasetStore:
                     "initial_speed": float(run["initial_speed"]),
                     "scenario": json.loads(str(run["scenario_json"])),
                     "status": str(run["status"]),
+                    "retention_policy": (
+                        "explicit_guarded_run_deletion_only"
+                    ),
                     "final_tick": (
                         int(run["final_tick"])
                         if run["final_tick"] is not None
@@ -2990,6 +3413,34 @@ class SQLiteDatasetStore:
                 )
                 yield _json(record.to_dict())
                 next_sequence += 1
+            snapshot_row = export_connection.execute(
+                """
+                SELECT snapshot_json
+                FROM text_content_snapshots
+                WHERE run_id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+            if snapshot_row is not None:
+                snapshot = json.loads(str(snapshot_row["snapshot_json"]))
+                if not isinstance(snapshot, dict):
+                    raise ValueError(
+                        "persisted text content snapshot must be an object"
+                    )
+                record = DatasetRecord(
+                    run_id=run_id,
+                    sequence=next_sequence,
+                    record_type="text_content_snapshot",
+                    simulation_tick=0,
+                    simulation_time=0.0,
+                    source_event_id=None,
+                    payload=cast(dict[str, JsonValue], snapshot),
+                    schema_id="stage0.text-content.v1",
+                    category=RecordCategory.INFORMATION,
+                    source=RecordSource.APPLICATION,
+                    visibility=RecordVisibility.PRIVATE_RESEARCH,
+                )
+                yield _json(record.to_dict())
         finally:
             export_connection.close()
 
@@ -3053,6 +3504,7 @@ class SQLiteDatasetStore:
                 "record_type",
                 include_private=include_private,
             ),
+            "retention_policy": "explicit_guarded_run_deletion_only",
             "category_counts": self._counts(
                 run_id,
                 "category",
@@ -3106,6 +3558,24 @@ class SQLiteDatasetStore:
                     "status",
                     include_private=include_private,
                 ),
+                "engagements": self._table_counts(
+                    run_id,
+                    "engagements",
+                    "status",
+                    include_private=include_private,
+                ),
+                "engagement_groups": self._table_counts(
+                    run_id,
+                    "engagement_groups",
+                    "status",
+                    include_private=include_private,
+                ),
+                "engagement_invocations": self._table_counts(
+                    run_id,
+                    "engagement_invocations",
+                    "status",
+                    include_private=include_private,
+                ),
                 "interactions": self._table_counts(
                     run_id,
                     "interactions",
@@ -3150,6 +3620,12 @@ class SQLiteDatasetStore:
                     "status",
                     include_private=include_private,
                 ),
+                "engagements": self._table_counts(
+                    run_id,
+                    "engagements",
+                    "terminal_outcome",
+                    include_private=include_private,
+                ),
             },
             "derived_feature_counts": {
                 table: self._linked_table_count(
@@ -3169,6 +3645,9 @@ class SQLiteDatasetStore:
                     "resource_flows",
                     "physical_object_states",
                     "physical_relation_samples",
+                    "engagements",
+                    "engagement_groups",
+                    "engagement_invocations",
                 )
             },
             "feature_family_counts": {
@@ -3190,6 +3669,11 @@ class SQLiteDatasetStore:
                 "interactions": self._linked_table_count(
                     run_id,
                     "interaction_episodes",
+                    include_private=include_private,
+                ),
+                "engagements": self._linked_table_count(
+                    run_id,
+                    "engagements",
                     include_private=include_private,
                 ),
                 "transitions": self._linked_table_count(
@@ -3234,6 +3718,7 @@ class SQLiteDatasetStore:
                 run_id,
                 include_private=include_private,
             ),
+            "engagement_integrity": self._engagement_integrity(run_id),
         }
 
     def _counts(
@@ -3440,6 +3925,77 @@ class SQLiteDatasetStore:
             "distributions": distributions,
         }
 
+    def _engagement_integrity(
+        self,
+        run_id: str,
+    ) -> dict[str, JsonValue]:
+        orphan_groups = int(
+            self._connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM engagement_groups g
+                LEFT JOIN engagements e
+                  ON e.run_id = g.run_id
+                 AND e.engagement_id = g.engagement_id
+                WHERE g.run_id = ? AND e.engagement_id IS NULL
+                """,
+                (run_id,),
+            ).fetchone()[0]
+        )
+        orphan_invocations = int(
+            self._connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM engagement_invocations i
+                LEFT JOIN engagement_groups g
+                  ON g.run_id = i.run_id
+                 AND g.engagement_id = i.engagement_id
+                 AND g.engagement_group_id = i.engagement_group_id
+                WHERE i.run_id = ? AND g.engagement_group_id IS NULL
+                """,
+                (run_id,),
+            ).fetchone()[0]
+        )
+        invalid_records = int(
+            self._connection.execute(
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT e.record_id
+                    FROM engagements e
+                    LEFT JOIN records r
+                      ON r.run_id = e.run_id
+                     AND r.record_id = e.record_id
+                    WHERE e.run_id = ? AND r.record_id IS NULL
+                    UNION ALL
+                    SELECT g.record_id
+                    FROM engagement_groups g
+                    LEFT JOIN records r
+                      ON r.run_id = g.run_id
+                     AND r.record_id = g.record_id
+                    WHERE g.run_id = ? AND r.record_id IS NULL
+                    UNION ALL
+                    SELECT i.record_id
+                    FROM engagement_invocations i
+                    LEFT JOIN records r
+                      ON r.run_id = i.run_id
+                     AND r.record_id = i.record_id
+                    WHERE i.run_id = ? AND r.record_id IS NULL
+                )
+                """,
+                (run_id, run_id, run_id),
+            ).fetchone()[0]
+        )
+        return {
+            "valid": (
+                orphan_groups == 0
+                and orphan_invocations == 0
+                and invalid_records == 0
+            ),
+            "orphan_group_count": orphan_groups,
+            "orphan_invocation_count": orphan_invocations,
+            "invalid_record_link_count": invalid_records,
+        }
+
     def _require_run(self, run_id: str) -> sqlite3.Row:
         row = self._connection.execute(
             "SELECT * FROM runs WHERE run_id = ?",
@@ -3495,6 +4051,11 @@ class SQLiteDatasetStore:
         columns = [
             str(row["name"])
             for row in self._connection.execute(f"PRAGMA table_info({table})")
+            if (
+                filters.include_private
+                or str(row["name"])
+                not in _PRIVATE_TABLE_COLUMNS.get(table, frozenset())
+            )
         ]
         export_columns = [
             *columns,
@@ -3559,6 +4120,9 @@ class SQLiteDatasetStore:
                 )
             )
             for table in (
+                "engagement_invocations",
+                "engagement_groups",
+                "engagements",
                 "interaction_events",
                 "interaction_participants",
                 "interaction_episodes",
@@ -3608,6 +4172,9 @@ class SQLiteDatasetStore:
                     "resource_flows",
                     "physical_object_states",
                     "physical_relation_samples",
+                    "engagements",
+                    "engagement_groups",
+                    "engagement_invocations",
                 )
             },
         }
@@ -3648,6 +4215,11 @@ class SQLiteDatasetStore:
                 tool_call_id=(
                     str(record.joins.tool_call_id)
                     if record.joins.tool_call_id is not None
+                    else None
+                ),
+                engagement_id=(
+                    str(record.joins.engagement_id)
+                    if record.joins.engagement_id is not None
                     else None
                 ),
                 correlation_id=(
@@ -3699,6 +4271,8 @@ class SQLiteDatasetStore:
                 )
         elif record.record_type == "interaction_episode":
             _rebuild_interaction_episode(self, record, payload)
+        elif record.record_type == "engagement_feature":
+            _rebuild_engagement_feature(self, record, payload)
         elif record.record_type == "physical_object_state":
             _rebuild_physical_object_state(self, record, payload)
         elif record.record_type == "physical_relation_sample":
@@ -4060,6 +4634,42 @@ class SQLiteDatasetStore:
             for row in rows
         )
 
+    def save_text_content_snapshot(
+        self,
+        run_id: str,
+        snapshot: dict[str, JsonValue],
+    ) -> None:
+        self._require_run_write_ownership(run_id)
+        self._connection.execute(
+            """
+            INSERT INTO text_content_snapshots (run_id, snapshot_json)
+            VALUES (?, ?)
+            ON CONFLICT (run_id) DO UPDATE SET
+                snapshot_json = excluded.snapshot_json
+            """,
+            (run_id, _json(snapshot)),
+        )
+        self._commit()
+
+    def load_text_content_snapshot(
+        self,
+        run_id: str,
+    ) -> dict[str, JsonValue] | None:
+        row = self._connection.execute(
+            """
+            SELECT snapshot_json
+            FROM text_content_snapshots
+            WHERE run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        payload = json.loads(str(row["snapshot_json"]))
+        if not isinstance(payload, dict):
+            raise ValueError("persisted text content snapshot must be an object")
+        return cast(dict[str, JsonValue], payload)
+
     def close(self) -> None:
         self._heartbeat_stop.set()
         self._heartbeat_thread.join(timeout=3.0)
@@ -4231,6 +4841,7 @@ def _rebuild_interaction_episode(
         action_id=_optional_text(payload, "initiating_action_id"),
         decision_id=_optional_text(payload, "initiating_decision_id"),
         tool_call_id=_optional_text(payload, "initiating_tool_call_id"),
+        engagement_id=_optional_text(payload, "initiating_engagement_id"),
         correlation_id=correlation_id,
     )
     participants = _array(payload, "participants")
@@ -4284,6 +4895,9 @@ def _rebuild_interaction_episode(
         initiating_tool_call_id=_optional_text(
             payload, "initiating_tool_call_id"
         ),
+        initiating_engagement_id=_optional_text(
+            payload, "initiating_engagement_id"
+        ),
         content_visibility=_text(payload, "content_visibility"),
         episode=payload,
         interaction_verb=interaction_verb,
@@ -4293,6 +4907,166 @@ def _rebuild_interaction_episode(
         slot_id=slot_id,
         correlation_id=correlation_id,
     )
+
+
+def _rebuild_engagement_feature(
+    store: SQLiteDatasetStore,
+    record: DatasetRecord,
+    payload: dict[str, JsonValue],
+) -> None:
+    engagement = _object(payload, "engagement")
+    referenced_ids_value = engagement.get("referenced_ids")
+    referenced_ids: tuple[str, ...] | None
+    if referenced_ids_value is None:
+        referenced_ids = None
+    elif isinstance(referenced_ids_value, list) and all(
+        isinstance(value, str) for value in referenced_ids_value
+    ):
+        referenced_ids = tuple(
+            value
+            for value in referenced_ids_value
+            if isinstance(value, str)
+        )
+    else:
+        raise ValueError("referenced_ids must be a string array")
+    store.append_engagement(
+        run_id=record.run_id,
+        engagement_id=_text(engagement, "engagement_id"),
+        record_id=record.record_id,
+        actor_id=_text(engagement, "actor_id"),
+        action_id=_optional_text(engagement, "action_id"),
+        plan_id=_optional_text(engagement, "plan_id"),
+        plan_revision=_optional_integer(engagement, "plan_revision"),
+        decision_id=_optional_text(engagement, "decision_id"),
+        tool_call_id=_optional_text(engagement, "tool_call_id"),
+        compiler_request_id=_optional_text(
+            engagement,
+            "compiler_request_id",
+        ),
+        root_correlation_id=_optional_text(
+            engagement,
+            "root_correlation_id",
+        ),
+        referenced_ids=referenced_ids,
+        scene_hash=_optional_text(engagement, "scene_hash"),
+        scene_version=_optional_text(engagement, "scene_version"),
+        catalog_version=_optional_text(engagement, "catalog_version"),
+        prompt_version=_optional_text(engagement, "prompt_version"),
+        status=_text(engagement, "status"),
+        compiler_status=_optional_text(engagement, "compiler_status"),
+        private_intent=_optional_text(engagement, "private_intent"),
+        private_controller_reason=_optional_text(
+            engagement,
+            "private_controller_reason",
+        ),
+        private_compiler_summary=_optional_text(
+            engagement,
+            "private_compiler_summary",
+        ),
+        private_proposal=_optional_object(
+            engagement,
+            "private_proposal",
+        ),
+        private_result=_optional_object(engagement, "private_result"),
+        requested_tick=_integer(engagement, "requested_tick"),
+        requested_at=_number(engagement, "requested_at"),
+        started_tick=_optional_integer(engagement, "started_tick"),
+        started_at=_optional_number(engagement, "started_at"),
+        terminal_tick=_optional_integer(engagement, "terminal_tick"),
+        terminal_at=_optional_number(engagement, "terminal_at"),
+        terminal_outcome=_optional_text(
+            engagement,
+            "terminal_outcome",
+        ),
+    )
+    groups_value = payload.get("groups", [])
+    if not isinstance(groups_value, list):
+        raise ValueError("groups must be an array")
+    for group_value in groups_value:
+        if not isinstance(group_value, dict):
+            raise ValueError("engagement group must be an object")
+        required_atomic_value = group_value.get("required_atomic")
+        if required_atomic_value is not None and not isinstance(
+            required_atomic_value,
+            bool,
+        ):
+            raise ValueError("required_atomic must be a boolean")
+        private_issues_value = group_value.get("private_issues")
+        if private_issues_value is not None and not isinstance(
+            private_issues_value,
+            list,
+        ):
+            raise ValueError("private_issues must be an array")
+        engagement_id = _text(engagement, "engagement_id")
+        group_id = _text(group_value, "engagement_group_id")
+        store.append_engagement_group(
+            run_id=record.run_id,
+            engagement_id=engagement_id,
+            engagement_group_id=group_id,
+            record_id=record.record_id,
+            ordinal=_optional_integer(group_value, "ordinal"),
+            required_atomic=required_atomic_value,
+            validation_status=_text(group_value, "validation_status"),
+            execution_status=_text(group_value, "execution_status"),
+            status=_text(group_value, "status"),
+            private_rejection_reason=_optional_text(
+                group_value,
+                "private_rejection_reason",
+            ),
+            failure_reason=_optional_text(group_value, "failure_reason"),
+            private_issues=private_issues_value,
+            private_proposal=_optional_object(
+                group_value,
+                "private_proposal",
+            ),
+            grounded_outcome=(
+                _optional_object(group_value, "grounded_outcome") or {}
+            ),
+        )
+        invocations_value = group_value.get("invocations", [])
+        if not isinstance(invocations_value, list):
+            raise ValueError("invocations must be an array")
+        for invocation_value in invocations_value:
+            if not isinstance(invocation_value, dict):
+                raise ValueError("engagement invocation must be an object")
+            store.append_engagement_invocation(
+                run_id=record.run_id,
+                engagement_id=engagement_id,
+                engagement_group_id=group_id,
+                engagement_invocation_id=_text(
+                    invocation_value,
+                    "engagement_invocation_id",
+                ),
+                record_id=record.record_id,
+                ordinal=_optional_integer(invocation_value, "ordinal"),
+                capability=_optional_text(invocation_value, "capability"),
+                consequence_tier=_optional_integer(
+                    invocation_value,
+                    "consequence_tier",
+                ),
+                subject_id=_optional_text(invocation_value, "subject_id"),
+                target_id=_optional_text(invocation_value, "target_id"),
+                status=_text(invocation_value, "status"),
+                private_proposal_arguments=_optional_object(
+                    invocation_value,
+                    "private_proposal_arguments",
+                ),
+                private_normalized_arguments=_optional_object(
+                    invocation_value,
+                    "private_normalized_arguments",
+                ),
+                private_result=_optional_object(
+                    invocation_value,
+                    "private_result",
+                ),
+                grounded_outcome=(
+                    _optional_object(
+                        invocation_value,
+                        "grounded_outcome",
+                    )
+                    or {}
+                ),
+            )
 
 
 def _rebuild_perception_fact(
@@ -4567,9 +5341,15 @@ def _json_safe_row(row: sqlite3.Row) -> dict[str, JsonValue]:
     result: dict[str, JsonValue] = {}
     for name in row.keys():  # noqa: SIM118
         value = row[name]
-        if name.endswith("_json"):
+        if value is None:
+            result[
+                name.removesuffix("_json")
+                if name.endswith("_json")
+                else name
+            ] = None
+        elif name.endswith("_json"):
             result[name.removesuffix("_json")] = json.loads(str(value))
-        elif value is None or isinstance(value, bool | int | float | str):
+        elif isinstance(value, bool | int | float | str):
             result[name] = value
         else:
             result[name] = str(value)
@@ -4596,6 +5376,9 @@ def _record_filter_from_query(query: DatasetQueryFilter) -> DatasetRecordFilter:
         model_request_id=query.model_request_id,
         tool_call_id=query.tool_call_id,
         interaction_id=query.interaction_id,
+        engagement_id=query.engagement_id,
+        engagement_group_id=query.engagement_group_id,
+        engagement_invocation_id=query.engagement_invocation_id,
         perception_fact_id=query.perception_fact_id,
         memory_id=query.memory_id,
         transaction_request_id=query.transaction_request_id,
@@ -4746,6 +5529,22 @@ def _field_meaning(name: str) -> str:
         "custodian_id": "entity with authoritative custody of the object",
         "held_by_id": "character physically holding the object",
         "interaction_verb": "physical interaction verb when applicable",
+        "engagement_id": "stable identity of one generic engagement attempt",
+        "engagement_group_id": (
+            "stable compiler/runtime group identity within an engagement"
+        ),
+        "engagement_invocation_id": (
+            "stable capability invocation identity within an engagement group"
+        ),
+        "validation_status": (
+            "compiler validation disposition for an engagement group"
+        ),
+        "execution_status": (
+            "deterministic runtime execution state for an engagement group"
+        ),
+        "grounded_outcome": (
+            "committed public evidence with private effects removed"
+        ),
         "anchor_x": "physical pose anchor x coordinate in room microcells",
         "anchor_y": "physical pose anchor y coordinate in room microcells",
         "orientation": "cardinal physical pose orientation",
@@ -4770,6 +5569,21 @@ def _field_meaning(name: str) -> str:
 
 
 def _table_meaning(table: str) -> str:
+    if table == "engagements":
+        return (
+            "normalized generic engagement lifecycle and action/compiler "
+            "lineage; private compiler content requires explicit access"
+        )
+    if table == "engagement_groups":
+        return (
+            "normalized compiler validation and runtime execution outcomes "
+            "for engagement groups"
+        )
+    if table == "engagement_invocations":
+        return (
+            "normalized engagement capability invocations with grounded "
+            "public outcomes separated from private proposals and effects"
+        )
     if table == "physical_object_states":
         return (
             "phase-boundary authoritative physical-object state observations; "
@@ -4835,6 +5649,15 @@ def _record_from_row(row: sqlite3.Row) -> DatasetRecord:
                 "model_request_id": _row_str(row, "model_request_id"),
                 "tool_call_id": _row_str(row, "tool_call_id"),
                 "interaction_id": _row_str(row, "interaction_id"),
+                "engagement_id": _row_str(row, "engagement_id"),
+                "engagement_group_id": _row_str(
+                    row,
+                    "engagement_group_id",
+                ),
+                "engagement_invocation_id": _row_str(
+                    row,
+                    "engagement_invocation_id",
+                ),
                 "perception_fact_id": _row_str(row, "perception_fact_id"),
                 "memory_id": _row_str(row, "memory_id"),
                 "transaction_request_id": _row_str(

@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "56b58e01fd746b254e7bda99c1f03ed57fe70c2ad09ab9a40171a95e5e3ffae3",
+        "content_hash": "380e63402c781dd71b7e26d09928da7aefb96121b7ec052fc7177d5fc436b8c7",
         "id": "greyford-office-evening.map-greyford-performing-arts",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

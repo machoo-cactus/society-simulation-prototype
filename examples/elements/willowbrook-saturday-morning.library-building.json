@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "3eb7e25bfd5facf7297657be001ae283e894467c62df6dfdb454cd2653f6334e",
+        "content_hash": "a0f4b0e053405a90265528a8b33f4617d581febb24cb57d205915baf2f510057",
         "id": "willowbrook-saturday-morning.library-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

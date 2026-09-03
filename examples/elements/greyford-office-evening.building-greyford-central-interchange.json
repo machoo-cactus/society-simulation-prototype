@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "0f51f6fddf064f2e8934c33448c61b291063beef48000156bffd94ed15c20007",
+        "content_hash": "f9b07ecdab67188d0fa08d690dfa26418b0aa70f8a1760c44aa8a4e4e61a4f58",
         "id": "greyford-office-evening.map-greyford-central-interchange",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

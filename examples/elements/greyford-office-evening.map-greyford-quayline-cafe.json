@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "cd01727a60c716f8bfcd366e2a9c32461253b8bec535524833d77cc9c28fabbc",
+        "content_hash": "adddf4cfbd970853761cd44d95c63404d33d964ae7bd70b8cb98b0d38724f25d",
         "id": "greyford-office-evening.station-greyford-quayline-cafe-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     },
     {
       "element": {
-        "content_hash": "5b9374d8b9ba257d2ee3af94c31c21540b244514ba5f3c99c79310a1c1775d30",
+        "content_hash": "1b365a536dc6844d76157cb0146ed165295dd093278bfb03d90ba4792f493129",
         "id": "greyford-office-evening.transaction-point-greyford-quayline-counter",
         "kind": "object"
       },
@@ -76,7 +76,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

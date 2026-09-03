@@ -1228,3 +1228,178 @@ def test_bundled_demo_is_a_valid_runnable_scenario() -> None:
     assert step_response.json()["tick"] == 1
     assert snapshot["world"]["zones"]
     assert snapshot["agents"][0]["system1"]["active_drive"] == "SATIETY"
+
+
+def test_selected_character_engagement_panel_and_filter_are_server_rendered() -> None:
+    with TestClient(app) as client:
+        run_id, session = _attach_physical_operator_run(client)
+        managed = app.state.simulation_manager.get_run(run_id)
+        lineage = {
+            "engagement_id": "engagement-ui-1",
+            "action_id": "action-ui-1",
+            "plan_id": "plan-ui-1",
+            "plan_revision": 3,
+            "decision_id": "decision-ui-1",
+            "tool_call_id": "tool-ui-1",
+            "root_correlation_id": "decision-ui-1",
+        }
+        for event_type, payload in (
+            (
+                "engagement.requested",
+                {
+                    **lineage,
+                    "reference_ids": ["physical-api-display"],
+                    "intent": "PRIVATE UI INTENT",
+                    "reason": "PRIVATE UI REASON",
+                    "visibility": "private",
+                },
+            ),
+            (
+                "engagement.compilation_requested",
+                {
+                    **lineage,
+                    "compiler_prompt": "PRIVATE COMPILER PROMPT",
+                    "visibility": "private",
+                },
+            ),
+            (
+                "engagement.compilation_completed",
+                {
+                    **lineage,
+                    "summary": "PRIVATE UI COMPILER SUMMARY",
+                    "scene": {"private": "PRIVATE RAW SCENE"},
+                    "visibility": "private",
+                },
+            ),
+            (
+                "engagement.capability_committed",
+                {
+                    **lineage,
+                    "group_id": "gesture",
+                    "group_ordinal": 0,
+                    "invocation_id": "gesture-1",
+                    "capability": "expressive_behavior",
+                    "modality": "visual",
+                    "public_text": "Alex gives a visible wave.",
+                    "expression_band": "moderate",
+                    "target_id": "physical-api-display",
+                    "visibility": "private",
+                },
+            ),
+            (
+                "engagement.capability_committed",
+                {
+                    **lineage,
+                    "group_id": "call",
+                    "group_ordinal": 1,
+                    "invocation_id": "call-1",
+                    "capability": "auditory_expression",
+                    "modality": "auditory",
+                    "public_text": "Alex calls out clearly.",
+                    "sound_band": "normal",
+                    "recipient_ids": ["physical-agent"],
+                    "listener_stress_delta": 50,
+                    "visibility": "private",
+                },
+            ),
+            (
+                "engagement.partial",
+                {
+                    **lineage,
+                    "completed_group_count": 2,
+                    "failed_group_count": 1,
+                    "reason": "PRIVATE UI TERMINAL REASON",
+                    "group_statuses": [
+                        {
+                            "group_id": "gesture",
+                            "group_ordinal": 0,
+                            "status": "completed",
+                        },
+                        {
+                            "group_id": "call",
+                            "group_ordinal": 1,
+                            "status": "completed",
+                        },
+                        {
+                            "group_id": "blocked",
+                            "group_ordinal": 2,
+                            "status": "failed",
+                            "failure_reason": "PRIVATE UI GROUP REASON",
+                        },
+                    ],
+                },
+            ),
+        ):
+            client.portal.call(
+                lambda event_type=event_type, payload=payload: (
+                    managed.runner.events.emit(
+                        event_type,
+                        simulation_tick=2,
+                        simulation_time=2.0,
+                        agent_id="physical-agent",
+                        payload=payload,
+                    )
+                )
+            )
+        client.portal.call(
+            lambda: managed.runner.events.emit(
+                "engagement.compilation_failed",
+                simulation_tick=3,
+                simulation_time=3.0,
+                agent_id="physical-agent",
+                payload={
+                    **lineage,
+                    "engagement_id": "engagement-ui-2",
+                    "action_id": "action-ui-2",
+                    "reason": "PRIVATE UI COMPILATION FAILURE",
+                    "summary": "PRIVATE UI FAILED SUMMARY",
+                    "visibility": "private",
+                },
+            )
+        )
+        session.selected_agent_id = "physical-agent"
+
+        page = client.get("/ui/?filter=engagement&order=oldest")
+
+    assert page.status_code == 200
+    assert 'action="/ui/"' in page.text
+    assert '<option value="engagement" selected>Engagement</option>' in page.text
+    assert "Current and recent engagement" in page.text
+    assert "engagement-ui-1" in page.text
+    assert "partial" in page.text
+    assert "action-ui-1" in page.text
+    assert "plan-ui-1" in page.text
+    assert "physical-api-display" in page.text
+    assert "gesture" in page.text
+    assert "completed" in page.text
+    assert "blocked" in page.text
+    assert "failed" in page.text
+    assert "visual" in page.text
+    assert "Alex gives a visible wave." in page.text
+    assert "auditory" in page.text
+    assert "Alex calls out clearly." in page.text
+    assert "Compilation pending" in page.text
+    assert "Compilation succeeded" in page.text
+    assert "Compilation failed" in page.text
+    assert "Execution partially completed" in page.text
+    event_log = re.search(
+        r'<ol id="event-log".*?</ol>',
+        page.text,
+        flags=re.DOTALL,
+    )
+    assert event_log is not None
+    assert "engagement.requested" in event_log.group()
+    assert "simulation.started" not in event_log.group()
+    for private_value in (
+        "PRIVATE UI INTENT",
+        "PRIVATE UI REASON",
+        "PRIVATE COMPILER PROMPT",
+        "PRIVATE UI COMPILER SUMMARY",
+        "PRIVATE RAW SCENE",
+        "PRIVATE UI TERMINAL REASON",
+        "PRIVATE UI GROUP REASON",
+        "PRIVATE UI COMPILATION FAILURE",
+        "PRIVATE UI FAILED SUMMARY",
+        "listener_stress_delta",
+    ):
+        assert private_value not in page.text

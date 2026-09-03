@@ -68,6 +68,7 @@ from stage0_sim.application.telemetry import (
     build_ui_bootstrap,
     build_world_object_snapshot,
     build_world_snapshot,
+    project_operator_event,
 )
 from stage0_sim.domain.components import PhysicalObjectIdentityComponent
 from stage0_sim.domain.events import DomainEvent, JsonValue
@@ -113,6 +114,7 @@ EVENT_FILTERS: dict[str, re.Pattern[str]] = {
     ),
     "dialogue": re.compile(r"^speech\."),
     "cognition": re.compile(r"^(cognition|tool)\."),
+    "engagement": re.compile(r"^engagement\."),
     "perception": re.compile(r"^perception\."),
     "travel": re.compile(r"^(travel|building|vehicle|metro)\."),
     "environment": re.compile(
@@ -157,6 +159,9 @@ DATASET_DOMAIN_FILTERS: tuple[tuple[str, str], ...] = (
     ("model_request_id", "Model request ID"),
     ("tool_call_id", "Tool call ID"),
     ("interaction_id", "Interaction ID"),
+    ("engagement_id", "Engagement ID"),
+    ("engagement_group_id", "Engagement group ID"),
+    ("engagement_invocation_id", "Engagement invocation ID"),
     ("perception_fact_id", "Perception fact ID"),
     ("memory_id", "Memory ID"),
     ("transaction_request_id", "Transaction request ID"),
@@ -576,7 +581,11 @@ async def operator_page(request: Request) -> Response:
                 PhysicalObjectIdentityComponent,
             )
         ]
-        all_events = list(managed.runner.events.events)
+        all_events = [
+            event
+            for source_event in managed.runner.events.events
+            if (event := project_operator_event(source_event)) is not None
+        ]
         status = managed.runner.status.value
     session.event_start_index = min(session.event_start_index, len(all_events))
     events = all_events[session.event_start_index :]
@@ -2189,6 +2198,34 @@ def _dataset_entry(
 
 
 def event_summary(event: DomainEvent) -> str:
+    engagement_status = event.payload.get("engagement_status")
+    engagement_phase = event.payload.get("engagement_phase")
+    if isinstance(engagement_status, str) and isinstance(
+        engagement_phase,
+        str,
+    ):
+        label = {
+            ("compilation", "pending"): "Compilation pending",
+            ("compilation", "succeeded"): "Compilation succeeded",
+            ("compilation", "failed"): "Compilation failed",
+            ("compilation", "cancelled"): "Compilation cancelled",
+            ("execution", "requested"): "Execution requested",
+            ("execution", "started"): "Execution started",
+            ("execution", "partial"): "Execution partially completed",
+            ("execution", "completed"): "Execution completed",
+            ("execution", "failed"): "Execution failed",
+            ("execution", "cancelled"): "Execution cancelled",
+            ("execution", "group_completed"): "Group completed",
+            ("execution", "group_failed"): "Group failed",
+            ("execution", "committed"): "Grounded evidence committed",
+        }.get((engagement_phase, engagement_status))
+        engagement_id = event.payload.get("engagement_id")
+        if label is not None:
+            return (
+                f"{label} · {engagement_id}"
+                if isinstance(engagement_id, str)
+                else label
+            )
     preferred = (
         "text",
         "tool_name",

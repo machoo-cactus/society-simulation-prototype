@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "34969cd6dab106db8500168817c084ec4dea271a770807fba263d94506dd2c1b",
+        "content_hash": "26d368cc6ff91809193e73c17cb1614b1018f59f1d45f48cb22d47ee735e10d3",
         "id": "greyford-office-evening.map-greyford-medical-research",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

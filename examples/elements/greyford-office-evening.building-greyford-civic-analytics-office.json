@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "4524362fb3ed32e34cbaf61d389d17edf5af3f71979062fb1ad319a052747156",
+        "content_hash": "c9c74b77fd0b2307893a7fbeba97df51997a4c426369ec85218001a7f566a3dc",
         "id": "greyford-office-evening.map-greyford-civic-analytics-office",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

@@ -69,7 +69,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "c639a7fc321f9e21c906b284cb9b6f84fd1f6e72b7f11192a9780ea2502344c4",
+        "content_hash": "e125e9c34115b2f6b6d77ce6be9c8d6ce04440f242f8667f024d7c31bed835e5",
         "id": "greyford-office-evening.station-greyford-quayside-platform-bench",
         "kind": "object"
       },
@@ -95,7 +95,7 @@
     },
     {
       "element": {
-        "content_hash": "1f920592a9710397ab999819dcd5bc035e6b624c94eafe30d0ab4f36c8a83955",
+        "content_hash": "01a4398ae2ecdf03eb273c34f071e3856ba9404374a837722a9bee91d651a3c0",
         "id": "greyford-office-evening.station-greyford-quayside-information-desk",
         "kind": "object"
       },
@@ -121,7 +121,7 @@
     },
     {
       "element": {
-        "content_hash": "121967e30c10b77cd5ba209652111c541fae028546d7c234ed531d66e3f1f6ef",
+        "content_hash": "bb761da249d9c7e42601ae1e51e7eeae6e7b3568757d1bdca538c6813718f2bf",
         "id": "greyford-office-evening.transaction-point-greyford-quayside-ticket-machine",
         "kind": "object"
       },
@@ -147,7 +147,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

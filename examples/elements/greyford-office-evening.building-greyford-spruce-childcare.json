@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "02dfb82e7c48ad8ded6b326c280c6fdec0598baf2fffb8e9d2f04771c3625036",
+        "content_hash": "54ae33560483951f79d251e551aa301c2cc042ee884d17dda7ba6523f7e718d4",
         "id": "greyford-office-evening.map-greyford-spruce-childcare",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

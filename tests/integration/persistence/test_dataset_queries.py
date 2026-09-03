@@ -111,7 +111,7 @@ def _physical_query_store(path: Path) -> SQLiteDatasetStore:
         seed=9,
         dt=1,
         initial_speed=1,
-        scenario={"name": "physical-query", "schema_version": 6},
+        scenario={"name": "physical-query", "schema_version": 8},
     )
     sequence = 0
     for tick, phase, is_open, relation_kind in (
@@ -539,8 +539,8 @@ def test_physical_filters_exports_dictionary_summary_and_aggregation(
     assert private_summary["physical"]["distinct_object_count"] == 1
     assert private_summary["physical"]["state_sample_count"] == 2
     assert private_summary["physical"]["relation_sample_count"] == 2
-    assert schema["dataset_schema_version"] == "stage0.dataset.v4"
-    assert schema["sqlite_schema_version"] == 10
+    assert schema["dataset_schema_version"] == "stage0.dataset.v6"
+    assert schema["sqlite_schema_version"] == 12
     assert schema["feature_schema_versions"][
         "stage0.feature.physical_object_state"
     ] == "2"

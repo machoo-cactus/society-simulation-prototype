@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "fffa72f05a76399e335d161ceb760aa39e1473bd3bda414197f4030ccbe17a6a",
+        "content_hash": "074826b1343e8236fdafb05b0d632dbc48ce06574cb290662b0ce32e0c303896",
         "id": "greyford-office-evening.map-greyford-juniper-kitchen",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

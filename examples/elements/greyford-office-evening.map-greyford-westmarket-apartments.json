@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "c772ec8e3e43c0512b88c8467a823aa335d2a14a4dc29d62e77f953377d66c88",
+        "content_hash": "9be3f24514ba65dd40b8ff886ad3e6bc73ea174767b7e15a86b157bb4ed66ba3",
         "id": "greyford-office-evening.station-greyford-westmarket-apartments-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

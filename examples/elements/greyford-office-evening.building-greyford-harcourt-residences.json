@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "385e56425731b4915ec7a17c57dee6b5f4a14f4b567cb8484cdf5d5ab03e87de",
+        "content_hash": "c695bcd99c0bf522694445f3553020e8717f2f7135362d9ed6ba766a0b154d2e",
         "id": "greyford-office-evening.map-greyford-harcourt-residences",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "1f3ae09c5575af4c7de090b9bb47aae83879572b09cab1983acbcd4032bd4077",
+        "content_hash": "872504f050ea1d038f7f88c5007f3b01db6d9b48c25248394211a56cf8bd8db5",
         "id": "greyford-office-evening.map-greyford-highland-conservatory",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "283acb8600fe90da3da1922fb56d346ba52ea113fdb2fbd63388cb5ebf45ca28",
+        "content_hash": "2409f61c4b961fe4f76a5757426e2807c559ff2b30b8b6ef69ae9f0901838776",
         "id": "greyford-office-evening.map-greyford-highland-boathouse",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

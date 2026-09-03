@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "dfc855283eb70045fb61335f88511c373edc284fd1097c2981d79b6b0a7fff4f",
+        "content_hash": "e5d7528b8d13c4ca72bf2f90e79066b30501d41d9981030e9d6560895bd9d3c6",
         "id": "greyford-office-evening.station-greyford-general-hospital-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

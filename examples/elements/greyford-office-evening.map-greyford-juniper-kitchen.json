@@ -49,7 +49,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "230a810f9f2636b242e19fe417303e2a6519dd81d57f678ff87413d910be4648",
+        "content_hash": "e68d5548dffeef1eb4c79c8d16f79713f62cc88224f1ec97cd7d77a98b1cabd8",
         "id": "greyford-office-evening.station-greyford-juniper-window-table",
         "kind": "object"
       },
@@ -75,7 +75,7 @@
     },
     {
       "element": {
-        "content_hash": "a8a2a6ec977976ed9ae1288433da33bb96993e81cc014c3f2e79e16d4c0c4f98",
+        "content_hash": "7d2ed412719d2b1e5b7a2d55f3049883683cbf948ee7382481c135ab51d88c40",
         "id": "greyford-office-evening.station-greyford-juniper-counter-seat",
         "kind": "object"
       },
@@ -101,7 +101,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

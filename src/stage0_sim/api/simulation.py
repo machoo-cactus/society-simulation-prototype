@@ -118,6 +118,9 @@ class DatasetQueryParameters(BaseModel):
     model_request_id: str | None = None
     tool_call_id: str | None = None
     interaction_id: str | None = None
+    engagement_id: str | None = None
+    engagement_group_id: str | None = None
+    engagement_invocation_id: str | None = None
     perception_fact_id: str | None = None
     memory_id: str | None = None
     transaction_request_id: str | None = None
@@ -188,6 +191,9 @@ class DatasetQueryParameters(BaseModel):
             model_request_id=self.model_request_id,
             tool_call_id=self.tool_call_id,
             interaction_id=self.interaction_id,
+            engagement_id=self.engagement_id,
+            engagement_group_id=self.engagement_group_id,
+            engagement_invocation_id=self.engagement_invocation_id,
             perception_fact_id=self.perception_fact_id,
             memory_id=self.memory_id,
             transaction_request_id=self.transaction_request_id,
@@ -1050,6 +1056,9 @@ async def get_dataset_records(
         model_request_id=dataset_filter.model_request_id,
         tool_call_id=dataset_filter.tool_call_id,
         interaction_id=dataset_filter.interaction_id,
+        engagement_id=dataset_filter.engagement_id,
+        engagement_group_id=dataset_filter.engagement_group_id,
+        engagement_invocation_id=dataset_filter.engagement_invocation_id,
         perception_fact_id=dataset_filter.perception_fact_id,
         memory_id=dataset_filter.memory_id,
         transaction_request_id=dataset_filter.transaction_request_id,
@@ -1116,6 +1125,43 @@ async def get_dataset_interactions(
     query: Annotated[DatasetQueryParameters, Query()],
 ) -> dict[str, object]:
     return _query_table_response(request, run_id, "interactions", query)
+
+
+@router.get("/runs/{run_id}/data/engagements")
+async def get_dataset_engagements(
+    run_id: str,
+    request: Request,
+    query: Annotated[DatasetQueryParameters, Query()],
+) -> dict[str, object]:
+    return _query_table_response(request, run_id, "engagements", query)
+
+
+@router.get("/runs/{run_id}/data/engagement-groups")
+async def get_dataset_engagement_groups(
+    run_id: str,
+    request: Request,
+    query: Annotated[DatasetQueryParameters, Query()],
+) -> dict[str, object]:
+    return _query_table_response(
+        request,
+        run_id,
+        "engagement_groups",
+        query,
+    )
+
+
+@router.get("/runs/{run_id}/data/engagement-invocations")
+async def get_dataset_engagement_invocations(
+    run_id: str,
+    request: Request,
+    query: Annotated[DatasetQueryParameters, Query()],
+) -> dict[str, object]:
+    return _query_table_response(
+        request,
+        run_id,
+        "engagement_invocations",
+        query,
+    )
 
 
 @router.get("/runs/{run_id}/data/state")
@@ -1349,6 +1395,9 @@ async def export_filtered_records(
         model_request_id=dataset_filter.model_request_id,
         tool_call_id=dataset_filter.tool_call_id,
         interaction_id=dataset_filter.interaction_id,
+        engagement_id=dataset_filter.engagement_id,
+        engagement_group_id=dataset_filter.engagement_group_id,
+        engagement_invocation_id=dataset_filter.engagement_invocation_id,
         perception_fact_id=dataset_filter.perception_fact_id,
         memory_id=dataset_filter.memory_id,
         transaction_request_id=dataset_filter.transaction_request_id,

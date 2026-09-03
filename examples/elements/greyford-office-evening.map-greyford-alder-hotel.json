@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "58ade249dd36969e2d4fd7c7de663cc961aab77ddd55cbffc5151819bf6f9681",
+        "content_hash": "919f013d73f2598cca08aff7fd98a52a6920e02741976e88ec2d397b304a8395",
         "id": "greyford-office-evening.station-greyford-alder-hotel-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     },
     {
       "element": {
-        "content_hash": "22405501c00476bacbe3350e16be30dc772f708e4ee66a8c0c7977aa8d195225",
+        "content_hash": "8e24c1b783d431956a855be3652662a7b9df1f07bfab0042888758da7fd0b35c",
         "id": "greyford-office-evening.transaction-point-greyford-alder-front-desk",
         "kind": "object"
       },
@@ -76,7 +76,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

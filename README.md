@@ -6,19 +6,20 @@ homeostasis, non-bypassable System 1 survival behavior, typed character
 controllers, situated perception and memory, grid and sparse-city navigation,
 an operator UI, and reproducible research datasets.
 
-Version **0.2.0** supports Python 3.12 or newer. Linux is the primary CI/runtime
-platform; Windows is a first-class development and CI platform.
+The current release supports Python 3.12 or newer. Linux is the primary
+CI/runtime platform; Windows is a first-class development and CI platform.
+See [current contracts](docs/CURRENT_CONTRACTS.md) for release and schema
+identifiers.
 
-Current content contracts are scenario source version 6, reusable element
-version 3, character version 2 with `human-v1`, dataset
-`stage0.dataset.v4`, fresh-only SQLite schema 10, and telemetry
-`stage0.telemetry.v3`. Local physical execution uses 9 microcells per legacy
-cell, 5×5-microcell character bodies, cardinal object footprints, live
+Local physical execution uses 9 microcells per legacy cell, 5×5-microcell
+character bodies, cardinal object footprints, live
 movement and per-sense obstruction, semantic mass/dimensions, equipment and
 typed sense effects, slots/relations/hands/posture/custody, footprint-aware
-sensory sweeps, and deterministic interaction/door traversal. It is discrete
-spatial simulation, not full
-rigid-body physics.
+sensory sweeps, deterministic interaction/door traversal, and constrained
+compiled `engage` actions. Revisioned text artifacts, composable content
+endpoints, embodied read/write tools, stable-block conflicts, attribution, and
+in-world mailbox delivery remain under the same deterministic authority. It is
+discrete spatial simulation, not full rigid-body physics.
 
 ## Quick start
 
@@ -90,11 +91,18 @@ $env:STAGE0_LLM_BASE_URL = "http://127.0.0.1:8081/v1"
 $env:STAGE0_LLM_MODEL = "stage0-fake"
 stage0-sim run examples\scenarios\provider-character-controller.json `
   --characters-dir examples\characters --ticks 30
+
+stage0-sim run examples\scenarios\engagement-demo.json --ticks 8
 ```
+
+The fake endpoint keeps ordinary controller behavior deterministic and
+recognizes the separate `engagement_compilation` operation. The engagement
+demo exercises solo dancing plus a loud warning whose actual listeners are
+resolved by domain hearing and structural blocking.
 
 ## Core workflows
 
-- **CLI:** run schema-version-6 scenarios, assign character slots, select an
+- **CLI:** run current-version scenarios, assign character slots, select an
   element library, write canonical events, and persist/export datasets.
 - **Simulation UI (`/ui/`):** stage without starting; assign characters; start,
   pause, resume, single-step, stop, inspect, and export.
@@ -107,14 +115,17 @@ stage0-sim run examples\scenarios\provider-character-controller.json `
 
 SQLite databases and complete or private-enabled exports can contain character
 profiles, synthesized situations, prompts, model text and tool calls, retrieved
-memories/information, and authoritative state. Filtered queries and exports
-exclude `PRIVATE_RESEARCH` by default; complete exports do not. Treat research
-artifacts as restricted data and apply appropriate consent, access, retention,
-and redaction controls.
+memories/information, raw engagement intent/reason, compiler scenes, summaries,
+responses, and authoritative state. Filtered queries and exports exclude
+`PRIVATE_RESEARCH` by default; complete exports do not. Treat research artifacts
+as restricted data and apply appropriate consent, access, retention, and
+redaction controls.
 
 ## Documentation
 
 - [Documentation by audience and task](docs/README.md)
+- [Current release and schema contracts](docs/CURRENT_CONTRACTS.md)
+- [Agent-first development workflow](docs/DEVELOPMENT_WORKFLOW.md)
 - [Architecture and authority boundaries](docs/ARCHITECTURE.md)
 - [Runtime semantics](docs/RUNTIME.md)
 - [Configuration](docs/CONFIGURATION.md)
@@ -125,6 +136,7 @@ and redaction controls.
 - [Research data](docs/DATA_COLLECTION.md)
 - [API and UI workflows](docs/API_AND_UI.md)
 - [UI architecture and testing](docs/UI_TESTING.md)
+- [LLM operations and live smoke testing](docs/LLM_OPERATIONS.md)
 - [Concept guide](docs/CONCEPT_GUIDE.md)
 - [Status and roadmap](docs/STATUS_AND_ROADMAP.md)
-- [Development history and legacy archive](docs/legacy/README.md)
+- [Compressed development history](docs/legacy/README.md)

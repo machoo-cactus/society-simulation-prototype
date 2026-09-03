@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "72efaf3d4e09bd7c3269090cc4eff06037dfda09285e83492b52fb735bac97eb",
+        "content_hash": "3a458efa6354426ca369d695b1359a57f62a2832e27a8d1e6b3403f604e49267",
         "id": "willowbrook-saturday-morning.market-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

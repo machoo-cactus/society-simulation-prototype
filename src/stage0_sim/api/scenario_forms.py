@@ -248,6 +248,8 @@ KNOWN_ENTITY_COMPONENT_MODELS: dict[str, type[BaseModel] | None] = {
     "plan": scenario_models.PlanComponentDefinition,
     "goals": scenario_models.GoalsComponentDefinition,
     "information": scenario_models.InformationComponentDefinition,
+    "content_endpoints": scenario_models.ContentEndpointsComponentDefinition,
+    "known_text_addresses": scenario_models.KnownTextAddressesDefinition,
     "controller": scenario_models.ControllerDefinition,
     "senses": scenario_models.SensesDefinition,
     "embodiment": scenario_models.CharacterEmbodimentDefinition,
@@ -469,6 +471,8 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "memory",
             "perception",
             "cognition",
+            "engagement",
+            "text_content",
             "character_situation_synthesis",
             "entities",
         ]
@@ -492,6 +496,30 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     ),
     scenario_models.PortableCapabilityDefinition: frozenset(["two_handed"]),
     scenario_models.ReadableCapabilityDefinition: frozenset(["document_id"]),
+    scenario_models.TextPrincipalDefinition: frozenset(["kind", "id"]),
+    scenario_models.TextAccessGrantDefinition: frozenset(
+        ["operation", "principals"]
+    ),
+    scenario_models.TextAccessPolicyDefinition: frozenset(["grants"]),
+    scenario_models.ContentEndpointDefinition: frozenset(
+        [
+            "id",
+            "label",
+            "kind",
+            "resource_id",
+            "operations",
+            "access_mode",
+            "lists_items",
+            "originates_messages",
+            "notifies_owner",
+            "created_media_kind",
+            "created_mode",
+            "created_access_policy",
+        ]
+    ),
+    scenario_models.ContentEndpointsComponentDefinition: frozenset(
+        ["endpoints"]
+    ),
     scenario_models.ConsumableCapabilityDefinition: frozenset(
         ["item_id", "servings"]
     ),
@@ -517,6 +545,7 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "container",
             "portable",
             "readable",
+            "content_endpoints",
             "consumable",
             "usable",
             "openable",
@@ -776,7 +805,38 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "max_requests",
             "max_input_tokens",
             "max_total_output_tokens",
+            "engagement_compiler",
             "tool_allowlist",
+        ]
+    ),
+    scenario_models.EngagementCompilerSettingsDefinition: frozenset(
+        [
+            "model_profile",
+            "timeout_seconds",
+            "max_output_tokens",
+            "max_concurrency",
+            "max_requests",
+            "max_input_tokens",
+            "max_total_output_tokens",
+        ]
+    ),
+    scenario_models.EngagementSettingsDefinition: frozenset(
+        [
+            "max_groups",
+            "max_invocations_per_group",
+            "max_public_text_chars",
+            "short_activity_seconds",
+            "medium_activity_seconds",
+            "long_activity_seconds",
+            "low_effort_energy_cost",
+            "medium_effort_energy_cost",
+            "high_effort_energy_cost",
+            "calming_stress_delta",
+            "activating_stress_delta",
+            "quiet_sound_range",
+            "normal_sound_range",
+            "loud_sound_range",
+            "alarming_listener_stress_delta",
         ]
     ),
     scenario_models.CharacterProfileTemplateDefinition: frozenset(["schema_version", "sections"]),
@@ -831,6 +891,46 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     scenario_models.CharacterSituationSynthesisSettingsDefinition: frozenset(
         ["enabled"]
     ),
+    scenario_models.InitialTextAttributionDefinition: frozenset(
+        [
+            "authoritative_actor_id",
+            "display",
+            "sender_address_id",
+            "display_label",
+        ]
+    ),
+    scenario_models.InitialTextBlockDefinition: frozenset(
+        ["id", "kind", "text"]
+    ),
+    scenario_models.InitialTextArtifactDefinition: frozenset(
+        [
+            "id",
+            "media_kind",
+            "mode",
+            "blocks",
+            "access_policy",
+            "attribution",
+        ]
+    ),
+    scenario_models.InitialTextCollectionDefinition: frozenset(
+        ["id", "kind", "members", "capacity", "access_policy"]
+    ),
+    scenario_models.InitialTextAddressDefinition: frozenset(
+        [
+            "id",
+            "owner",
+            "mailbox_id",
+            "display_label",
+            "accepted_senders",
+            "sent_collection_id",
+        ]
+    ),
+    scenario_models.InitialTextGroupDefinition: frozenset(
+        ["id", "member_ids"]
+    ),
+    scenario_models.TextContentDefinition: frozenset(
+        ["artifacts", "collections", "addresses", "groups"]
+    ),
     scenario_models.ScenarioDefinition: frozenset(
         [
             "schema_version",
@@ -849,6 +949,8 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
             "memory",
             "perception",
             "cognition",
+            "engagement",
+            "text_content",
             "character_situation_synthesis",
             "entities",
         ]
@@ -1077,10 +1179,46 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
     scenario_models.ActivityDefinition: frozenset({"type"}),
     scenario_models.PossessionsComponentDefinition: frozenset(["holdings"]),
     scenario_models.PlanActionDefinition: frozenset(
-        ["action", "target", "duration", "mode", "offer_id", "interaction"]
+        [
+            "action",
+            "target",
+            "duration",
+            "mode",
+            "offer_id",
+            "interaction",
+            "text_read",
+            "text_write",
+        ]
     ),
     scenario_models.InteractionSpecificationDefinition: frozenset(
         ["verb", "target_id", "destination_id", "slot_id"]
+    ),
+    scenario_models.TextAttributionRequestDefinition: frozenset(
+        ["display", "sender_address_id", "display_label"]
+    ),
+    scenario_models.TextBlockDraftDefinition: frozenset(["text", "kind"]),
+    scenario_models.TextReadSpecificationDefinition: frozenset(
+        ["target_id", "endpoint_id", "artifact_id", "block_ids"]
+    ),
+    scenario_models.TextWriteSpecificationDefinition: frozenset(
+        [
+            "operation",
+            "target_id",
+            "endpoint_id",
+            "attribution",
+            "artifact_id",
+            "expected_artifact_revision",
+            "expected_collection_revision",
+            "expected_sent_collection_revision",
+            "block_id",
+            "expected_block_revision",
+            "blocks",
+            "text",
+            "start",
+            "end",
+            "recipient_address_id",
+            "artifact_id_hint",
+        ]
     ),
     scenario_models.PlanComponentDefinition: frozenset(["queue", "current"]),
     scenario_models.GoalsComponentDefinition: frozenset(
@@ -1107,6 +1245,9 @@ SCENARIO_EDITOR_MODEL_FIELDS: dict[type[BaseModel], frozenset[str]] = {
         ]
     ),
     scenario_models.InformationComponentDefinition: frozenset({"documents"}),
+    scenario_models.KnownTextAddressesDefinition: frozenset(
+        ["address_ids"]
+    ),
     scenario_models.InitialMemoryDefinition: frozenset(["text", "simulation_time", "importance"]),
     scenario_models.MemoryComponentDefinition: frozenset(["top_k", "initial_episodes"]),
     scenario_models.ConversationComponentDefinition: frozenset({"turns"}),
@@ -1135,6 +1276,7 @@ def scenario_editor_coverage_errors() -> tuple[str, ...]:
         "SensesDefinition",
         "CharacterEmbodimentDefinition",
         "ActivityDefinition",
+        "KnownTextAddressesDefinition",
     }
     discovered_components = {
         model

@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "432f651d2707bc6d7d391bef03932f726c814dfb2ce379dc43d71a40c2f5dbbe",
+        "content_hash": "77784a5fe02af554c8205c964060c9891f3861284592dbf174325b684fbbb96a",
         "id": "greyford-office-evening.station-greyford-intermodal-logistics-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

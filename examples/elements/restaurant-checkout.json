@@ -14,7 +14,7 @@
   "kind": "object",
   "name": "Restaurant Checkout",
   "npc_role": {
-    "content_hash": "b2d7d9a88ae30e8bbf34e81e12b5569a19870022460f04e3e0aac6702496745b",
+    "content_hash": "c01510adc228bbeb4ebc409b952e5747d3732f8d4d0ef5e1d98c0f7c0a202e02",
     "id": "restaurant-server",
     "kind": "npc_role"
   },
@@ -43,6 +43,7 @@
     "capabilities": {
       "consumable": null,
       "container": null,
+      "content_endpoints": [],
       "openable": null,
       "portable": null,
       "readable": null,
@@ -76,6 +77,6 @@
     "owner_id": null
   },
   "request_timeout": 60.0,
-  "schema_version": 3,
+  "schema_version": 4,
   "supported_actions": null
 }

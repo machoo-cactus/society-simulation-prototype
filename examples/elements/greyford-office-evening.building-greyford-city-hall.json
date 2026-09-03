@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "f817022036c9c23d7e81709708e350dfde04a8ef65f33f96028caab1081e3a8a",
+        "content_hash": "d9bbd4a4d1d52b574f4dd1b6e8e91c9fe5667d7033b41e43f2cdbeef9bae5489",
         "id": "greyford-office-evening.map-greyford-city-hall",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

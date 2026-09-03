@@ -37,10 +37,13 @@ Ordinary character controllers may be offered:
 - `perform`
 - `interact_with`
 - `say`
+- `engage`
 - `wait`
 - `skip`
 - `transact`
 - `check_environment`
+- `read_text`
+- `write_text`
 
 The actual offered set is the intersection of the implemented tools and the
 scenario/entity controller allowlist. A controller cannot call an implemented
@@ -199,6 +202,12 @@ Each supplied capsule includes:
 Retrieved `memory.episode` capsules also provide their summary in the request's
 memory list.
 
+Completed embodied text reads are supplied once in
+`completed_text_reads` on the next decision and are also recorded as private
+`world.text.read` information documents for later retrieval. Each entry is
+pinned to the exact artifact revision and includes only the blocks completed by
+the character. Unread mailbox metadata never supplies a message body.
+
 If information retrieval fails, the decision fails explicitly with
 `information_retrieval_failed`; the controller is not invoked with an invented
 empty success result.
@@ -234,6 +243,13 @@ All character requests created in one tick settle behind the global cognition
 barrier. Simulation time does not advance while the batch is waiting. Settled
 decisions commit in stable order by requested tick, character ID, and decision
 ID.
+
+An accepted `engage` decision creates a normal queued `ENGAGE` action and
+separate compiler work in that same frozen barrier. The compiler uses the same
+configured `ModelClient` but its own prompt/profile, timeout, concurrency, and
+request/input/output budgets. It must return exactly one strict
+`compile_engagement` tool call. Controller and compiler turns are both covered
+by recording/replay.
 
 Before intent creation, the coordinator rejects a result if:
 
@@ -309,6 +325,40 @@ Available actions are `WORK`, `READ`, `DRINK`, `EAT`, `SLEEP`, and `RELAX`.
 | `EAT` | Character is at the approach pose of an available station supporting `EAT`; target may identify it or the lowest stable-ID nearby match is selected. | Runs the station-defined duration and interpolates its configured homeostasis effect. |
 | `SLEEP` | Same station approach, support, availability, and capacity requirements for `SLEEP`. | Runs the station-defined duration and applies its configured energy effect. |
 | `RELAX` | Same station approach, support, availability, and capacity requirements for `RELAX`. | Runs the station-defined duration and applies its configured stress effect. |
+
+### `read_text`
+
+```json
+{
+  "target_id": "book-or-terminal-id",
+  "endpoint_id": "main-text",
+  "artifact_id": "artifact-id",
+  "block_ids": ["chapter-1"],
+  "reason": "private short reason"
+}
+```
+
+The target must advertise the endpoint, artifact, optional stable block IDs,
+and `read` operation. The action consumes deterministic simulation time and
+revalidates live endpoint, physical/terminal, and artifact-policy access. A
+successful completion makes the exact pinned revision available on the next
+decision; a tool commit is not a successful read.
+
+### `write_text`
+
+`write_text` is a strict operation-discriminated tool. Operations are
+`create`, `append`, `replace`, `edit`, and `delete`. Existing-content
+mutations require the observed artifact revision. Block replacement, editing,
+and deletion also require the observed block revision. Creation requires the
+observed collection revision. Message creation additionally supplies one known
+recipient address and the observed sender sent-collection revision.
+
+The immutable intent contains the exact proposed plain text. Execution
+revalidates all access and revisions after the embodied duration. Stale writes
+fail with `revision_conflict`; append does not merge automatically. Delete
+creates a tombstone revision. Reader-visible verified, pseudonymous,
+anonymous, or unverified attribution never replaces the privately retained
+authoritative actor.
 
 For station affordances, the station definition owns duration and physiological
 effect. A controller-supplied duration does not override the configured
@@ -394,6 +444,59 @@ slot, posture, open-state, or spatial-index mutation.
 - Intended recipient is not guaranteed to hear it.
 
 The private reason is not spoken.
+
+### `engage`
+
+```json
+{
+  "intent": "Dance solo for a short upbeat interval.",
+  "reference_ids": [],
+  "reason": "private short reason"
+}
+```
+
+Use `engage` only when no offered specialized tool accurately expresses the
+attempt. Ordinary words belong in `say`; advertised object manipulation in
+`interact_with`; established bounded activities in `perform`; configured
+exchanges in `transact`.
+
+**Proposal requirements**
+
+- `intent` is non-empty attempted behavior, not claimed success.
+- `reference_ids` contains at most 12 unique observable target IDs.
+- `reason` is optional private controller metadata.
+- The attempt may be unilateral; another character does not consent to the
+  request merely by being referenced.
+
+**Compilation**
+
+- A frozen sanitized scene includes the actor's bounded public state, only the
+  referenced observed targets, offered specialized tools, environment, and
+  versioned capability catalog.
+- The initial capabilities are `expressive_behavior`,
+  `auditory_expression`, and `bounded_activity`.
+- The compiler may produce valid/rejected required-atomic groups, require an
+  offered specialized tool, or report unsupported behavior.
+- The compiler cannot choose arbitrary component paths or numeric mutations,
+  author future cooperation, or prove that an effect succeeds.
+
+**Execution and outcomes**
+
+- Domain handlers revalidate every group against current ECS state.
+- All invocations in one group commit together or not at all.
+- Independent groups execute in stable order. Completed plus failed groups
+  yield `engagement.partial`; no committed groups yield failure.
+- System 1, stop, stale results, or lost plan/action state cancels or fails the
+  work explicitly and clears incompatible engagement state.
+- Auditory reach and listener effects use authoritative hearing range,
+  footprints, local place, and hearing obstruction. Only actual recipients get
+  heard perception or memory.
+
+Raw intent/reason, compiler scene, proposed summary/response, rejected details,
+and private normalized arguments are research-only. Character and ordinary
+operator views use grounded committed evidence. Injury, theft/custody transfer,
+forced movement, relationship/reputation changes, and arbitrary object mutation
+are outside the current capability catalog.
 
 ### `wait`
 

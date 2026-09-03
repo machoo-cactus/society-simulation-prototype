@@ -98,6 +98,10 @@ from stage0_sim.domain.components import (
     CharacterSituationComponent,
     ConsumableComponent,
     ContainerComponent,
+    ContentAccessMode,
+    ContentEndpoint,
+    ContentEndpointComponent,
+    ContentEndpointKind,
     ControllerComponent,
     ConversationComponent,
     CustodyComponent,
@@ -124,6 +128,7 @@ from stage0_sim.domain.components import (
     InteractionSpecification,
     InteractionType,
     InteractionVerb,
+    KnownTextAddressesComponent,
     LineageIdGenerator,
     LocationMatchCriterion,
     MemoryComponent,
@@ -170,6 +175,25 @@ from stage0_sim.domain.components import (
 )
 from stage0_sim.domain.components import (
     GoalDefinition as DomainGoalDefinition,
+)
+from stage0_sim.domain.content import (
+    TextAccessGrant,
+    TextAccessPolicy,
+    TextAddress,
+    TextArtifact,
+    TextArtifactMode,
+    TextAttribution,
+    TextAttributionDisplay,
+    TextBlock,
+    TextBlockDraft,
+    TextBlockKind,
+    TextCollection,
+    TextCollectionKind,
+    TextContentRegistry,
+    TextMediaKind,
+    TextOperation,
+    TextPrincipal,
+    TextPrincipalKind,
 )
 from stage0_sim.domain.economy import (
     ItemAmount,
@@ -223,6 +247,10 @@ from stage0_sim.domain.systems.effects import (
     CharacterEffectResolutionSystem,
     resolve_character_effects,
 )
+from stage0_sim.domain.systems.engagements import (
+    EngagementExecutionSystem,
+    build_v1_handler_registry,
+)
 from stage0_sim.domain.systems.environment import (
     EnvironmentAvailabilitySystem,
     SurfaceConditionSystem,
@@ -238,8 +266,14 @@ from stage0_sim.domain.systems.plans import PlanExecutionSystem, TimedPlanAction
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
 from stage0_sim.domain.systems.speech import SpeechSystem
 from stage0_sim.domain.systems.system1 import System1ArbitrationSystem
+from stage0_sim.domain.systems.text_actions import TextActionExecutionSystem
 from stage0_sim.domain.systems.transactions import TransactionExecutionSystem
 from stage0_sim.domain.systems.travel import TravelSystem
+from stage0_sim.domain.text_actions import (
+    TextAttributionRequest,
+    TextReadSpecification,
+    TextWriteSpecification,
+)
 from stage0_sim.domain.world import (
     STANDING_CHARACTER_FOOTPRINT,
     AffordanceAction,
@@ -435,6 +469,124 @@ class ReadableCapabilityDefinition(BaseModel):
     document_id: str = Field(min_length=1)
 
 
+class TextPrincipalDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: TextPrincipalKind
+    id: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def shape_is_valid(self) -> "TextPrincipalDefinition":
+        TextPrincipal(self.kind, self.id)
+        return self
+
+    def to_domain(self) -> TextPrincipal:
+        return TextPrincipal(self.kind, self.id)
+
+
+class TextAccessGrantDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation: TextOperation
+    principals: list[TextPrincipalDefinition] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def principals_are_unique(self) -> "TextAccessGrantDefinition":
+        values = [principal.to_domain() for principal in self.principals]
+        if len(values) != len(set(values)):
+            raise ValueError("text access grant principals must be unique")
+        return self
+
+
+class TextAccessPolicyDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    grants: list[TextAccessGrantDefinition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def operations_are_unique(self) -> "TextAccessPolicyDefinition":
+        operations = [grant.operation for grant in self.grants]
+        if len(operations) != len(set(operations)):
+            raise ValueError("text access policy operations must be unique")
+        return self
+
+    def to_domain(self) -> TextAccessPolicy:
+        return TextAccessPolicy(
+            tuple(
+                TextAccessGrant(
+                    grant.operation,
+                    tuple(
+                        principal.to_domain()
+                        for principal in grant.principals
+                    ),
+                )
+                for grant in self.grants
+            )
+        )
+
+
+class ContentEndpointDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    kind: ContentEndpointKind
+    resource_id: str = Field(min_length=1)
+    operations: list[TextOperation] = Field(min_length=1)
+    access_mode: ContentAccessMode = ContentAccessMode.EXPOSED_REACHABLE
+    lists_items: bool = False
+    originates_messages: bool = False
+    notifies_owner: bool = False
+    created_media_kind: TextMediaKind | None = None
+    created_mode: TextArtifactMode | None = None
+    created_access_policy: TextAccessPolicyDefinition | None = None
+
+    @model_validator(mode="after")
+    def shape_is_valid(self) -> "ContentEndpointDefinition":
+        if len(self.operations) != len(set(self.operations)):
+            raise ValueError("content endpoint operations must be unique")
+        self.to_domain()
+        return self
+
+    def to_domain(self) -> ContentEndpoint:
+        return ContentEndpoint(
+            id=self.id,
+            label=self.label,
+            kind=self.kind,
+            resource_id=self.resource_id,
+            operations=tuple(self.operations),
+            access_mode=self.access_mode,
+            lists_items=self.lists_items,
+            originates_messages=self.originates_messages,
+            notifies_owner=self.notifies_owner,
+            created_media_kind=self.created_media_kind,
+            created_mode=self.created_mode,
+            created_access_policy=(
+                self.created_access_policy.to_domain()
+                if self.created_access_policy is not None
+                else None
+            ),
+        )
+
+
+class ContentEndpointsComponentDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    endpoints: list[ContentEndpointDefinition] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def endpoint_ids_are_unique(self) -> "ContentEndpointsComponentDefinition":
+        endpoint_ids = [endpoint.id for endpoint in self.endpoints]
+        if len(endpoint_ids) != len(set(endpoint_ids)):
+            raise ValueError("content endpoint IDs must be unique")
+        return self
+
+    def to_domain(self) -> ContentEndpointComponent:
+        return ContentEndpointComponent(
+            tuple(endpoint.to_domain() for endpoint in self.endpoints)
+        )
+
+
 class ConsumableCapabilityDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -564,6 +716,9 @@ class PhysicalCapabilitiesDefinition(BaseModel):
     container: ContainerCapabilityDefinition | None = None
     portable: PortableCapabilityDefinition | None = None
     readable: ReadableCapabilityDefinition | None = None
+    content_endpoints: list[ContentEndpointDefinition] = Field(
+        default_factory=list
+    )
     consumable: ConsumableCapabilityDefinition | None = None
     usable: UsableCapabilityDefinition | None = None
     openable: OpenableCapabilityDefinition | None = None
@@ -608,6 +763,9 @@ class PhysicalCapabilitiesDefinition(BaseModel):
                 )
         if self.wearable is not None and self.portable is None:
             raise ValueError("wearable objects require the portable capability")
+        endpoint_ids = [endpoint.id for endpoint in self.content_endpoints]
+        if len(endpoint_ids) != len(set(endpoint_ids)):
+            raise ValueError("physical content endpoint IDs must be unique")
         return self
 
 
@@ -1602,6 +1760,18 @@ class PerceptionSettingsDefinition(BaseModel):
         )
 
 
+class EngagementCompilerSettingsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_profile: str = "default"
+    timeout_seconds: float = Field(default=30.0, gt=0)
+    max_output_tokens: int = Field(default=768, gt=0)
+    max_concurrency: int = Field(default=2, gt=0)
+    max_requests: int | None = Field(default=None, gt=0)
+    max_input_tokens: int | None = Field(default=None, gt=0)
+    max_total_output_tokens: int | None = Field(default=None, gt=0)
+
+
 class CognitionSettingsDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1615,15 +1785,21 @@ class CognitionSettingsDefinition(BaseModel):
     max_requests: int | None = Field(default=None, gt=0)
     max_input_tokens: int | None = Field(default=None, gt=0)
     max_total_output_tokens: int | None = Field(default=None, gt=0)
+    engagement_compiler: EngagementCompilerSettingsDefinition = Field(
+        default_factory=EngagementCompilerSettingsDefinition
+    )
     tool_allowlist: list[str] = Field(
         default_factory=lambda: [
             "navigate_to",
             "perform",
             "say",
+            "engage",
             "wait",
             "skip",
             "transact",
             "check_environment",
+            "read_text",
+            "write_text",
         ]
     )
 
@@ -1633,14 +1809,62 @@ class CognitionSettingsDefinition(BaseModel):
             "navigate_to",
             "perform",
             "say",
+            "engage",
             "wait",
             "skip",
             "transact",
             "interact_with",
             "check_environment",
+            "read_text",
+            "write_text",
         }
         if unknown:
             raise ValueError(f"unknown cognition tools: {sorted(unknown)}")
+        return self
+
+
+class EngagementSettingsDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_groups: int = Field(default=4, ge=1, le=16)
+    max_invocations_per_group: int = Field(default=4, ge=1, le=16)
+    max_public_text_chars: int = Field(default=280, ge=1, le=2000)
+    short_activity_seconds: float = Field(default=5.0, gt=0)
+    medium_activity_seconds: float = Field(default=15.0, gt=0)
+    long_activity_seconds: float = Field(default=30.0, gt=0)
+    low_effort_energy_cost: float = Field(default=1.0, ge=0)
+    medium_effort_energy_cost: float = Field(default=3.0, ge=0)
+    high_effort_energy_cost: float = Field(default=6.0, ge=0)
+    calming_stress_delta: float = Field(default=-2.0, le=0)
+    activating_stress_delta: float = Field(default=2.0, ge=0)
+    quiet_sound_range: int = Field(default=2, ge=0)
+    normal_sound_range: int = Field(default=10, ge=0)
+    loud_sound_range: int = Field(default=20, ge=0)
+    alarming_listener_stress_delta: float = Field(default=2.0, ge=0)
+
+    @model_validator(mode="after")
+    def bands_are_ordered(self) -> "EngagementSettingsDefinition":
+        durations = (
+            self.short_activity_seconds,
+            self.medium_activity_seconds,
+            self.long_activity_seconds,
+        )
+        if durations != tuple(sorted(durations)):
+            raise ValueError("engagement activity durations must be ordered")
+        energy_costs = (
+            self.low_effort_energy_cost,
+            self.medium_effort_energy_cost,
+            self.high_effort_energy_cost,
+        )
+        if energy_costs != tuple(sorted(energy_costs)):
+            raise ValueError("engagement effort energy costs must be ordered")
+        sound_ranges = (
+            self.quiet_sound_range,
+            self.normal_sound_range,
+            self.loud_sound_range,
+        )
+        if sound_ranges != tuple(sorted(sound_ranges)):
+            raise ValueError("engagement sound ranges must be ordered")
         return self
 
 
@@ -1850,10 +2074,207 @@ class CharacterSituationSynthesisSettingsDefinition(BaseModel):
     enabled: bool = False
 
 
+class InitialTextAttributionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    authoritative_actor_id: str = Field(min_length=1)
+    display: TextAttributionDisplay = TextAttributionDisplay.VERIFIED
+    sender_address_id: str | None = Field(default=None, min_length=1)
+    display_label: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def shape_is_valid(self) -> "InitialTextAttributionDefinition":
+        self.to_domain()
+        return self
+
+    def to_domain(self) -> TextAttribution:
+        return TextAttribution(
+            self.authoritative_actor_id,
+            self.display,
+            self.sender_address_id,
+            self.display_label,
+        )
+
+
+class InitialTextBlockDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    kind: TextBlockKind = TextBlockKind.PARAGRAPH
+    text: str = Field(max_length=65_536)
+
+    def to_domain(self) -> TextBlock:
+        return TextBlock(self.id, 1, self.text, self.kind)
+
+
+class InitialTextArtifactDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    media_kind: TextMediaKind
+    mode: TextArtifactMode
+    blocks: list[InitialTextBlockDefinition] = Field(min_length=1)
+    access_policy: TextAccessPolicyDefinition
+    attribution: InitialTextAttributionDefinition
+
+    @model_validator(mode="after")
+    def block_ids_are_unique(self) -> "InitialTextArtifactDefinition":
+        block_ids = [block.id for block in self.blocks]
+        if len(block_ids) != len(set(block_ids)):
+            raise ValueError("initial text block IDs must be unique")
+        return self
+
+    def to_domain(self) -> TextArtifact:
+        return TextArtifact.create(
+            id=self.id,
+            media_kind=self.media_kind,
+            mode=self.mode,
+            blocks=tuple(block.to_domain() for block in self.blocks),
+            access_policy=self.access_policy.to_domain(),
+            operation_id=f"scenario-create:{self.id}",
+            attribution=self.attribution.to_domain(),
+            simulation_tick=0,
+            simulation_time=0.0,
+        )
+
+
+class InitialTextCollectionDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    kind: TextCollectionKind
+    members: list[str] = Field(default_factory=list)
+    capacity: int = Field(default=1_000, gt=0, le=100_000)
+    access_policy: TextAccessPolicyDefinition
+
+    @model_validator(mode="after")
+    def members_are_unique(self) -> "InitialTextCollectionDefinition":
+        if len(self.members) != len(set(self.members)):
+            raise ValueError("initial text collection members must be unique")
+        return self
+
+    def to_domain(self) -> TextCollection:
+        return TextCollection(
+            self.id,
+            self.kind,
+            1,
+            tuple(self.members),
+            self.capacity,
+            self.access_policy.to_domain(),
+        )
+
+
+class InitialTextAddressDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    owner: TextPrincipalDefinition
+    mailbox_id: str = Field(min_length=1)
+    display_label: str = Field(min_length=1)
+    accepted_senders: list[TextPrincipalDefinition] = Field(min_length=1)
+    sent_collection_id: str | None = Field(default=None, min_length=1)
+
+    def to_domain(self) -> TextAddress:
+        return TextAddress(
+            self.id,
+            self.owner.to_domain(),
+            self.mailbox_id,
+            self.display_label,
+            tuple(
+                principal.to_domain()
+                for principal in self.accepted_senders
+            ),
+            self.sent_collection_id,
+        )
+
+
+class InitialTextGroupDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    member_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def members_are_unique(self) -> "InitialTextGroupDefinition":
+        if len(self.member_ids) != len(set(self.member_ids)):
+            raise ValueError("initial text group members must be unique")
+        return self
+
+
+class TextContentDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifacts: list[InitialTextArtifactDefinition] = Field(
+        default_factory=list
+    )
+    collections: list[InitialTextCollectionDefinition] = Field(
+        default_factory=list
+    )
+    addresses: list[InitialTextAddressDefinition] = Field(
+        default_factory=list
+    )
+    groups: list[InitialTextGroupDefinition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def references_are_valid(self) -> "TextContentDefinition":
+        for values, label in (
+            ([item.id for item in self.artifacts], "artifact"),
+            ([item.id for item in self.collections], "collection"),
+            ([item.id for item in self.addresses], "address"),
+            ([item.id for item in self.groups], "group"),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"text {label} IDs must be unique")
+        artifact_ids = {artifact.id for artifact in self.artifacts}
+        collection_ids = {
+            collection.id for collection in self.collections
+        }
+        for collection in self.collections:
+            unknown = set(collection.members) - artifact_ids
+            if unknown:
+                raise ValueError(
+                    f"text collection {collection.id} references unknown "
+                    f"artifacts: {sorted(unknown)}"
+                )
+        for address in self.addresses:
+            references = {
+                address.mailbox_id,
+                *(
+                    [address.sent_collection_id]
+                    if address.sent_collection_id is not None
+                    else []
+                ),
+            }
+            unknown = references - collection_ids
+            if unknown:
+                raise ValueError(
+                    f"text address {address.id} references unknown "
+                    f"collections: {sorted(unknown)}"
+                )
+        return self
+
+    def to_domain(self) -> TextContentRegistry:
+        return TextContentRegistry(
+            artifacts=tuple(
+                artifact.to_domain() for artifact in self.artifacts
+            ),
+            collections=tuple(
+                collection.to_domain() for collection in self.collections
+            ),
+            addresses=tuple(
+                address.to_domain() for address in self.addresses
+            ),
+            groups={
+                group.id: tuple(group.member_ids)
+                for group in self.groups
+            },
+        )
+
+
 class ScenarioDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[6] = SCENARIO_SCHEMA_VERSION
+    schema_version: Literal[8] = SCENARIO_SCHEMA_VERSION
     name: str = Field(min_length=1)
     seed: int = 0
     dt: float = Field(default=1.0, gt=0)
@@ -1876,6 +2297,12 @@ class ScenarioDefinition(BaseModel):
     )
     cognition: CognitionSettingsDefinition = Field(
         default_factory=CognitionSettingsDefinition
+    )
+    engagement: EngagementSettingsDefinition = Field(
+        default_factory=EngagementSettingsDefinition
+    )
+    text_content: TextContentDefinition = Field(
+        default_factory=TextContentDefinition
     )
     character_situation_synthesis: CharacterSituationSynthesisSettingsDefinition = (
         Field(default_factory=CharacterSituationSynthesisSettingsDefinition)
@@ -2122,7 +2549,7 @@ def load_scenario(path: Path) -> ScenarioDefinition:
         or raw_scenario.get("schema_version") != SCENARIO_SCHEMA_VERSION
     ):
         raise ScenarioLoadError(
-            "scenario schema version 6 is required; run "
+            f"scenario schema version {SCENARIO_SCHEMA_VERSION} is required; run "
             "'stage0-sim migrate content'"
         )
     try:
@@ -2150,6 +2577,7 @@ def create_runner(
     registry = Registry()
     systems = SystemExecutor()
     information_store = InformationStore()
+    text_content = scenario.text_content.to_domain()
     resolved_embedding_provider = (
         embedding_provider or DeterministicEmbeddingProvider()
     )
@@ -2169,6 +2597,7 @@ def create_runner(
         research_recorder=research_recorder,
     )
     registry.set_resource(information_store)
+    registry.set_resource(text_content)
     registry.set_resource(information_retriever)
     registry.set_resource(memory_store)
     registry.set_resource(memory_work)
@@ -2233,6 +2662,7 @@ def create_runner(
     systems.add(MovementActivitySystem())
     systems.add(HomeostasisSystem())
     systems.add(TimedPlanActionSystem())
+    systems.add(TextActionExecutionSystem())
     systems.add(System1ArbitrationSystem())
     systems.add(SpeechSystem())
     systems.add(MemoryRecordingSystem())
@@ -2379,6 +2809,9 @@ def create_runner(
         systems.add(CharacterEffectResolutionSystem())
         systems.add(AffordanceExecutionSystem())
         systems.add(TransactionExecutionSystem())
+        systems.add(
+            EngagementExecutionSystem(build_v1_handler_registry())
+        )
         if staffing_states:
             systems.add(NpcStaffingSystem())
         systems.add(MovementSystem())
@@ -2452,6 +2885,54 @@ def create_runner(
                 research_recorder=research_recorder,
             )
         )
+        if model_client is not None:
+            from stage0_sim.application.engagements.compiler import (
+                EngagementCompiler,
+            )
+            from stage0_sim.application.engagements.coordinator import (
+                EngagementWorkCoordinator,
+            )
+
+            compiler_settings = (
+                scenario.cognition.engagement_compiler.model_copy(
+                    update={
+                        "max_output_tokens": (
+                            min(
+                                scenario.cognition.engagement_compiler.max_output_tokens,
+                                model_max_output_tokens,
+                            )
+                            if model_max_output_tokens is not None
+                            else scenario.cognition.engagement_compiler.max_output_tokens
+                        )
+                    }
+                )
+            )
+            registry.set_resource(
+                EngagementWorkCoordinator(
+                    EngagementCompiler(
+                        model_client,
+                        compiler_settings=compiler_settings,
+                        engagement_settings=scenario.engagement,
+                    ),
+                    max_concurrency=(
+                        min(
+                            compiler_settings.max_concurrency,
+                            model_max_concurrency,
+                        )
+                        if model_max_concurrency is not None
+                        else compiler_settings.max_concurrency
+                    ),
+                    request_timeout_seconds=(
+                        compiler_settings.timeout_seconds
+                    ),
+                    max_requests=compiler_settings.max_requests,
+                    max_input_tokens=compiler_settings.max_input_tokens,
+                    max_output_tokens=(
+                        compiler_settings.max_total_output_tokens
+                    ),
+                    research_recorder=research_recorder,
+                )
+            )
         systems.add(CognitionScheduler())
 
     occupied: set[tuple[str, Coordinate]] = set()
@@ -2879,6 +3360,44 @@ def create_runner(
             ),
         )
 
+        content_endpoint_values = raw_components.pop(
+            "content_endpoints", None
+        )
+        if content_endpoint_values is not None:
+            endpoint_definition = _validate_component(
+                ContentEndpointsComponentDefinition,
+                content_endpoint_values,
+                entity_id,
+            )
+            registry.add_component(
+                entity_id,
+                endpoint_definition.to_domain(),
+            )
+
+        known_address_values = raw_components.pop(
+            "known_text_addresses", None
+        )
+        if known_address_values is not None:
+            known_addresses = _validate_component(
+                KnownTextAddressesDefinition,
+                known_address_values,
+                entity_id,
+            )
+            unknown_addresses = set(
+                known_addresses.address_ids
+            ) - text_content.addresses.keys()
+            if unknown_addresses:
+                raise ValueError(
+                    f"entity {entity_id} references unknown text addresses: "
+                    f"{sorted(unknown_addresses)}"
+                )
+            registry.add_component(
+                entity_id,
+                KnownTextAddressesComponent(
+                    tuple(known_addresses.address_ids)
+                ),
+            )
+
         controller_values = raw_components.pop("controller", None)
         if controller_values is not None:
             controller_definition = _validate_component(
@@ -3042,6 +3561,7 @@ def create_runner(
                     )
             registry.add_component(entity_id, navigation)
     _materialize_character_physics(registry)
+    _validate_content_endpoint_bindings(registry)
     _validate_initial_equipment(registry)
     for entity_id in registry.query_entities(SensesComponent):
         resolve_character_effects(registry, entity_id)
@@ -3085,6 +3605,23 @@ def create_runner(
     if world is not None:
         _synthesize_navigation_knowledge(registry, information_store)
     return runner
+
+
+def _validate_content_endpoint_bindings(registry: Registry) -> None:
+    content = registry.get_resource(TextContentRegistry)
+    for entity_id, component in registry.query(ContentEndpointComponent):
+        for endpoint in component.endpoints:
+            if endpoint.kind is ContentEndpointKind.ARTIFACT:
+                if endpoint.resource_id not in content.artifacts:
+                    raise ValueError(
+                        f"content endpoint {entity_id}:{endpoint.id} references "
+                        f"unknown artifact {endpoint.resource_id}"
+                    )
+            elif endpoint.resource_id not in content.collections:
+                raise ValueError(
+                    f"content endpoint {entity_id}:{endpoint.id} references "
+                    f"unknown collection {endpoint.resource_id}"
+                )
 
 
 class PositionDefinition(CoordinateDefinition):
@@ -3165,10 +3702,13 @@ class ControllerDefinition(BaseModel):
             "navigate_to",
             "perform",
             "say",
+            "engage",
             "wait",
             "skip",
             "transact",
             "check_environment",
+            "read_text",
+            "write_text",
         ]
     )
 
@@ -3178,11 +3718,14 @@ class ControllerDefinition(BaseModel):
             "navigate_to",
             "perform",
             "say",
+            "engage",
             "wait",
             "skip",
             "transact",
             "interact_with",
             "check_environment",
+            "read_text",
+            "write_text",
         }
         if unknown:
             raise ValueError(f"unknown controller tools: {sorted(unknown)}")
@@ -3295,6 +3838,98 @@ class InteractionSpecificationDefinition(BaseModel):
         )
 
 
+class TextAttributionRequestDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display: TextAttributionDisplay = TextAttributionDisplay.VERIFIED
+    sender_address_id: str | None = Field(default=None, min_length=1)
+    display_label: str | None = Field(default=None, min_length=1)
+
+    def to_domain(self) -> TextAttributionRequest:
+        return TextAttributionRequest(
+            self.display,
+            self.sender_address_id,
+            self.display_label,
+        )
+
+
+class TextBlockDraftDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(max_length=65_536)
+    kind: TextBlockKind = TextBlockKind.PARAGRAPH
+
+    def to_domain(self) -> TextBlockDraft:
+        return TextBlockDraft(self.text, self.kind)
+
+
+class TextReadSpecificationDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_id: str = Field(min_length=1)
+    endpoint_id: str = Field(min_length=1)
+    artifact_id: str = Field(min_length=1)
+    block_ids: list[str] = Field(default_factory=list)
+
+    def to_domain(self) -> TextReadSpecification:
+        return TextReadSpecification(
+            self.target_id,
+            self.endpoint_id,
+            self.artifact_id,
+            tuple(self.block_ids),
+        )
+
+
+class TextWriteSpecificationDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation: TextOperation
+    target_id: str = Field(min_length=1)
+    endpoint_id: str = Field(min_length=1)
+    attribution: TextAttributionRequestDefinition = Field(
+        default_factory=TextAttributionRequestDefinition
+    )
+    artifact_id: str | None = Field(default=None, min_length=1)
+    expected_artifact_revision: int | None = Field(default=None, gt=0)
+    expected_collection_revision: int | None = Field(default=None, gt=0)
+    expected_sent_collection_revision: int | None = Field(default=None, gt=0)
+    block_id: str | None = Field(default=None, min_length=1)
+    expected_block_revision: int | None = Field(default=None, gt=0)
+    blocks: list[TextBlockDraftDefinition] = Field(default_factory=list)
+    text: str | None = Field(default=None, max_length=65_536)
+    start: int | None = Field(default=None, ge=0)
+    end: int | None = Field(default=None, ge=0)
+    recipient_address_id: str | None = Field(default=None, min_length=1)
+    artifact_id_hint: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def shape_is_valid(self) -> "TextWriteSpecificationDefinition":
+        self.to_domain()
+        return self
+
+    def to_domain(self) -> TextWriteSpecification:
+        return TextWriteSpecification(
+            operation=self.operation,
+            target_id=self.target_id,
+            endpoint_id=self.endpoint_id,
+            attribution=self.attribution.to_domain(),
+            artifact_id=self.artifact_id,
+            expected_artifact_revision=self.expected_artifact_revision,
+            expected_collection_revision=self.expected_collection_revision,
+            expected_sent_collection_revision=(
+                self.expected_sent_collection_revision
+            ),
+            block_id=self.block_id,
+            expected_block_revision=self.expected_block_revision,
+            blocks=tuple(block.to_domain() for block in self.blocks),
+            text=self.text,
+            start=self.start,
+            end=self.end,
+            recipient_address_id=self.recipient_address_id,
+            artifact_id_hint=self.artifact_id_hint,
+        )
+
+
 class PlanActionDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -3304,10 +3939,20 @@ class PlanActionDefinition(BaseModel):
     mode: TravelMode | None = None
     offer_id: str | None = Field(default=None, min_length=1)
     interaction: InteractionSpecificationDefinition | None = None
+    text_read: TextReadSpecificationDefinition | None = None
+    text_write: TextWriteSpecificationDefinition | None = None
 
     @model_validator(mode="after")
     def travel_fields_are_consistent(self) -> "PlanActionDefinition":
-        if self.action is ActionType.INTERACT:
+        if self.action is ActionType.READ_TEXT:
+            if self.text_read is None or self.text_write is not None:
+                raise ValueError("READ_TEXT requires only text_read")
+        elif self.action is ActionType.WRITE_TEXT:
+            if self.text_write is None or self.text_read is not None:
+                raise ValueError("WRITE_TEXT requires only text_write")
+        elif self.text_read is not None or self.text_write is not None:
+            raise ValueError("text specifications require a text action")
+        elif self.action is ActionType.INTERACT:
             if self.interaction is None:
                 raise ValueError("INTERACT requires interaction")
             if self.target is not None and self.target != self.interaction.target_id:
@@ -3347,6 +3992,16 @@ class PlanActionDefinition(BaseModel):
             interaction=(
                 self.interaction.to_domain()
                 if self.interaction is not None
+                else None
+            ),
+            text_read=(
+                self.text_read.to_domain()
+                if self.text_read is not None
+                else None
+            ),
+            text_write=(
+                self.text_write.to_domain()
+                if self.text_write is not None
                 else None
             ),
         )
@@ -3662,6 +4317,18 @@ class InformationComponentDefinition(BaseModel):
         return self
 
 
+class KnownTextAddressesDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    address_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def address_ids_are_unique(self) -> "KnownTextAddressesDefinition":
+        if len(self.address_ids) != len(set(self.address_ids)):
+            raise ValueError("known text address IDs must be unique")
+        return self
+
+
 class InitialMemoryDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -3833,6 +4500,16 @@ def _materialize_physical_objects(
             registry.add_component(
                 item.id,
                 ReadableComponent(capabilities.readable.document_id),
+            )
+        if capabilities.content_endpoints:
+            registry.add_component(
+                item.id,
+                ContentEndpointComponent(
+                    tuple(
+                        endpoint.to_domain()
+                        for endpoint in capabilities.content_endpoints
+                    )
+                ),
             )
         if capabilities.consumable is not None:
             registry.add_component(

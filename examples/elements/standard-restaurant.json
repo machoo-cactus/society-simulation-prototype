@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "a616ea75f1e522de56dfd9aad8a15684b1d995924bba336fd7b7e408d62e556c",
+        "content_hash": "5610bd1b2bb7d4a400516590232ad73bd448d1128ce85a03a6c0abfd51b254c2",
         "id": "standard-restaurant-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

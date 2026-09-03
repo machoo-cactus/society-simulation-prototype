@@ -593,6 +593,96 @@
           {% for row in plan_rows(selected_agent) %}<li>{{ row }}</li>{% else %}<li>No plan available</li>{% endfor %}
         </ol>
         </section>
+        {% set engagement = selected_agent.get("engagement", {}) %}
+        {% set current_engagement = engagement.get("active") or engagement.get("compiled") or engagement.get("pending") %}
+        <section class="inspector-section engagement-inspector" aria-labelledby="engagement-inspector-heading">
+          <h3 id="engagement-inspector-heading">Current and recent engagement</h3>
+          {% if current_engagement %}
+            <article class="engagement-card engagement-card--current">
+              <header>
+                <h4>Current engagement</h4>
+                <p class="status-chip">{{ current_engagement.get("status", "unknown")|replace("_", " ") }}</p>
+              </header>
+              <dl class="facts engagement-facts">
+                <div><dt>Engagement ID</dt><dd><code>{{ current_engagement.engagement_id }}</code></dd></div>
+                <div><dt>Compilation</dt><dd>{{ current_engagement.get("compiler_status", "not started")|replace("_", " ") }}</dd></div>
+                <div><dt>Action lineage</dt><dd><code>{{ current_engagement.get("action_id") or "none" }}</code></dd></div>
+                <div><dt>Plan lineage</dt><dd><code>{{ current_engagement.get("plan_id") or "none" }}</code>{% if current_engagement.get("plan_revision") is not none %} revision {{ current_engagement.plan_revision }}{% endif %}</dd></div>
+                <div><dt>Decision / tool</dt><dd><code>{{ current_engagement.get("decision_id") or "none" }}</code> / <code>{{ current_engagement.get("tool_call_id") or "none" }}</code></dd></div>
+                <div><dt>References</dt><dd>{{ current_engagement.get("reference_ids", [])|join(", ") or "none" }}</dd></div>
+                <div><dt>Participants</dt><dd>{{ current_engagement.get("participant_ids", [])|join(", ") or selected_agent.id }}</dd></div>
+                <div><dt>Current group</dt><dd>{{ current_engagement.get("current_group_id") or "none" }}</dd></div>
+                {% set progress = current_engagement.get("progress", {}) %}
+                <div><dt>Progress</dt><dd>{{ progress.get("completed_group_count", 0) }} completed · {{ progress.get("failed_group_count", 0) }} failed · {{ progress.get("group_count", 0) }} total</dd></div>
+              </dl>
+              <h4>Group statuses</h4>
+              <ol class="engagement-groups">
+                {% for group in current_engagement.get("groups", []) %}
+                  <li>
+                    <strong>{{ group.group_id }}</strong>
+                    · group {{ group.get("ordinal", loop.index0) }}
+                    · {{ group.get("status", "unknown")|replace("_", " ") }}
+                    · {{ "atomic" if group.get("required_atomic") else "non-atomic" }}
+                    {% if group.get("invocation_ids") %} · invocations {{ group.invocation_ids|join(", ") }}{% endif %}
+                  </li>
+                {% else %}
+                  <li>No compiled groups yet.</li>
+                {% endfor %}
+              </ol>
+              <h4>Grounded committed evidence</h4>
+              <ul class="engagement-evidence">
+                {% for evidence in current_engagement.get("evidence", []) %}
+                  <li>
+                    <strong>{{ evidence.get("modality", "activity")|title }}</strong>
+                    · group {{ evidence.get("group_id", "unknown") }}
+                    {% if evidence.get("public_text") %} · {{ evidence.public_text }}{% endif %}
+                    {% if evidence.get("activity") %} · {{ evidence.activity }}{% endif %}
+                    {% if evidence.get("sound_band") %} · {{ evidence.sound_band }} sound{% endif %}
+                    {% if evidence.get("expression_band") %} · {{ evidence.expression_band }} gesture{% endif %}
+                    {% if evidence.get("recipient_ids") %} · heard by {{ evidence.recipient_ids|join(", ") }}{% endif %}
+                  </li>
+                {% else %}
+                  <li>No committed visual, auditory, or bounded-activity evidence yet.</li>
+                {% endfor %}
+              </ul>
+            </article>
+          {% else %}
+            <p class="empty-state">No pending, compiled, or active engagement.</p>
+          {% endif %}
+          <h4>Recent outcomes</h4>
+          <ol class="engagement-history">
+            {% for recent in engagement.get("recent", []) %}
+              <li>
+                <article class="engagement-card">
+                  <header>
+                    <h5><code>{{ recent.engagement_id }}</code></h5>
+                    <p class="status-chip">{{ recent.get("status", "unknown")|replace("_", " ") }}</p>
+                  </header>
+                  <p>
+                    Compilation {{ recent.get("compiler_status", "not started")|replace("_", " ") }}
+                    · action <code>{{ recent.get("action_id") or "none" }}</code>
+                    · plan <code>{{ recent.get("plan_id") or "none" }}</code>
+                    · references {{ recent.get("reference_ids", [])|join(", ") or "none" }}
+                  </p>
+                  <ul class="engagement-groups">
+                    {% for group in recent.get("groups", []) %}
+                      <li>
+                        <strong>{{ group.group_id }}</strong> · {{ group.get("status", "unknown")|replace("_", " ") }}
+                        {% for outcome in group.get("outcomes", []) %}
+                          <span> · {{ outcome.get("modality", "activity") }}{% if outcome.get("public_text") %}: {{ outcome.public_text }}{% elif outcome.get("activity") %}: {{ outcome.activity }}{% endif %}</span>
+                        {% endfor %}
+                      </li>
+                    {% else %}
+                      <li>No grounded group outcomes were committed.</li>
+                    {% endfor %}
+                  </ul>
+                </article>
+              </li>
+            {% else %}
+              <li>No recent engagement outcomes.</li>
+            {% endfor %}
+          </ol>
+        </section>
         <details class="inspector-section">
         <summary>Character profile</summary>
         <pre>{{ json_pretty(selected_agent.get("character_profile", {}).get("data", {})) }}</pre>
@@ -641,7 +731,7 @@
       <label>Search <input name="search" type="search" value="{{ event_search }}"></label>
       <label>Category
         <select name="filter">
-          {% for value, label in (("all", "All events"), ("system1", "System 1"), ("actions", "Plans and actions"), ("dialogue", "Speech and dialogue"), ("cognition", "Cognition and tools"), ("perception", "Perception"), ("travel", "Travel"), ("environment", "Environment"), ("errors", "Failures"), ("ui", "Simulation lifecycle")) %}
+          {% for value, label in (("all", "All events"), ("system1", "System 1"), ("actions", "Plans and actions"), ("dialogue", "Speech and dialogue"), ("cognition", "Cognition and tools"), ("engagement", "Engagement"), ("perception", "Perception"), ("travel", "Travel"), ("environment", "Environment"), ("errors", "Failures"), ("ui", "Simulation lifecycle")) %}
             <option value="{{ value }}" {% if event_filter == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
@@ -657,7 +747,7 @@
     <div id="event-live">
       <ol id="event-log" class="event-log" data-preserve-scroll aria-live="polite" aria-relevant="additions">
         {% for event in events %}
-          <li class="{% if 'failed' in event.event_type or 'error' in event.event_type or 'blocked' in event.event_type or 'rejected' in event.event_type %}event-error{% elif event.event_type.startswith('system1.') %}event-system1{% endif %}">
+          <li class="{% if 'failed' in event.event_type or 'error' in event.event_type or 'blocked' in event.event_type or 'rejected' in event.event_type %}event-error{% elif event.event_type.startswith('system1.') %}event-system1{% elif event.event_type.startswith('engagement.') %}event-engagement{% endif %}">
             <a href="?filter={{ event_filter }}&order={{ event_order }}&search={{ event_search|urlencode }}&event={{ event.event_id|urlencode }}#event-detail" data-ui-link-targets="#world-panel,#events-panel" data-ui-remove-query="focus">
               <span>tick {{ event.simulation_tick }}</span>
               <strong>{{ event.event_type }}</strong>

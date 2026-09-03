@@ -41,7 +41,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "d22a9559c81b597ad16744a2329013bfdc63e139d6de16ad6a033781d497ce5c",
+        "content_hash": "33358837b38b93ea4bd4d2e976849d8382ac3f4ad89e1d4eba850631c51a8260",
         "id": "greyford-rivermarket-exchange.station-greyford-rivermarket-grocer-browse",
         "kind": "object"
       },
@@ -67,7 +67,7 @@
     },
     {
       "element": {
-        "content_hash": "7313db6048c9b1b0b4d958a92694669689c3f84115d6bb8595a432092b6edff5",
+        "content_hash": "2a726fbf5e9efa294c3e347cf064e45167567f65efa1051c09a17e90f34a370a",
         "id": "greyford-rivermarket-exchange.transaction-point-greyford-rivermarket-checkout",
         "kind": "object"
       },
@@ -96,7 +96,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

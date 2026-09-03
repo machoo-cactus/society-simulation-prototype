@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "7e9a2547d7523c88ce5266ee326b1c0dee8d2399408208a3e3602879ccfd4b73",
+        "content_hash": "6e875ed8e7d5975bfca97ba6fff59c4090c3244bf7d82a67f54e4b6813dcd0fe",
         "id": "greyford-office-evening.map-greyford-westmarket-apartments",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

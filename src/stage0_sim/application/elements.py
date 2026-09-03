@@ -26,6 +26,7 @@ from stage0_sim.application.scenario import (
     CityDefinition,
     CognitionSettingsDefinition,
     CoordinateDefinition,
+    EngagementSettingsDefinition,
     EntityDefinition,
     EnvironmentalAvailabilityDefinition,
     HomeostasisSettingsDefinition,
@@ -38,6 +39,7 @@ from stage0_sim.application.scenario import (
     SpatialMetricDefinition,
     StationActionDefinition,
     System1SettingsDefinition,
+    TextContentDefinition,
     TransactionOfferDefinition,
     TransportDefinition,
     WeatherSettingsDefinition,
@@ -79,7 +81,7 @@ class ElementReference(BaseModel):
 class ElementDefinitionBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[3] = ELEMENT_SCHEMA_VERSION
+    schema_version: Literal[4] = ELEMENT_SCHEMA_VERSION
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     description: str = ""
@@ -144,7 +146,7 @@ class ObjectElementDefinition(ElementDefinitionBase):
     @model_validator(mode="after")
     def capability_shape_is_valid(self) -> ObjectElementDefinition:
         if self.physical is None:
-            raise ValueError("element schema version 3 objects require physical data")
+            raise ValueError("element schema version 4 objects require physical data")
         if self.npc_role is not None and self.npc_role.kind is not ElementKind.NPC_ROLE:
             raise ValueError("object npc_role must reference an npc_role element")
         if self.object_type == "affordance":
@@ -593,7 +595,7 @@ class CityWorldSourceDefinition(BaseModel):
 class ScenarioSourceDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[6] = SCENARIO_SCHEMA_VERSION
+    schema_version: Literal[8] = SCENARIO_SCHEMA_VERSION
     name: str = Field(min_length=1)
     seed: int = 0
     dt: float = Field(default=1.0, gt=0)
@@ -617,6 +619,12 @@ class ScenarioSourceDefinition(BaseModel):
     )
     cognition: CognitionSettingsDefinition = Field(
         default_factory=CognitionSettingsDefinition
+    )
+    engagement: EngagementSettingsDefinition = Field(
+        default_factory=EngagementSettingsDefinition
+    )
+    text_content: TextContentDefinition = Field(
+        default_factory=TextContentDefinition
     )
     character_situation_synthesis: CharacterSituationSynthesisSettingsDefinition = (
         Field(default_factory=CharacterSituationSynthesisSettingsDefinition)

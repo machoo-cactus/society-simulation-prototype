@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "5538d6da9acde93bde73b0165922d2a10d02628a2c54d331508f2d866e8eb679",
+        "content_hash": "0768bc6ae0060259cb89e52a61721d840044efa285eed8766281bed1290c8b39",
         "id": "greyford-office-evening.station-greyford-central-interchange-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

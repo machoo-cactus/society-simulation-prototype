@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "804340660ece0491dc200572370d6b687982102f70dc8892f2874a3303a12767",
+        "content_hash": "f6666a4808fc9ecde7fb5ed2a1d51d77a0e4fcea7f3e6ff589499f6fec701c45",
         "id": "greyford-office-evening.station-greyford-mobility-centre-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     },
     {
       "element": {
-        "content_hash": "3e7583fa08ac03f771939a5a997e7c27ece3e174a31b3321da9ffd98580491d0",
+        "content_hash": "ec2d6fe917b8af49f6dd26bc9423a4e165a481090f3e4d5a672a67d424155917",
         "id": "greyford-office-evening.transaction-point-greyford-mobility-service",
         "kind": "object"
       },
@@ -76,7 +76,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

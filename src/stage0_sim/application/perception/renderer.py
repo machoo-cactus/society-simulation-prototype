@@ -35,6 +35,15 @@ class DeterministicPerceptionRenderer:
                 f"{fact.properties.get('verb', 'an interaction')} with "
                 f"{fact.properties.get('target_name', fact.object_id or 'an object')}."
             )
+        if fact.fact_type == "text_activity_observed":
+            return (
+                f"{subject} is {fact.properties.get('activity', 'using text')} "
+                f"with {fact.properties.get('target_name', fact.object_id or 'an object')}."
+            )
+        if fact.fact_type == "text_arrived":
+            return (
+                f"New text arrived for {fact.properties.get('display_label', 'an address')}."
+            )
         if fact.fact_type == "heard_speech":
             return f'{subject} said: "{fact.properties.get("text", "")}"'
         if fact.fact_type in {"scent_detected", "scent_changed"}:

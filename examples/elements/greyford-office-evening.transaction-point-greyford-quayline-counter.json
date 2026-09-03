@@ -14,7 +14,7 @@
   "kind": "object",
   "name": "Quayline Coffee Counter",
   "npc_role": {
-    "content_hash": "c3886f8a0f1911eead41935b7a170b40aa00c8fbf8cc71ada8195379687e5f65",
+    "content_hash": "424ce6641f7b05ca0bf87f3dbbaa29e610ea8e49f9b403896ce8ce34c01cd6b4",
     "id": "quayside-cashier",
     "kind": "npc_role"
   },
@@ -43,6 +43,7 @@
     "capabilities": {
       "consumable": null,
       "container": null,
+      "content_endpoints": [],
       "openable": null,
       "portable": null,
       "readable": null,
@@ -76,6 +77,6 @@
     "owner_id": null
   },
   "request_timeout": 90.0,
-  "schema_version": 3,
+  "schema_version": 4,
   "supported_actions": null
 }

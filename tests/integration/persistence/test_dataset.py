@@ -33,6 +33,15 @@ from stage0_sim.application.scenario import (
 )
 from stage0_sim.cli import main
 from stage0_sim.domain.components import HomeostasisComponent
+from stage0_sim.domain.content import (
+    TextAccessGrant,
+    TextAccessPolicy,
+    TextCollection,
+    TextCollectionKind,
+    TextContentRegistry,
+    TextOperation,
+    TextPrincipal,
+)
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.information import (
     InformationDocument,
@@ -143,7 +152,7 @@ def test_unknown_payload_fields_survive_sqlite_restart(tmp_path: Path) -> None:
     }
 
 
-def test_v4_record_envelope_round_trips_all_dataset_metadata() -> None:
+def test_v5_record_envelope_round_trips_all_dataset_metadata() -> None:
     record = DatasetRecord(
         run_id="round-trip",
         sequence=7,
@@ -168,6 +177,9 @@ def test_v4_record_envelope_round_trips_all_dataset_metadata() -> None:
             decision_id="decision-1",
             model_request_id="request-1",
             tool_call_id="tool-1",
+            engagement_id="engagement-1",
+            engagement_group_id="group-1",
+            engagement_invocation_id="invocation-1",
         ),
         source_metadata={"provider": "fake"},
     )
@@ -177,6 +189,12 @@ def test_v4_record_envelope_round_trips_all_dataset_metadata() -> None:
     assert restored == record
     assert record.record_id == "round-trip:record:00000007"
     assert record.to_dict()["decision_id"] == "decision-1"
+    assert record.to_dict()["engagement_id"] == "engagement-1"
+    legacy_shape = record.to_dict()
+    del legacy_shape["engagement_id"]
+    del legacy_shape["engagement_group_id"]
+    del legacy_shape["engagement_invocation_id"]
+    assert DatasetRecord.from_dict(legacy_shape).joins.engagement_id is None
 
 
 def test_dataset_record_rejects_positional_and_agent_id_compatibility() -> None:
@@ -235,7 +253,7 @@ def test_noncurrent_database_schema_is_rejected_without_modification(
     with pytest.raises(
         RuntimeError,
         match=(
-            "unsupported SQLite schema version 3; expected 10. "
+            "unsupported SQLite schema version 3; expected 12. "
             "Existing databases are not migrated"
         ),
     ):
@@ -267,7 +285,7 @@ def test_nonempty_schema_8_database_is_rejected_without_migration(
     with pytest.raises(
         RuntimeError,
         match=(
-            "unsupported SQLite schema version 8; expected 10. "
+            "unsupported SQLite schema version 8; expected 12. "
             "Existing databases are not migrated"
         ),
     ):
@@ -307,7 +325,7 @@ def test_fresh_database_creates_only_the_current_schema(tmp_path: Path) -> None:
     }
     connection.close()
 
-    assert version == 10
+    assert version == 12
     assert "subject_id" in record_columns
     assert "agent_id" not in record_columns
     assert action_columns["root_correlation_id"] is None
@@ -351,7 +369,7 @@ def test_unversioned_existing_database_is_rejected_without_recreation(
 
     with pytest.raises(
         RuntimeError,
-        match="unsupported SQLite schema version 0; expected 10",
+        match="unsupported SQLite schema version 0; expected 12",
     ):
         SQLiteDatasetStore(database)
 
@@ -790,7 +808,7 @@ def test_newer_database_schema_is_rejected_explicitly(tmp_path: Path) -> None:
 
     with pytest.raises(
         RuntimeError,
-        match="unsupported SQLite schema version 999; expected 10",
+        match="unsupported SQLite schema version 999; expected 12",
     ):
         SQLiteDatasetStore(database)
 
@@ -855,6 +873,52 @@ def test_jsonl_export_includes_every_information_document_revision(
         original.to_dict(),
         revised.to_dict(),
     ]
+
+
+def test_text_content_snapshot_round_trips_and_exports_privately(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "text-content.sqlite3"
+    store = SQLiteDatasetStore(database)
+    store.begin_run(
+        run_id="text-content",
+        seed=1,
+        dt=1,
+        initial_speed=1,
+        scenario={"schema_version": 8, "name": "text-content"},
+    )
+    registry = TextContentRegistry(
+        collections=(
+            TextCollection(
+                "documents",
+                TextCollectionKind.DOCUMENT_SET,
+                1,
+                (),
+                10,
+                TextAccessPolicy(
+                    (
+                        TextAccessGrant(
+                            TextOperation.CREATE,
+                            (TextPrincipal.public(),),
+                        ),
+                    )
+                ),
+            ),
+        )
+    )
+
+    store.save_text_content_snapshot("text-content", registry.to_dict())
+
+    assert store.load_text_content_snapshot("text-content") == registry.to_dict()
+    exported = parse_export(store, "text-content")
+    snapshot = next(
+        record
+        for record in exported
+        if record["record_type"] == "text_content_snapshot"
+    )
+    assert snapshot["visibility"] == "PRIVATE_RESEARCH"
+    assert snapshot["payload"] == registry.to_dict()
+    store.close()
 
 
 def test_completed_navigation_knowledge_is_persisted_and_exported(

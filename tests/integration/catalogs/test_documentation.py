@@ -2,7 +2,16 @@ import re
 from pathlib import Path
 from urllib.parse import unquote
 
+from stage0_sim import __version__
+from stage0_sim.adapters.persistence.sqlite_schema import DATABASE_SCHEMA_VERSION
+from stage0_sim.application.data_capture import DATASET_SCHEMA_VERSION
+from stage0_sim.application.migrations import (
+    CHARACTER_SCHEMA_VERSION,
+    ELEMENT_SCHEMA_VERSION,
+    SCENARIO_SCHEMA_VERSION,
+)
 from stage0_sim.application.scenario import CognitionSettingsDefinition
+from stage0_sim.application.telemetry import TELEMETRY_SCHEMA_VERSION
 from stage0_sim.config import Settings
 from stage0_sim.domain.components import ActionType
 
@@ -41,6 +50,9 @@ def test_internal_markdown_links_resolve() -> None:
 
 
 def test_current_contracts_are_documented() -> None:
+    contracts = (
+        REPOSITORY_ROOT / "docs" / "CURRENT_CONTRACTS.md"
+    ).read_text(encoding="utf-8")
     configuration = (
         REPOSITORY_ROOT / "docs" / "CONFIGURATION.md"
     ).read_text(encoding="utf-8")
@@ -59,9 +71,27 @@ def test_current_contracts_are_documented() -> None:
     for action in ActionType:
         assert f"`{action.value}`" in vocabulary
 
-    assert "stage0.dataset.v4" in (
-        REPOSITORY_ROOT / "docs" / "DATA_COLLECTION.md"
-    ).read_text(encoding="utf-8")
-    assert "schema 10" in (
-        REPOSITORY_ROOT / "docs" / "STATUS_AND_ROADMAP.md"
-    ).read_text(encoding="utf-8")
+    assert f"`{__version__}`" in contracts
+    assert f"| Scenario source | `{SCENARIO_SCHEMA_VERSION}` |" in contracts
+    assert f"| Character source | `{CHARACTER_SCHEMA_VERSION}`" in contracts
+    assert f"| Reusable element source | `{ELEMENT_SCHEMA_VERSION}` |" in contracts
+    assert f"`{DATASET_SCHEMA_VERSION}`" in contracts
+    assert f"schema `{DATABASE_SCHEMA_VERSION}`" in contracts
+    assert f"`{TELEMETRY_SCHEMA_VERSION}`" in contracts
+
+    for event_type in (
+        "engagement.requested",
+        "engagement.compilation_requested",
+        "engagement.compilation_completed",
+        "engagement.compilation_failed",
+        "engagement.compilation_cancelled",
+        "engagement.started",
+        "engagement.group_completed",
+        "engagement.group_failed",
+        "engagement.capability_committed",
+        "engagement.completed",
+        "engagement.partial",
+        "engagement.failed",
+        "engagement.cancelled",
+    ):
+        assert f"`{event_type}`" in vocabulary

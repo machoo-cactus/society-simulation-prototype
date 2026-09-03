@@ -39,15 +39,19 @@ from stage0_sim.domain.components import (
     PlanComponent,
     System1State,
 )
+from stage0_sim.domain.engagements import EngagementSpecification
 from stage0_sim.domain.events import JsonValue
 from stage0_sim.domain.intents import (
     ActivityIntent,
     CharacterIntent,
+    EngageIntent,
     InteractionIntent,
     NavigationIntent,
     ServeTransactionIntent,
     SkipIntent,
     SpeechIntent,
+    TextReadIntent,
+    TextWriteIntent,
     TransactionIntent,
     WaitIntent,
 )
@@ -55,6 +59,7 @@ from stage0_sim.domain.lineage import (
     active_goal_links,
     emit_action_lifecycle,
     new_action_instance,
+    new_engagement_id,
     queue_plan_actions,
 )
 from stage0_sim.domain.systems import SystemContext
@@ -631,12 +636,24 @@ class AgentWorkCoordinator:
                 "tool_call_id": call.call_id,
                 "tool_name": call.name,
                 "arguments": call.arguments,
+                **(
+                    {"visibility": "private"}
+                    if call.name in {"engage", "write_text"}
+                    else {}
+                ),
             },
             correlation_id=request.decision_id,
         )
         freshness = self._freshness_failure(context, request)
         if freshness is not None:
-            self._reject(context, request, call.call_id, freshness, freshness)
+            self._reject(
+                context,
+                request,
+                call.call_id,
+                freshness,
+                freshness,
+                private=call.name in {"engage", "write_text"},
+            )
             return
         try:
             intent = self.tool_registry.propose(request, call)
@@ -646,7 +663,12 @@ class AgentWorkCoordinator:
                 request,
                 call.call_id,
                 error.reason,
-                str(error),
+                (
+                    "engage arguments were rejected"
+                    if call.name == "engage"
+                    else str(error)
+                ),
+                private=call.name in {"engage", "write_text"},
             )
             return
         context.events.emit(
@@ -745,6 +767,7 @@ class AgentWorkCoordinator:
             )
             return
         action_instance = None
+        engagement_action: ActionInstance | None = None
         goal_links = active_goal_links(context, request.agent_id)
         if isinstance(intent, ActivityIntent):
             duration = intent.duration_seconds
@@ -897,6 +920,94 @@ class AgentWorkCoordinator:
                 tool_call_id=intent.tool_call_id,
                 root_correlation_id=request.decision_id,
             )[0]
+        elif isinstance(intent, TextReadIntent):
+            action_instance = queue_plan_actions(
+                context,
+                request.agent_id,
+                plan,
+                [
+                    PlanAction(
+                        action=ActionType.READ_TEXT,
+                        text_read=intent.specification,
+                    )
+                ],
+                origin=ActionOrigin.CONTROLLER,
+                goal_links=goal_links,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                root_correlation_id=request.decision_id,
+            )[0]
+        elif isinstance(intent, TextWriteIntent):
+            if intent.specification is None:
+                self._reject(
+                    context,
+                    request,
+                    intent.tool_call_id,
+                    "invalid_arguments",
+                    "write_text specification is missing",
+                )
+                return
+            action_instance = queue_plan_actions(
+                context,
+                request.agent_id,
+                plan,
+                [
+                    PlanAction(
+                        action=ActionType.WRITE_TEXT,
+                        text_write=intent.specification,
+                    )
+                ],
+                origin=ActionOrigin.CONTROLLER,
+                goal_links=goal_links,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                root_correlation_id=request.decision_id,
+            )[0]
+        elif isinstance(intent, EngageIntent):
+            engagement_id = new_engagement_id(context)
+            action_instance = queue_plan_actions(
+                context,
+                request.agent_id,
+                plan,
+                [
+                    PlanAction(
+                        action=ActionType.ENGAGE,
+                        engagement=EngagementSpecification(
+                            engagement_id=engagement_id,
+                            intent=intent.intent,
+                            reference_ids=intent.reference_ids,
+                        ),
+                    )
+                ],
+                origin=ActionOrigin.CONTROLLER,
+                goal_links=goal_links,
+                decision_id=request.decision_id,
+                tool_call_id=intent.tool_call_id,
+                root_correlation_id=request.decision_id,
+            )[0]
+            context.events.emit(
+                "engagement.requested",
+                simulation_tick=context.clock.tick,
+                simulation_time=context.clock.simulation_time,
+                agent_id=request.agent_id,
+                payload={
+                    "engagement_id": engagement_id,
+                    "intent": intent.intent,
+                    "reference_ids": list(intent.reference_ids),
+                    "reason": intent.reason,
+                    "visibility": "private",
+                    "action_id": action_instance.action_id,
+                    "plan_id": action_instance.plan_id,
+                    "plan_revision": action_instance.plan_revision,
+                    "decision_id": request.decision_id,
+                    "tool_call_id": intent.tool_call_id,
+                    "root_correlation_id": (
+                        action_instance.root_correlation_id
+                    ),
+                },
+                correlation_id=request.decision_id,
+            )
+            engagement_action = action_instance
         else:
             raise TypeError(f"unsupported intent: {type(intent).__name__}")
         state = context.registry.get_component(
@@ -939,6 +1050,32 @@ class AgentWorkCoordinator:
             },
             correlation_id=request.decision_id,
         )
+        if engagement_action is not None:
+            from stage0_sim.application.engagements.coordinator import (
+                EngagementWorkCoordinator,
+                fail_uncompiled_engagement,
+            )
+
+            if not context.registry.has_resource(
+                EngagementWorkCoordinator
+            ):
+                fail_uncompiled_engagement(
+                    context,
+                    request.agent_id,
+                    engagement_action,
+                    "engagement_coordinator_missing",
+                    "engagement compiler coordinator is not configured",
+                )
+                state.last_outcome = (
+                    "engagement compilation failed: "
+                    "engagement_coordinator_missing"
+                )
+            elif context.registry.get_resource(
+                EngagementWorkCoordinator
+            ).submit(context, request, engagement_action):
+                state.last_outcome = "engagement compilation pending"
+            else:
+                state.last_outcome = "engagement compilation unavailable"
         if isinstance(intent, SkipIntent):
             context.events.emit(
                 "cognition.skipped",
@@ -1011,6 +1148,7 @@ class AgentWorkCoordinator:
         message: str,
         *,
         details: dict[str, JsonValue] | None = None,
+        private: bool = False,
     ) -> None:
         self._clear_pending(context, request)
         context.events.emit(
@@ -1024,6 +1162,7 @@ class AgentWorkCoordinator:
                 "reason": reason,
                 "message": message,
                 **(details or {}),
+                **({"visibility": "private"} if private else {}),
             },
             correlation_id=request.decision_id,
         )
@@ -1125,7 +1264,11 @@ def _build_information_query(
             target.id for target in targets if target.kind != "character"
         ),
         simulation_time=request.observation.simulation_time,
-        source_scope=("character.dossier", "memory.episode"),
+        source_scope=(
+            "character.dossier",
+            "memory.episode",
+            "world.text.read",
+        ),
         token_budget=512,
         operation_id=f"{request.decision_id}:information-retrieval",
     )

@@ -6,6 +6,10 @@ from stage0_sim.domain.interactions import (
     InteractionSpecification,
     InteractionVerb,
 )
+from stage0_sim.domain.text_actions import (
+    TextReadSpecification,
+    TextWriteSpecification,
+)
 from stage0_sim.domain.world import TravelMode
 
 
@@ -18,6 +22,9 @@ class IntentKind(StrEnum):
     TRANSACT = "transact"
     SERVE_TRANSACTION = "serve_transaction"
     INTERACT = "interact"
+    ENGAGE = "engage"
+    READ_TEXT = "read_text"
+    WRITE_TEXT = "write_text"
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,3 +83,23 @@ class InteractionIntent(CharacterIntent):
         verb=InteractionVerb.USE,
         target_id="target",
     )
+
+
+@dataclass(frozen=True, slots=True)
+class EngageIntent(CharacterIntent):
+    intent: str = ""
+    reference_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class TextReadIntent(CharacterIntent):
+    specification: TextReadSpecification = TextReadSpecification(
+        target_id="target",
+        endpoint_id="endpoint",
+        artifact_id="artifact",
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class TextWriteIntent(CharacterIntent):
+    specification: TextWriteSpecification | None = None

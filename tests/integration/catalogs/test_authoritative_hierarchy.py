@@ -275,7 +275,7 @@ def _source(
     )
     source = ScenarioSourceDefinition.model_validate(
         {
-            "schema_version": 6,
+            "schema_version": 8,
             "name": "Authoritative hierarchy",
             "items": [
                 {"id": "credit", "name": "Credit", "unit": "credit"},

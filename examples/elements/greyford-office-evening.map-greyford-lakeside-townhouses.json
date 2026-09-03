@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "75186b0ef82e71a7c2697824c2bb83a2243411fbdcde78adbff741457e02932a",
+        "content_hash": "f31e44f07e5940430da948678b66cf682a3d1a2244baa8022359502b224f15af",
         "id": "greyford-office-evening.station-greyford-lakeside-townhouses-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

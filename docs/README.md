@@ -1,7 +1,7 @@
 # Documentation
 
-Active documentation describes version **0.2.0** only. Historical plans and
-requirements are provenance, not operating instructions.
+Active documentation describes only the current runtime. Release and schema
+identifiers have one owner: [Current contracts](CURRENT_CONTRACTS.md).
 
 ## Operators
 
@@ -17,18 +17,19 @@ requirements are provenance, not operating instructions.
 
 | Task | Owner |
 | --- | --- |
-| Author schema-version-6 scenarios and version-3 reusable elements | [Scenario and element authoring](SCENARIO_EDITOR_GUIDE.md) |
-| Author schema-version-2 `human-v1` characters | [Character authoring](CHARACTER_PROFILE_GUIDE.md) |
+| Author current scenarios and reusable elements | [Scenario and element authoring](SCENARIO_EDITOR_GUIDE.md) |
+| Author current `human-v1` characters | [Character authoring](CHARACTER_PROFILE_GUIDE.md) |
 | Check or upgrade content catalogs | [Content migration](CONTENT_MIGRATION.md) |
 | Select valid tools, actions, criteria, and event names | [Actions, tools, and events](ACTIONS_AND_EVENTS.md) |
 | Understand character-agent actions, requirements, information retrieval, and outcomes | [Character agent actions and decision flow](CHARACTER_AGENT_ACTIONS.md) |
+| Author text artifacts, endpoints, access policies, and in-world mailboxes | [Text content and character read/write actions](TEXT_CONTENT.md) |
 | Choose and copy a tracked sample | [Example catalog](../examples/README.md) |
 
 ## Researchers
 
 | Task | Owner |
 | --- | --- |
-| Understand dataset v4 and SQLite schema 10 | [Research data](DATA_COLLECTION.md) |
+| Understand current dataset and SQLite contracts | [Research data](DATA_COLLECTION.md), [Current contracts](CURRENT_CONTRACTS.md) |
 | Analyze physical object, relation, and character-body observations | [Research data](DATA_COLLECTION.md) |
 | Query, export, aggregate, retain, or delete datasets | [Research data](DATA_COLLECTION.md) |
 | Review privacy and reproducibility boundaries | [Research data](DATA_COLLECTION.md) |
@@ -38,19 +39,21 @@ requirements are provenance, not operating instructions.
 
 | Task | Owner |
 | --- | --- |
+| Plan, implement, validate, and hand off agent work | [Development workflow](DEVELOPMENT_WORKFLOW.md) |
+| Check current release, schema, telemetry, vocabulary, and route identifiers | [Current contracts](CURRENT_CONTRACTS.md) |
 | Locate authority and dependency boundaries | [Architecture](ARCHITECTURE.md) |
 | Change tick, cognition, perception, or action behavior | [Runtime semantics](RUNTIME.md) |
 | Maintain canonical public vocabulary | [Actions, tools, and events](ACTIONS_AND_EVENTS.md) |
 | Change controller observations, retrieval, tools, intents, or action flow | [Character agent actions and decision flow](CHARACTER_AGENT_ACTIONS.md) |
-| Evaluate consequential free-form and unilateral interaction designs | [Consequential open interaction directions](OPEN_INTERACTION_DIRECTIONS.md) |
+| Change text artifacts, endpoints, read/write actions, attribution, or messaging | [Text content and character read/write actions](TEXT_CONTENT.md) |
 | Change the server-rendered UI or browser tests | [UI architecture and testing](UI_TESTING.md) |
 | Change a content schema or migrator | [Content migration](CONTENT_MIGRATION.md) |
+| Configure or smoke-test local/rented model services | [LLM operations](LLM_OPERATIONS.md) |
 | Check supported platforms, limitations, and unfinished work | [Status and roadmap](STATUS_AND_ROADMAP.md) |
 | Follow repository automation rules | [Copilot instructions](../.github/copilot-instructions.md) |
 
-## Historical records
+## Historical record
 
-[The legacy archive](legacy/README.md) preserves the original requirements,
-completed and superseded plans, dated assessments, and non-authoritative prompt
-material. Do not copy old route names, schema versions, tools, or compatibility
-behavior into current work.
+[Development history](legacy/README.md) compresses superseded architectural
+eras and links to their implementation commits. Detailed old plans and
+requirements remain available through Git history, not the active working tree.

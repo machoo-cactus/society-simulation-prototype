@@ -18,6 +18,9 @@ _OPERATIONAL_RESOURCE_EXCLUSIONS = {
     "stage0_sim.application.agents.coordinator.AgentWorkCoordinator": (
         "owns controller/model clients, futures, and a thread pool"
     ),
+    "stage0_sim.application.engagements.coordinator.EngagementWorkCoordinator": (
+        "owns engagement compiler/model clients, futures, and a thread pool"
+    ),
     "stage0_sim.application.environment.EnvironmentInformationService": (
         "derived query facade over authoritative registry state"
     ),
@@ -30,10 +33,14 @@ _OPERATIONAL_RESOURCE_EXCLUSIONS = {
     "stage0_sim.application.navigation.service.NavigationService": (
         "derived navigation service referencing the registry"
     ),
+    "stage0_sim.domain.components.text_action.TextContentPersistenceBinding": (
+        "persistence callback for authoritative text snapshots"
+    ),
 }
 _CUSTOM_RESOURCE_PROJECTORS = {
     "stage0_sim.application.information.store.InformationStore",
     "stage0_sim.application.memory.EpisodicMemoryStore",
+    "stage0_sim.domain.content.TextContentRegistry",
     "stage0_sim.domain.world.physical.SpatialIndex",
     "stage0_sim.domain.world.topology.SpaceRegistry",
 }
@@ -583,6 +590,7 @@ def physical_object_states(
     from stage0_sim.domain.components import (
         ConsumableComponent,
         ContainerComponent,
+        ContentEndpointComponent,
         CustodyComponent,
         ObjectIntrinsicComponent,
         OccupancySlotsComponent,
@@ -808,6 +816,21 @@ def physical_object_states(
                             object_id, ReadableComponent
                         )
                         else None
+                    ),
+                    "content_endpoints": (
+                        serialize_authoritative(
+                            registry.get_component(
+                                object_id, ContentEndpointComponent
+                            ).endpoints,
+                            path=(
+                                f"physical_objects[{object_id!r}]"
+                                ".capabilities.content_endpoints"
+                            ),
+                        )
+                        if registry.has_component(
+                            object_id, ContentEndpointComponent
+                        )
+                        else []
                     ),
                     "consumable": (
                         {
@@ -1231,6 +1254,11 @@ def _serialize_resource(
                 for document in information_store.documents()
             ]
         }
+    if type_name == "stage0_sim.domain.content.TextContentRegistry":
+        from stage0_sim.domain.content import TextContentRegistry
+
+        content = cast(TextContentRegistry, resource)
+        return content.to_dict()
     if type_name == "stage0_sim.application.memory.EpisodicMemoryStore":
         from stage0_sim.application.memory import EpisodicMemoryStore
 

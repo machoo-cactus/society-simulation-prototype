@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "a964ef00570d717d426a901fe8a7dd0cbd3222c1b276d3ee9077996825f4901b",
+        "content_hash": "44c7df6e680d1a0f9a25d3e60a73ca287541f054050c783cbbc46e2b64a460ab",
         "id": "greyford-office-evening.station-greyford-state-university-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

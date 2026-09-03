@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "8ad507b29d220e12b2b231d46c7028ec2f6b42a0e9a79a1369ada4e1f2496211",
+        "content_hash": "6566b02feb7d406597a4d487082f2fceab1962da5857c1e1a46a9887907dadaf",
         "id": "greyford-office-evening.station-greyford-highland-boathouse-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

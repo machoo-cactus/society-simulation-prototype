@@ -38,7 +38,7 @@
   "kind": "object",
   "name": "Corner Cup Counter",
   "npc_role": {
-    "content_hash": "4084339a2a76d5bbbd6de2f93ce141a03c56407f6c417acf8f9e9843a19063f9",
+    "content_hash": "1ba670b7800503a5a66969560c7c17d8e845280838c2489a67a52febde964660",
     "id": "willowbrook-saturday-morning.cafe-barista",
     "kind": "npc_role"
   },
@@ -101,6 +101,7 @@
     "capabilities": {
       "consumable": null,
       "container": null,
+      "content_endpoints": [],
       "openable": null,
       "portable": null,
       "readable": null,
@@ -402,6 +403,6 @@
     "owner_id": null
   },
   "request_timeout": 90.0,
-  "schema_version": 3,
+  "schema_version": 4,
   "supported_actions": null
 }

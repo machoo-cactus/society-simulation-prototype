@@ -46,6 +46,7 @@ from stage0_sim.domain.systems.spatial_context import (
     local_world_for_agent,
     shares_local_map,
 )
+from stage0_sim.domain.systems.text_actions import cancel_text_action
 from stage0_sim.domain.systems.transactions import cancel_transaction
 from stage0_sim.domain.world import (
     AffordanceStation,
@@ -153,6 +154,11 @@ class System1ArbitrationSystem:
                             "drive_priority_changed",
                         )
                         self._clear_interaction_request(context, agent_id)
+                        cancel_text_action(
+                            context,
+                            agent_id,
+                            "drive_priority_changed",
+                        )
                         drive.active_drive = selected
                         drive.target_station_id = None
                         drive.target_position = None
@@ -238,6 +244,7 @@ class System1ArbitrationSystem:
         cancel_affordance(context, agent_id, "system1_preemption")
         cancel_transaction(context, agent_id, "system1_preemption")
         cancel_interaction(context, agent_id, "system1_preemption")
+        cancel_text_action(context, agent_id, "system1_preemption")
         self._clear_affordance_request(context, agent_id)
         self._clear_transaction_request(context, agent_id)
         self._clear_interaction_request(context, agent_id)

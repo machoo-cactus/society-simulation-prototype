@@ -1,8 +1,6 @@
 # Copilot instructions for Stage 0
 
-## Commands
-
-Use Python 3.12 or newer and install the editable package:
+Use Python 3.12 or newer:
 
 ```powershell
 py -3.12 -m venv .venv
@@ -10,63 +8,32 @@ py -3.12 -m venv .venv
 python -m pip install -e ".[dev]"
 ```
 
-Linux:
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-```
-
-Run the standard gates from the repository root:
-
-```powershell
-python -m pytest
-python -m ruff check .
-python -m mypy
-python -m build
-```
-
-Run a focused test with a pytest node ID, for example:
-
-```powershell
-python -m pytest tests\unit\domain\test_navigation.py
-```
-
-Run the application or deterministic CLI demo:
-
-```powershell
-python -m uvicorn stage0_sim.api.app:app --reload
-stage0-sim run demo --ticks 10
-```
-
 Use `.\update.ps1` on Windows or `bash ./update.sh` on Linux to refresh an
 existing environment. Source updates require explicit `-Pull` or `--pull`.
 
-UI changes require Playwright:
+## Development workflow
 
-```powershell
-.\.venv\Scripts\python.exe -m playwright install chromium
-$env:STAGE0_RUN_PLAYWRIGHT = "1"
-.\.venv\Scripts\python.exe -m pytest tests\e2e\web
-```
-
-## Current contracts
-
-- Release: `0.2.0`
-- Scenario source: version 6
-- Character source: version 2, template `human-v1`
-- Reusable element source: version 3
-- Dataset: `stage0.dataset.v4`
-- SQLite: schema 10, fresh-only
-- Telemetry: `stage0.telemetry.v3`
-- Cognition: typed character-controller tools behind one global barrier
-- Navigation: `navigate_to` and `NAVIGATE`
-- Action lifecycle: `action.queued`, `action.started`,
-  `action.completed`, `action.failed`, `action.cancelled`
-- Canonical persisted-data routes: `/simulation/data/*`
-- Canonical per-run data/export routes:
-  `/simulation/runs/{run_id}/data/*` and `/exports/*`
+- Classify the change before exploring or testing. Follow
+  [Development workflow](../docs/DEVELOPMENT_WORKFLOW.md).
+- Start with `git status`, the current diff, the owning current document, the
+  authoritative call chain, and its closest tests. Stop when those boundaries
+  are known; do not inventory the repository for a localized task.
+- Keep ordinary plans below roughly 150 lines with three to seven ordered
+  tasks. Do not copy full schemas, exhaustive test matrices, or validation logs
+  into plans.
+- Run focused local tests and Ruff paths that can falsify the changed behavior.
+  Broad pytest, Playwright, mypy, build, package, and platform gates are CI
+  responsibilities unless the task is explicitly a release or diagnostic run.
+- For UI work, run the closest HTTP tests and one focused Playwright workflow.
+- For model protocol work, run `python -m pytest -m model_contract`; a live
+  provider is optional and uses the bounded smoke in
+  [LLM operations](../docs/LLM_OPERATIONS.md).
+- Update only the document that owns the changed contract. Volatile identifiers
+  live in [Current contracts](../docs/CURRENT_CONTRACTS.md).
+- Runtime contracts are current-only and may break rapidly. Do not add
+  compatibility branches without an explicit current requirement. Character,
+  element, and scenario schemas still require tested adjacent migrators and
+  legacy fixtures.
 
 Use **character** for a simulated person and **character controller** for the
 software selecting decisions.
@@ -116,6 +83,8 @@ software selecting decisions.
 
 ## Authoritative documentation
 
+- [Development workflow](../docs/DEVELOPMENT_WORKFLOW.md)
+- [Current contracts](../docs/CURRENT_CONTRACTS.md)
 - [Documentation map](../docs/README.md)
 - [Architecture](../docs/ARCHITECTURE.md)
 - [Runtime semantics](../docs/RUNTIME.md)
@@ -127,3 +96,4 @@ software selecting decisions.
 - [Research data](../docs/DATA_COLLECTION.md)
 - [API and UI workflows](../docs/API_AND_UI.md)
 - [UI architecture and testing](../docs/UI_TESTING.md)
+- [LLM operations](../docs/LLM_OPERATIONS.md)

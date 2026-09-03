@@ -73,6 +73,9 @@ stage0_sim = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "model_contract: deterministic controller, compiler, replay, and provider protocol checks",
+]
 
 [tool.ruff]
 target-version = "py312"

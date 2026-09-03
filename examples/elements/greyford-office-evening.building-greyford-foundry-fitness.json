@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "ab84ea4f448b855d815079805d97c201ed713bffe33049e8e785afff5cc4e375",
+        "content_hash": "fb20949bcebc1d6999ea9d8c5caecbfb99788d9add31a400d43ad2388add1c61",
         "id": "greyford-office-evening.map-greyford-foundry-fitness",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

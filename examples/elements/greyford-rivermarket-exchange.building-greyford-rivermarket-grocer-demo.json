@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "b3bc97e407a8e849ff37b04c00ea12f7066986159aaeba93de1473ad327786f2",
+        "content_hash": "0a0172525a0f1cbe82f4caddd45528af3d8bff0efa8b0cad044541b963d755fe",
         "id": "greyford-rivermarket-exchange.map-greyford-rivermarket-grocer-demo",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

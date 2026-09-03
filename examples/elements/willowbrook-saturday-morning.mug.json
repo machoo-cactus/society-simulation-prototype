@@ -22,6 +22,7 @@
         "servings": 1
       },
       "container": null,
+      "content_endpoints": [],
       "openable": null,
       "portable": {
         "two_handed": false
@@ -77,6 +78,6 @@
     "owner_id": null
   },
   "request_timeout": 60.0,
-  "schema_version": 3,
+  "schema_version": 4,
   "supported_actions": null
 }

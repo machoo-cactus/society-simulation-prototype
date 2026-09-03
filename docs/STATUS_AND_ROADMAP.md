@@ -1,7 +1,9 @@
 # Status and Roadmap
 
-**Status date:** 2026-09-02  
-**Current release:** 0.2.0
+**Status date:** 2026-09-03
+
+Release and schema identifiers are listed in
+[Current contracts](CURRENT_CONTRACTS.md).
 
 Stage 0 is an implemented deterministic simulation prototype with a Python
 runtime, canonical API, server-rendered operator UI, reusable source libraries,
@@ -16,15 +18,21 @@ and versioned SQLite/JSONL research datasets.
   preemption and recovery.
 - Typed character-controller tools, one global cognition barrier, deterministic
   intent commit, scripted/replay clients, and opt-in OpenAI-compatible clients.
+- Stable specialized-first `engage(intent, reference_ids, reason)` fallback;
+  separate recorded/replayed engagement compiler budgets; strict
+  `compile_engagement`; and deterministic expressive, auditory, and bounded
+  activity domain handlers with atomic groups and partial completion.
 - Plans, structured goals, affordances, possessions, atomic transactions,
   run-scoped service NPCs, speech, observer-specific perception, episodic
   memory, information retrieval, and learned route knowledge.
+- Revisioned in-world text artifacts and collections, composable physical or
+  logical content endpoints, embodied `read_text`/`write_text`, stable-block
+  edits, tombstones, policy-controlled attribution, and deterministic mailbox
+  delivery.
 - Fixed 9-microcell local spatial metric, 5×5 character bodies, cardinal
   object footprints, live obstruction/index revisions, slots/relations,
   hands/posture/custody, door-linked traversal, and deterministic physical
   interaction lifecycles.
-- Scenario source version 6, character version 2, element version 3, dataset
-  v4, fresh-only SQLite schema 10, and telemetry v3.
 - Hash-protected character, scenario, and element libraries.
 - Accessible Python-rendered HTML/SVG operator workflows with Playwright
   coverage and no-JavaScript fallbacks.
@@ -45,6 +53,10 @@ and versioned SQLite/JSONL research datasets.
   mass/dimensions, equipment effects, and structural sensory sweeps; it is not
   continuous rigid-body dynamics, torque, arbitrary rotation, optical
   reflection, acoustic attenuation, or scent diffusion.
+- Engagement compilation is low-fidelity stochastic proposal generation.
+  Compiler selection or prose is not proof of committed effects. The current
+  catalog does not implement Tier 2+ injury, theft/custody transfer, forced
+  movement, relationships/reputation, or arbitrary object mutation.
 - Dataset projection rebuild does not reconstruct every normalized lifecycle
   table.
 - Authentication, deployment authorization, retention policy, encryption,

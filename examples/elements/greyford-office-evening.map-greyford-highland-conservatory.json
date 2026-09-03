@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "afef955954bd040af957c7790f1024fbc72ac5fd2a5121afb9bef1e53c86f546",
+        "content_hash": "5089909f08515e7179de0101c0c5c6c551441d56743694e8797ca44db7fd6fce",
         "id": "greyford-office-evening.station-greyford-highland-conservatory-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

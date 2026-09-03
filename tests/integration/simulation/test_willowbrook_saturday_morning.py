@@ -220,7 +220,7 @@ def test_willowbrook_catalog_has_reusable_physical_object_families() -> None:
     for suffix in expected:
         element_id = f"{WILLOWBROOK_PREFIX}{suffix}"
         element = library.get(element_id, ElementKind.OBJECT)
-        assert element.schema_version == 3
+        assert element.schema_version == 4
         assert element.physical is not None
         assert len(element.physical.footprint.cells) > 1
         assert len(element_content_hash(element)) == 64

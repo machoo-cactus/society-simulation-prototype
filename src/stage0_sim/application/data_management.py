@@ -677,6 +677,25 @@ class DatasetManagementService:
                 (),
             ),
             (
+                "engagements",
+                ("status", "compiler_status", "terminal_outcome"),
+                (
+                    ("requested_at", "engagements.requested_at", "simulation seconds"),
+                    ("started_at", "engagements.started_at", "simulation seconds"),
+                    ("terminal_at", "engagements.terminal_at", "simulation seconds"),
+                ),
+            ),
+            (
+                "engagement_groups",
+                ("validation_status", "execution_status", "status"),
+                (),
+            ),
+            (
+                "engagement_invocations",
+                ("capability", "consequence_tier", "status"),
+                (),
+            ),
+            (
                 "interaction_episodes",
                 (
                     "interaction_type",
@@ -928,6 +947,7 @@ class DatasetManagementService:
             ("action_instances", "actions.count", "actions"),
             ("decisions", "decisions.count", "decisions"),
             ("goals", "goals.count", "goals"),
+            ("engagements", "engagements.count", "engagements"),
             ("interactions", "interactions.count", "interactions"),
         ):
             count = sum(1 for _ in self._iter_table(run_id, table, include_private))

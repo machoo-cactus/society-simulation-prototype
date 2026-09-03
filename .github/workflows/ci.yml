@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  quality:
+  static:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,20 +20,60 @@ jobs:
         run: python -m pip install -e '.[dev]'
       - name: Validate update helper
         run: bash -n update.sh
+      - name: Lint
+        run: python -m ruff check .
+      - name: Type check
+        run: python -m mypy
+
+  core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project
+        run: python -m pip install -e '.[dev]'
+      - name: Test unit and integration behavior
+        run: python -m pytest tests/unit tests/integration
+        env:
+          STAGE0_CHARACTER_DIRECTORY: ${{ runner.temp }}/stage0/characters
+          STAGE0_SCENARIO_DIRECTORY: ${{ runner.temp }}/stage0/scenarios
+          STAGE0_ELEMENT_DIRECTORY: ${{ runner.temp }}/stage0/elements
+          STAGE0_DATA_DIRECTORY: ${{ runner.temp }}/stage0/runs
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project
+        run: python -m pip install -e '.[dev]'
       - name: Install Playwright browser
         run: python -m playwright install --with-deps chromium
-      - name: Test including browser workflows
-        run: python -m pytest
+      - name: Test browser workflows
+        run: python -m pytest tests/e2e/web
         env:
           STAGE0_RUN_PLAYWRIGHT: "1"
           STAGE0_CHARACTER_DIRECTORY: ${{ runner.temp }}/stage0/characters
           STAGE0_SCENARIO_DIRECTORY: ${{ runner.temp }}/stage0/scenarios
           STAGE0_ELEMENT_DIRECTORY: ${{ runner.temp }}/stage0/elements
           STAGE0_DATA_DIRECTORY: ${{ runner.temp }}/stage0/runs
-      - name: Lint
-        run: python -m ruff check .
-      - name: Type check
-        run: python -m mypy
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project
+        run: python -m pip install -e '.[dev]'
       - name: Check installed dependencies
         run: python -m pip check
       - name: Build wheel and source distribution
@@ -97,7 +137,7 @@ jobs:
           tests/integration/api/test_health.py
 
   installed-wheel:
-    needs: quality
+    needs: package
     strategy:
       fail-fast: false
       matrix:

@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "043986b22ee4d6c79b90ae5df60540b69e84b65f370ac755a09723809a332d82",
+        "content_hash": "85c65e2d86af9331b252d87fced55109b4b738bdbaf9fb0bc3709b8ceb1ad7b9",
         "id": "greyford-office-evening.map-greyford-water-treatment",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

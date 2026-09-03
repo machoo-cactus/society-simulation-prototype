@@ -7,7 +7,7 @@ action execution, perception, and determinism.
 
 Scenario authoring, staging, and execution are separate:
 
-1. A schema-version-6 source is validated.
+1. A schema-version-8 source is validated.
 2. Character assignments and element references are resolved and frozen.
 3. Optional character-situation synthesis completes transactionally.
 4. A prepared scenario is staged without starting or advancing time.
@@ -29,6 +29,7 @@ capture tick_post_systems
 drain memory work
 settle the complete cognition batch behind the global barrier
 commit settled decisions in stable order
+settle engagement compilation work created by those decisions
 emit simulation.tick
 capture tick_post_cognition
 notify tick-completed handlers
@@ -62,6 +63,7 @@ orders are:
 | 190 | `npc_staffing` |
 | 200 | `movement` |
 | 240 | `calendar_update`, then `navigation_knowledge_recording` when both are registered |
+| 245 | `engagement_execution` |
 | 250 | `perception` |
 | 280 | `goal_evaluation` |
 | 290 | `memory_recording` |
@@ -87,6 +89,39 @@ Nothing commits before the batch settles, and commits use stable decision
 ordering. Timeout, malformed output, budget exhaustion, stop cancellation, and
 stale results are explicit. Correctness never depends on successful network
 cancellation.
+
+### Generic engagement compilation
+
+Controllers prefer an exact specialized tool. `engage` is the first-class
+fallback and accepts only attempted `intent`, observable `reference_ids`, and
+optional private `reason`. The request creates a normal `ENGAGE`
+`ActionInstance`; it does not bypass plan/action lineage.
+
+After settled controller decisions commit, the same frozen global barrier
+drains the separate engagement compiler queue. The compiler uses the configured
+`ModelClient` but a distinct `engagement_compilation.v1` prompt, model profile,
+timeout, concurrency, and request/input/output budgets. Exactly one
+`compile_engagement` tool call is accepted. The compiler may return a compiled
+program, `specialized_tool_required`, or `unsupported`; none is converted into
+a success-shaped fallback. Recording/replay includes controller and compiler
+turns.
+
+Compiled programs currently use `expressive_behavior`,
+`auditory_expression`, and `bounded_activity`. Compiler selection is
+stochastic; application schema/reference validation and domain execution are
+deterministic. A required-atomic group is revalidated as a unit immediately
+before commit. Separate valid groups execute in stable order, so some may
+complete while later groups fail; terminal engagement/action outcomes then
+report completed, partial, failed, or cancelled state. A partial engagement is
+still a completed `ENGAGE` action because at least one group committed; a
+fully failed engagement produces `action.failed`.
+
+System 1 activation, stop, stale state, or lost action lineage cancels pending
+compilation or execution and clears incompatible engagement state. An
+initiator may attempt an engagement affecting another character without target
+consent. The target receives only domain-resolved immediate effects and
+observer-specific evidence; future cooperation remains that character
+controller's decision.
 
 ## System 1
 
@@ -149,6 +184,20 @@ open successfully; a locked door blocks the route. Traversal still revalidates
 the live topology and availability instead of trusting immutable `CityWorld`
 metadata.
 
+Text reads and writes are embodied deterministic actions. `READ_TEXT` pins the
+current artifact revision when execution starts, consumes simulation time,
+revalidates endpoint and policy access, then creates a private read receipt for
+the character's next decision. `WRITE_TEXT` carries immutable proposed text
+and expected artifact, block, and collection revisions. The text execution
+system commits only after final live validation; stale revisions, lost
+physical access, policy changes, capacity conflicts, System 1, or stop produce
+explicit failure or cancellation.
+
+Message sending is an in-world atomic write across one message artifact,
+recipient mailbox membership, sender sent-mail membership, and unread state.
+It does not call an external provider and does not inject the body directly
+into recipient perception.
+
 Local physical room grids use 9 microcells per legacy cell. Anchors, paths,
 footprints, and occupied cells are microcells; compatibility positions may be
 reported in legacy cells. Characters use a fixed 5×5-microcell body footprint
@@ -178,6 +227,18 @@ surfaces and do not create reflected observations. Scent sources are
 room-local, range-bounded, and blocked structurally; diffusion, airflow,
 attenuation, and lingering fields are not modeled.
 
+Engagement auditory effects reuse the domain hearing sweep. The compiler does
+not choose actual recipients: live range, listener senses, local place, body
+footprints, and hearing obstruction do. Only resolved recipients receive
+bounded listener effects, heard facts, and resulting memories. Visual
+engagement evidence likewise requires observer-specific visibility.
+
+Nearby observers may perceive that a character is reading or writing and the
+involved visible object. Text bodies, deleted revisions, mailbox contents, and
+the authoritative actor behind reader-visible anonymous content remain
+private. Metadata-only message-arrival notifications are delivered only to an
+authorized mailbox owner.
+
 ## Determinism
 
 Fixed `dt`, stable iteration, ordered systems, deterministic pathfinding, stable
@@ -185,6 +246,11 @@ conflict resolution, and deterministic commit order define canonical execution.
 Wall timestamps, live provider text, provider IDs, latency, and external
 failures are nondeterministic inputs and are recorded as such. Recording/replay
 is required to reproduce live-provider choices.
+
+Tier 2+ consequences remain outside the current engagement catalog: injury,
+theft or custody transfer, forced movement, relationships or reputation, and
+arbitrary object/component mutation require dedicated domain models and cannot
+be established by compiler prose.
 
 See [Actions, tools, and events](ACTIONS_AND_EVENTS.md) for the closed
 vocabulary.

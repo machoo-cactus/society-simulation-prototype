@@ -14,7 +14,7 @@ def test_package_version_has_one_authoritative_source() -> None:
     assert metadata["tool"]["setuptools"]["dynamic"]["version"] == {
         "attr": "stage0_sim.__version__"
     }
-    assert __version__ == "0.2.0"
+    assert __version__ == "0.3.0"
 
 
 def test_package_metadata_declares_supported_python_and_readme() -> None:

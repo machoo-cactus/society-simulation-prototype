@@ -2,7 +2,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from stage0_sim.domain.components.physiology import ActivityType
+from stage0_sim.domain.engagements import EngagementSpecification
 from stage0_sim.domain.interactions import InteractionSpecification
+from stage0_sim.domain.text_actions import (
+    TextReadSpecification,
+    TextWriteSpecification,
+)
 from stage0_sim.domain.world import TravelMode
 
 
@@ -10,6 +15,8 @@ class ActionType(StrEnum):
     WORK = "WORK"
     SOCIALIZE = "SOCIALIZE"
     READ = "READ"
+    READ_TEXT = "READ_TEXT"
+    WRITE_TEXT = "WRITE_TEXT"
     EAT = "EAT"
     SLEEP = "SLEEP"
     RELAX = "RELAX"
@@ -19,6 +26,7 @@ class ActionType(StrEnum):
     SERVE_TRANSACTION = "SERVE_TRANSACTION"
     INTERACT = "INTERACT"
     DRINK = "DRINK"
+    ENGAGE = "ENGAGE"
 
 
 class ActionOrigin(StrEnum):
@@ -41,11 +49,65 @@ class PlanAction:
     mode: TravelMode | None = None
     offer_id: str | None = None
     interaction: InteractionSpecification | None = None
+    engagement: EngagementSpecification | None = None
+    text_read: TextReadSpecification | None = None
+    text_write: TextWriteSpecification | None = None
 
     def __post_init__(self) -> None:
         if self.duration is not None and self.duration <= 0:
             raise ValueError("action duration must be greater than zero")
-        if self.action is ActionType.INTERACT:
+        text_specifications = (
+            self.text_read is not None,
+            self.text_write is not None,
+        )
+        if self.action is ActionType.READ_TEXT:
+            if self.text_read is None or self.text_write is not None:
+                raise ValueError("READ_TEXT requires only a read specification")
+            if self.target is None:
+                object.__setattr__(self, "target", self.text_read.target_id)
+            elif self.target != self.text_read.target_id:
+                raise ValueError("READ_TEXT target must match its specification")
+            if any(
+                value is not None
+                for value in (
+                    self.mode,
+                    self.offer_id,
+                    self.interaction,
+                    self.engagement,
+                )
+            ):
+                raise ValueError("READ_TEXT does not accept unrelated specifications")
+        elif self.action is ActionType.WRITE_TEXT:
+            if self.text_write is None or self.text_read is not None:
+                raise ValueError("WRITE_TEXT requires only a write specification")
+            if self.target is None:
+                object.__setattr__(self, "target", self.text_write.target_id)
+            elif self.target != self.text_write.target_id:
+                raise ValueError("WRITE_TEXT target must match its specification")
+            if any(
+                value is not None
+                for value in (
+                    self.mode,
+                    self.offer_id,
+                    self.interaction,
+                    self.engagement,
+                )
+            ):
+                raise ValueError("WRITE_TEXT does not accept unrelated specifications")
+        elif any(text_specifications):
+            raise ValueError("text specifications require a text action")
+        elif self.action is ActionType.ENGAGE:
+            if self.engagement is None:
+                raise ValueError("ENGAGE requires an engagement specification")
+            if self.target is None and self.engagement.reference_ids:
+                object.__setattr__(self, "target", self.engagement.reference_ids[0])
+            if self.mode is not None or self.offer_id is not None:
+                raise ValueError("ENGAGE does not accept mode or offer_id")
+            if self.interaction is not None:
+                raise ValueError("ENGAGE does not accept an interaction specification")
+        elif self.engagement is not None:
+            raise ValueError("engagement is only valid for ENGAGE")
+        elif self.action is ActionType.INTERACT:
             if self.interaction is None:
                 raise ValueError("INTERACT requires an interaction specification")
             if self.target is None:
@@ -154,6 +216,30 @@ class ActionInstance:
         )
 
     @property
+    def engagement(self) -> EngagementSpecification | None:
+        return (
+            self.specification.engagement
+            if self.specification is not None
+            else None
+        )
+
+    @property
+    def text_read(self) -> TextReadSpecification | None:
+        return (
+            self.specification.text_read
+            if self.specification is not None
+            else None
+        )
+
+    @property
+    def text_write(self) -> TextWriteSpecification | None:
+        return (
+            self.specification.text_write
+            if self.specification is not None
+            else None
+        )
+
+    @property
     def goal_ids(self) -> tuple[str, ...]:
         return tuple(link.goal_id for link in self.goal_links)
 
@@ -163,6 +249,7 @@ class LineageIdGenerator:
     next_plan_number: int = 1
     next_action_number: int = 1
     next_intervention_number: int = 1
+    next_engagement_number: int = 1
 
     def new_plan_id(self) -> str:
         value = f"plan-{self.next_plan_number:08d}"
@@ -179,6 +266,11 @@ class LineageIdGenerator:
         self.next_intervention_number += 1
         return value
 
+    def new_engagement_id(self) -> str:
+        value = f"engagement-{self.next_engagement_number:08d}"
+        self.next_engagement_number += 1
+        return value
+
 
 @dataclass(slots=True)
 class PlanComponent:
@@ -189,6 +281,8 @@ class PlanComponent:
     waiting_for_affordance: bool = False
     waiting_for_transaction: bool = False
     waiting_for_interaction: bool = False
+    waiting_for_engagement: bool = False
+    waiting_for_text: bool = False
     current_started: bool = False
     plan_id: str | None = None
     plan_revision: int = 0
@@ -204,6 +298,8 @@ class PlanComponent:
         self.waiting_for_affordance = False
         self.waiting_for_transaction = False
         self.waiting_for_interaction = False
+        self.waiting_for_engagement = False
+        self.waiting_for_text = False
         self.current_started = False
         self.plan_id = None
         self.plan_revision = 0

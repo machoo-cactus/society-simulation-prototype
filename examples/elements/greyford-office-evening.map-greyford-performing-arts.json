@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "85168afbf011da3b7d2d3bab2b6e25fe0457ff17fe7d4462bb2c2413cac82f85",
+        "content_hash": "7e74b519464d3c8fcd88dbb70f3ce20b1729c54a897a855d7c5e2eb5f7e7ef95",
         "id": "greyford-office-evening.station-greyford-performing-arts-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

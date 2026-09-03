@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "0a13511e0bc88917de3fef4f14260f2f5b59577feb009faff027386ca9790d7e",
+        "content_hash": "46e01ec0eee9f7e902b6b5783faf60cf5ca7774178c1c12948d7b55253c0fdf9",
         "id": "greyford-office-evening.map-greyford-riverlands-museum",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

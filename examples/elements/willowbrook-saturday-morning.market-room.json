@@ -25,7 +25,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "158b9da0feef531e0b2fafa517446ede3adb64ec46408b29dd68a80a05708351",
+        "content_hash": "818539bfb34e1a29d102d86b240178485e5b0da103a858957dcc2e7205dae693",
         "id": "willowbrook-saturday-morning.exterior-door",
         "kind": "object"
       },
@@ -48,7 +48,7 @@
     },
     {
       "element": {
-        "content_hash": "279a741b5fb7487373db3740fa0bb1dcd4838ce0e7cc5cef30c376dd48917256",
+        "content_hash": "9ac38f249d420c9b0ddc3afc3949f5ba799eae739cd12f3b646c292273442790",
         "id": "willowbrook-saturday-morning.window",
         "kind": "object"
       },
@@ -71,7 +71,7 @@
     },
     {
       "element": {
-        "content_hash": "279a741b5fb7487373db3740fa0bb1dcd4838ce0e7cc5cef30c376dd48917256",
+        "content_hash": "9ac38f249d420c9b0ddc3afc3949f5ba799eae739cd12f3b646c292273442790",
         "id": "willowbrook-saturday-morning.window",
         "kind": "object"
       },
@@ -94,7 +94,7 @@
     },
     {
       "element": {
-        "content_hash": "6a914eb84216d7222b2c579bcee69aff33af5994209294f88a6d4510fb4a908c",
+        "content_hash": "9aeeab0ac85ec5254c4b0b3965f7f232269b2ed51b73e59bb7be4dde42653af2",
         "id": "willowbrook-saturday-morning.market-shelf",
         "kind": "object"
       },
@@ -117,7 +117,7 @@
     },
     {
       "element": {
-        "content_hash": "6a914eb84216d7222b2c579bcee69aff33af5994209294f88a6d4510fb4a908c",
+        "content_hash": "9aeeab0ac85ec5254c4b0b3965f7f232269b2ed51b73e59bb7be4dde42653af2",
         "id": "willowbrook-saturday-morning.market-shelf",
         "kind": "object"
       },
@@ -140,7 +140,7 @@
     },
     {
       "element": {
-        "content_hash": "6a914eb84216d7222b2c579bcee69aff33af5994209294f88a6d4510fb4a908c",
+        "content_hash": "9aeeab0ac85ec5254c4b0b3965f7f232269b2ed51b73e59bb7be4dde42653af2",
         "id": "willowbrook-saturday-morning.market-shelf",
         "kind": "object"
       },
@@ -163,7 +163,7 @@
     },
     {
       "element": {
-        "content_hash": "6a914eb84216d7222b2c579bcee69aff33af5994209294f88a6d4510fb4a908c",
+        "content_hash": "9aeeab0ac85ec5254c4b0b3965f7f232269b2ed51b73e59bb7be4dde42653af2",
         "id": "willowbrook-saturday-morning.market-shelf",
         "kind": "object"
       },
@@ -186,7 +186,7 @@
     },
     {
       "element": {
-        "content_hash": "705619387f5aaf41b71c894135b6f0f0af898134e6ca23bb8ea19a0c3b44e9fb",
+        "content_hash": "d2721d664d3c38daa9f1b3340367e008f7f938c15a9b77b72d666fa9aa37416e",
         "id": "willowbrook-saturday-morning.market-display",
         "kind": "object"
       },
@@ -209,7 +209,7 @@
     },
     {
       "element": {
-        "content_hash": "957c0cf62c73d00a0f421a2e740ddae62dd67e3de25fbb956f9faf6c3a33d4e0",
+        "content_hash": "932f31529d0c57ac1f330d22f8cd6a4b4f919536a54bc9653e44b158312e293c",
         "id": "willowbrook-saturday-morning.cabinet",
         "kind": "object"
       },
@@ -232,7 +232,7 @@
     },
     {
       "element": {
-        "content_hash": "0489a97ee6af96a75d4bbd0b5e5429469eb47f52f790827824dad0ecab3293a1",
+        "content_hash": "5d42e7f13adf7164afad1bd4883a28dd54b27611a3bd8aee2ccb74291bb4b394",
         "id": "willowbrook-saturday-morning.market-checkout",
         "kind": "object"
       },
@@ -255,7 +255,7 @@
     },
     {
       "element": {
-        "content_hash": "80140e47827dfd0f1ef462e6445019230c9cd7035fa8fa5c351327682fe31a51",
+        "content_hash": "529533005c4d333515390b08feb0b5fde2b5e47fd3de414c72ab75a2a1138995",
         "id": "willowbrook-saturday-morning.bottle",
         "kind": "object"
       },
@@ -278,7 +278,7 @@
     },
     {
       "element": {
-        "content_hash": "80140e47827dfd0f1ef462e6445019230c9cd7035fa8fa5c351327682fe31a51",
+        "content_hash": "529533005c4d333515390b08feb0b5fde2b5e47fd3de414c72ab75a2a1138995",
         "id": "willowbrook-saturday-morning.bottle",
         "kind": "object"
       },
@@ -301,7 +301,7 @@
     },
     {
       "element": {
-        "content_hash": "80140e47827dfd0f1ef462e6445019230c9cd7035fa8fa5c351327682fe31a51",
+        "content_hash": "529533005c4d333515390b08feb0b5fde2b5e47fd3de414c72ab75a2a1138995",
         "id": "willowbrook-saturday-morning.bottle",
         "kind": "object"
       },
@@ -324,7 +324,7 @@
     },
     {
       "element": {
-        "content_hash": "80140e47827dfd0f1ef462e6445019230c9cd7035fa8fa5c351327682fe31a51",
+        "content_hash": "529533005c4d333515390b08feb0b5fde2b5e47fd3de414c72ab75a2a1138995",
         "id": "willowbrook-saturday-morning.bottle",
         "kind": "object"
       },
@@ -347,7 +347,7 @@
     },
     {
       "element": {
-        "content_hash": "328eb03f30f50af58912eb1cd09d727ffb8601a5e19d9a7a701e4ac2dd37eb5b",
+        "content_hash": "1888e36d5b6251e09a123145395d90bc62493250e24d4270a5afc4c205f7b432",
         "id": "willowbrook-saturday-morning.phone",
         "kind": "object"
       },
@@ -370,7 +370,7 @@
     }
   ],
   "room_type": "MARKET",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

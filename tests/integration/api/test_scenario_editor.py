@@ -32,7 +32,11 @@ from stage0_sim.application.elements import (
 )
 from stage0_sim.application.scenarios import scenario_content_hash
 from stage0_sim.config import Settings
-from tests.helpers.paths import EXAMPLE_ELEMENTS, EXAMPLE_SCENARIOS
+from tests.helpers.paths import (
+    EXAMPLE_CHARACTERS,
+    EXAMPLE_ELEMENTS,
+    EXAMPLE_SCENARIOS,
+)
 
 
 def _nodes(node: ScenarioEditorNode) -> Iterator[ScenarioEditorNode]:
@@ -66,9 +70,9 @@ def scenario_ui(
 ) -> Iterator[tuple[TestClient, FastAPI, Path]]:
     scenarios = tmp_path / "scenarios"
     scenarios.mkdir()
-    for name in ("minimal.json", "navigation.json"):
+    for name in ("engagement-demo.json", "minimal.json", "navigation.json"):
         payload = json.loads((EXAMPLE_SCENARIOS / name).read_text(encoding="utf-8"))
-        payload["schema_version"] = 6
+        payload["schema_version"] = 8
         (scenarios / name).write_text(
             json.dumps(payload),
             encoding="utf-8",
@@ -79,9 +83,11 @@ def scenario_ui(
     )
     elements = tmp_path / "elements"
     shutil.copytree(EXAMPLE_ELEMENTS, elements)
+    characters = tmp_path / "characters"
+    shutil.copytree(EXAMPLE_CHARACTERS, characters)
     settings = Settings(
         data_directory=tmp_path / "runs",
-        character_directory=tmp_path / "_runtime" / "characters",
+        character_directory=characters,
         scenario_directory=scenarios,
         element_directory=elements,
     )
@@ -139,6 +145,8 @@ def test_scenario_editor_descriptor_covers_every_typed_field() -> None:
         "plan",
         "goals",
         "information",
+        "content_endpoints",
+        "known_text_addresses",
         "controller",
         "senses",
         "embodiment",
@@ -1261,11 +1269,11 @@ def test_import_search_duplicate_rename_download_and_delete(
         files={"scenario": ("legacy-scenario.json", legacy_path.read_bytes())},
         follow_redirects=True,
     )
-    assert "saved scenarios require schema version 6" in legacy.text
+    assert "saved scenarios require schema version 8" in legacy.text
     imported_path.write_text(
         json.dumps(
             {
-                "schema_version": 6,
+                "schema_version": 8,
                 "name": "Imported scenario",
                 "entities": [],
             }
@@ -1333,7 +1341,7 @@ def test_simulation_page_stages_only_the_selected_saved_scenario(
     page = client.get("/ui/")
     staged = client.post(
         "/ui/scenario/library/stage",
-        data={"scenario_id": "minimal"},
+        data={"scenario_id": "engagement-demo"},
         follow_redirects=True,
     )
     session_id = client.cookies["stage0_operator_session"]
@@ -1341,16 +1349,16 @@ def test_simulation_page_stages_only_the_selected_saved_scenario(
 
     assert "Stage selected saved scenario" in page.text
     assert "Open selected scenario in editor" in page.text
-    assert "minimal is validated and staged" in staged.text
+    assert "engagement-demo is validated and staged" in staged.text
     assert operator_session.scenario is not None
-    assert operator_session.scenario.name == "minimal"
+    assert operator_session.scenario.name == "engagement-demo"
     assert operator_session.run_id is None
     assert operator_session.scenario_id is not None
     prepared = app.state.simulation_manager.get_scenario(
         operator_session.scenario_id
     )
     assert prepared.scenario_source is not None
-    assert prepared.scenario_source["schema_version"] == 6
+    assert prepared.scenario_source["schema_version"] == 8
 
 
 def test_saved_reference_scenario_preserves_resolved_provenance(

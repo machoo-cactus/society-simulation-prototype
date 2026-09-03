@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "66aae6d9d28bb8ddeabe83c9c5eb5ac1aa43b6bfb4d60dda561a909bcbdf0b92",
+        "content_hash": "deb379e9c3fb0f52feab21a5e09ee713bab005220ab0592d42fe56b38903194f",
         "id": "greyford-office-evening.station-greyford-airport-terminal-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

@@ -17,7 +17,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "836bb60d9f4448fa96aa78122644072967f9abd140e8cc6280618e26ad04022b",
+        "content_hash": "bfaa3cb4ccbd815731c14fb3868af2307779339eef467859c28591b808e5a554",
         "id": "dining-table",
         "kind": "object"
       },
@@ -43,7 +43,7 @@
     },
     {
       "element": {
-        "content_hash": "e39224b78c376397bb1432e0207ff6304f1b71e18d0ee46a81f3154ff95fd091",
+        "content_hash": "718181511438c47051c8cedd85483e8a3f0b8fd1134a7857887bc76e056f0b84",
         "id": "restaurant-checkout",
         "kind": "object"
       },
@@ -72,7 +72,7 @@
     }
   ],
   "room_type": "DINING",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

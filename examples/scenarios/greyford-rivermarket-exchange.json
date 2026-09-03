@@ -5,6 +5,15 @@
   },
   "cognition": {
     "decision_timeout_seconds": 30.0,
+    "engagement_compiler": {
+      "max_concurrency": 2,
+      "max_input_tokens": null,
+      "max_output_tokens": 768,
+      "max_requests": null,
+      "max_total_output_tokens": null,
+      "model_profile": "default",
+      "timeout_seconds": 30.0
+    },
     "max_concurrency": 4,
     "max_input_tokens": null,
     "max_output_tokens": 512,
@@ -18,13 +27,33 @@
       "navigate_to",
       "perform",
       "say",
+      "engage",
       "wait",
       "skip",
       "transact",
-      "check_environment"
+      "check_environment",
+      "read_text",
+      "write_text"
     ]
   },
   "dt": 1.0,
+  "engagement": {
+    "activating_stress_delta": 2.0,
+    "alarming_listener_stress_delta": 2.0,
+    "calming_stress_delta": -2.0,
+    "high_effort_energy_cost": 6.0,
+    "long_activity_seconds": 30.0,
+    "loud_sound_range": 20,
+    "low_effort_energy_cost": 1.0,
+    "max_groups": 4,
+    "max_invocations_per_group": 4,
+    "max_public_text_chars": 280,
+    "medium_activity_seconds": 15.0,
+    "medium_effort_energy_cost": 3.0,
+    "normal_sound_range": 10,
+    "quiet_sound_range": 2,
+    "short_activity_seconds": 5.0
+  },
   "entities": [
     {
       "components": {
@@ -170,7 +199,7 @@
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 6,
+  "schema_version": 8,
   "seed": 20260901,
   "speed": 30.0,
   "system1": {
@@ -180,6 +209,12 @@
       "ENERGY",
       "STRESS"
     ]
+  },
+  "text_content": {
+    "addresses": [],
+    "artifacts": [],
+    "collections": [],
+    "groups": []
   },
   "weather": null,
   "world": {
@@ -206,7 +241,7 @@
               "y": 14200.0
             },
             "element": {
-              "content_hash": "e7f91f6700d8129afb6cbf7efc6769e23b5cb2e12941ce2a74f74d0b761eca22",
+              "content_hash": "c0aa987195f58005a89910a330a1eddbaf7005cf69c072ee198ef75808e16f02",
               "id": "greyford-rivermarket-exchange.building-greyford-rivermarket-flat",
               "kind": "building"
             },
@@ -228,7 +263,7 @@
               "y": 14070.0
             },
             "element": {
-              "content_hash": "f8abc4f6d370d0dc3cc4fa2dc479e87dbebb32fd4d66ba616396288d9e03c64d",
+              "content_hash": "520c7dbd015aa0c908bc8f4af0b8536ad3a91ccbcc165fe856ed1d4cfa5755c4",
               "id": "greyford-rivermarket-exchange.building-greyford-rivermarket-grocer-demo",
               "kind": "building"
             },

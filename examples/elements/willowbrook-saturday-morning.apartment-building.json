@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "7e02a378e1be0550d1b47ae7df02fb5ede842baddb4bd94c34736581a65ce054",
+        "content_hash": "b67d9dc2263fe83b6d511bb1b9745592d6fedb2d9eb200e0233b68e5f7e2eb3a",
         "id": "willowbrook-saturday-morning.apartment-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

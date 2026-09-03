@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "834d646239d69a2639f42246d56378dcb188f6c7b113658c5a1a8b59527f6ff8",
+        "content_hash": "81c2d024a74eba962e25b47ebbe31f119ba9d3cd88d38f8ccf8c98be60f4ea5a",
         "id": "greyford-office-evening.station-greyford-foundry-fitness-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

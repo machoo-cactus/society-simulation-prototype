@@ -6,12 +6,16 @@ from stage0_sim.application.agents.contracts import (
     CharacterObservation,
     EnvironmentObservation,
     ObservationFact,
+    ObservedContentEndpoint,
     ObservedGoal,
     ObservedItemAmount,
     ObservedOffer,
     ObservedPossession,
     ObservedServiceRequest,
     ObservedTarget,
+    ObservedTextAddress,
+    ObservedTextArtifact,
+    ObservedTextBlock,
 )
 from stage0_sim.application.environment import EnvironmentInformationService
 from stage0_sim.application.navigation import NavigationService
@@ -24,12 +28,14 @@ from stage0_sim.domain.components import (
     CarriedLoadComponent,
     CharacterEmbodimentComponent,
     CharacterProfileComponent,
+    ContentEndpointComponent,
     ControllerComponent,
     CustodyComponent,
     EffectiveSensesComponent,
     EquipmentStateComponent,
     GoalComponent,
     HomeostasisComponent,
+    KnownTextAddressesComponent,
     NpcComponent,
     ObjectIntrinsicComponent,
     OpenableComponent,
@@ -43,6 +49,11 @@ from stage0_sim.domain.components import (
     SpatialParentRelationComponent,
     TransactionRequestComponent,
     WearableComponent,
+)
+from stage0_sim.domain.content import (
+    TextContentError,
+    TextContentRegistry,
+    TextOperation,
 )
 from stage0_sim.domain.economy import (
     ItemAmount,
@@ -60,6 +71,7 @@ from stage0_sim.domain.systems.interactions import (
     available_physical_actions,
 )
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
+from stage0_sim.domain.systems.text_actions import content_endpoint_accessible
 from stage0_sim.domain.world import CityWorld, TravelMode, WorldGrid, WorldMap
 
 
@@ -164,6 +176,11 @@ def build_character_observation(
             agent_id,
             target_id,
         )
+        content_endpoints = _observed_content_endpoints(
+            context,
+            agent_id,
+            target_id,
+        )
         if existing is None:
             targets_by_id[target_id] = ObservedTarget(
                 id=target_id,
@@ -177,6 +194,7 @@ def build_character_observation(
                     target_id,
                     recognized=target_id in perception.recognized_objects_now,
                 ),
+                content_endpoints=content_endpoints,
             )
         else:
             targets_by_id[target_id] = replace(
@@ -193,7 +211,24 @@ def build_character_observation(
                     target_id,
                     recognized=target_id in perception.recognized_objects_now,
                 ),
+                content_endpoints=content_endpoints,
             )
+    for target_id in registry.query_entities(ContentEndpointComponent):
+        if target_id in targets_by_id:
+            continue
+        content_endpoints = _observed_content_endpoints(
+            context,
+            agent_id,
+            target_id,
+        )
+        if not content_endpoints:
+            continue
+        targets_by_id[target_id] = ObservedTarget(
+            id=target_id,
+            kind="content_endpoint",
+            name=target_id,
+            content_endpoints=content_endpoints,
+        )
     targets = [
         targets_by_id[target_id]
         for target_id in sorted(targets_by_id)
@@ -308,6 +343,7 @@ def build_character_observation(
         carried_load=_observed_carried_load(registry, agent_id),
         possessions=_observed_possessions(registry, agent_id),
         structured_goals=_observed_goals(registry, agent_id),
+        text_addresses=_observed_text_addresses(registry, agent_id),
     )
 
 
@@ -448,6 +484,170 @@ def _build_npc_observation(
             )
         ),
         structured_goals=_observed_goals(registry, agent_id),
+        text_addresses=(),
+    )
+
+
+def _observed_content_endpoints(
+    context: SystemContext,
+    actor_id: str,
+    target_id: str,
+) -> tuple[ObservedContentEndpoint, ...]:
+    registry = context.registry
+    if not (
+        registry.has_resource(TextContentRegistry)
+        and registry.has_component(target_id, ContentEndpointComponent)
+    ):
+        return ()
+    content = registry.get_resource(TextContentRegistry)
+    memberships = content.group_memberships(actor_id)
+    controlled_addresses = content.controlled_address_ids(actor_id)
+    observed: list[ObservedContentEndpoint] = []
+    for endpoint in registry.get_component(
+        target_id, ContentEndpointComponent
+    ).endpoints:
+        if not content_endpoint_accessible(
+            context, actor_id, target_id, endpoint
+        ):
+            continue
+        artifacts: tuple[ObservedTextArtifact, ...] = ()
+        collection_revision = None
+        operations: list[str] = []
+        if endpoint.kind.value == "artifact":
+            try:
+                artifact = content.artifact(endpoint.resource_id)
+            except TextContentError:
+                continue
+            operations = [
+                operation.value
+                for operation in endpoint.operations
+                if artifact.access_policy.allows(
+                    operation,
+                    actor_id,
+                    memberships,
+                    controlled_addresses,
+                )
+            ]
+            artifacts = (_observed_text_artifact(artifact),)
+        else:
+            try:
+                collection = content.collection(endpoint.resource_id)
+            except TextContentError:
+                continue
+            collection_revision = collection.revision
+            for operation in endpoint.operations:
+                policy_operation = (
+                    TextOperation.SEND
+                    if endpoint.originates_messages
+                    and operation is TextOperation.CREATE
+                    else operation
+                )
+                if collection.access_policy.allows(
+                    policy_operation,
+                    actor_id,
+                    memberships,
+                    controlled_addresses,
+                ) or (
+                    operation
+                    in {
+                        TextOperation.READ,
+                        TextOperation.APPEND,
+                        TextOperation.REPLACE,
+                        TextOperation.EDIT,
+                        TextOperation.DELETE,
+                    }
+                    and any(
+                        content.artifact(artifact_id).access_policy.allows(
+                            operation,
+                            actor_id,
+                            memberships,
+                            controlled_addresses,
+                        )
+                        for artifact_id in collection.members
+                    )
+                ):
+                    operations.append(operation.value)
+            if (
+                endpoint.lists_items
+                and collection.access_policy.allows(
+                    TextOperation.LIST,
+                    actor_id,
+                    memberships,
+                    controlled_addresses,
+                )
+            ):
+                artifacts = tuple(
+                    _observed_text_artifact(content.artifact(artifact_id))
+                    for artifact_id in collection.members
+                    if not content.artifact(artifact_id).tombstone
+                )
+        if operations:
+            observed.append(
+                ObservedContentEndpoint(
+                    id=endpoint.id,
+                    label=endpoint.label,
+                    kind=endpoint.kind.value,
+                    operations=tuple(operations),
+                    resource_id=endpoint.resource_id,
+                    collection_revision=collection_revision,
+                    artifacts=artifacts,
+                    originates_messages=endpoint.originates_messages,
+                )
+            )
+    return tuple(observed)
+
+
+def _observed_text_artifact(artifact: object) -> ObservedTextArtifact:
+    from stage0_sim.domain.content import TextArtifact
+
+    if not isinstance(artifact, TextArtifact):
+        raise TypeError("observed text artifact has an invalid type")
+    return ObservedTextArtifact(
+        id=artifact.id,
+        media_kind=artifact.media_kind.value,
+        mode=artifact.mode.value,
+        revision=artifact.current_revision,
+        content_hash=artifact.current.content_hash,
+        blocks=tuple(
+            ObservedTextBlock(
+                id=block.id,
+                revision=block.revision,
+                kind=block.kind.value,
+                text_length=len(block.text),
+            )
+            for block in artifact.current.blocks
+            if not block.tombstone
+        ),
+    )
+
+
+def _observed_text_addresses(
+    registry: Registry,
+    actor_id: str,
+) -> tuple[ObservedTextAddress, ...]:
+    if not (
+        registry.has_resource(TextContentRegistry)
+        and registry.has_component(actor_id, KnownTextAddressesComponent)
+    ):
+        return ()
+    content = registry.get_resource(TextContentRegistry)
+    controlled = set(content.controlled_address_ids(actor_id))
+    return tuple(
+        ObservedTextAddress(
+            id=address.id,
+            display_label=address.display_label,
+            mailbox_revision=content.collection(address.mailbox_id).revision,
+            unread_count=(
+                content.unread_count(address.id)
+                if address.id in controlled
+                else None
+            ),
+            controlled=address.id in controlled,
+        )
+        for address_id in registry.get_component(
+            actor_id, KnownTextAddressesComponent
+        ).address_ids
+        for address in (content.address(address_id),)
     )
 
 

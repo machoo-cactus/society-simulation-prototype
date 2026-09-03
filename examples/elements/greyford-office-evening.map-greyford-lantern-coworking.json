@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "7ee1fc9d42bb74d8705127cc53715c29d5defc359a7f5ab437b80175ffb4ff18",
+        "content_hash": "d7c8e61b702b2c47b6cf2c36c9c4de9d3869abc73d16eec32bca1c5de3e11be8",
         "id": "greyford-office-evening.station-greyford-lantern-coworking-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

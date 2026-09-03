@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "fe991c41fc3750bc8b83b8676c732c6619f3155a2469ff2d929cd5264824edd3",
+        "content_hash": "7d777a43ad547e467d51f77a25b28d1e12fca0088be44b88b6f51df136be4b76",
         "id": "greyford-office-evening.station-greyford-harcourt-residences-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

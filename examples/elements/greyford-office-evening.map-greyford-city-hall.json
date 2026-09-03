@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "6b298fa50d48c8a349268f5b9b82635e954b20d02bfd97159a5373954a77c871",
+        "content_hash": "043ae363b8da0f0ed3c12e0aa0c4ea4fa4c6c7d3c613798361fc2bd21bb83155",
         "id": "greyford-office-evening.station-greyford-city-hall-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

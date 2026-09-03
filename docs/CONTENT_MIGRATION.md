@@ -1,9 +1,9 @@
 # Content Migration
 
 Character, element, and scenario catalogs are versioned source records. Runtime
-libraries accept only the current versions: character **2**, element **3**, and
-scenario **6**. Legacy versions are accepted only by the offline migration
-service.
+libraries accept only the versions listed in
+[Current contracts](CURRENT_CONTRACTS.md). Legacy versions are accepted only
+by the offline migration service.
 
 ## CLI workflow
 

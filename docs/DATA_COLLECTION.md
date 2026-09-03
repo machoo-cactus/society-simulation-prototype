@@ -1,7 +1,9 @@
 # Research Data
 
-**Owner:** Dataset v4, SQLite schema 10, privacy, queries, exports, aggregation,
-deletion, and capture limitations.
+**Owner:** Current dataset and SQLite behavior, privacy, queries, exports,
+aggregation, deletion, and capture limitations.
+
+Identifiers are listed in [Current contracts](CURRENT_CONTRACTS.md).
 
 Research data observes execution. It is never live simulation authority,
 character perception, memory input merely by being recorded, or
@@ -12,8 +14,8 @@ character-controller context.
 ```text
 prepared scenario + deterministic runner
   -> domain events + read-only phase hooks + private application traces
-  -> immutable stage0.dataset.v4 records
-  -> SQLite schema 10 normalized and derived projections
+  -> immutable versioned dataset records
+  -> current SQLite normalized and derived projections
   -> REST queries, server-rendered explorer, exports, aggregation
 ```
 
@@ -22,9 +24,9 @@ of truth; relational and derived tables are query projections. Capture must not
 change system order, physical outcomes, perception, memory routing, or telemetry
 frequency.
 
-## Dataset v4 envelope
+## Dataset envelope
 
-Every immutable `stage0.dataset.v4` record contains:
+Every immutable dataset record contains:
 
 - `record_id`, `run_id`, and positive monotonic `sequence`;
 - `record_type`, per-record `schema_id` and `schema_version`;
@@ -32,8 +34,9 @@ Every immutable `stage0.dataset.v4` record contains:
 - simulation tick/time and optional nondeterministic wall time;
 - primary and related entity IDs;
 - source-event, causation, and correlation IDs;
-- typed goal, plan, action, decision, model, tool, interaction, perception,
-  memory, transaction-request, and operator-intervention join IDs;
+- typed goal, plan, action, decision, model, tool, interaction, engagement,
+  engagement-group, engagement-invocation, perception, memory,
+  transaction-request, and operator-intervention join IDs;
 - producer metadata and a complete JSON payload.
 
 Categories are `RUN`, `PROVENANCE`, `EVENT`, `STATE`, `TRANSITION`, `GOAL`,
@@ -60,7 +63,9 @@ Visibility classes are:
 - `PRIVATE_RESEARCH`: may contain profiles, synthesized situations, prompts,
   rendered/model messages, tool calls, reasons, retrieved memories or
   information, embeddings, hidden closed-container contents, ownership,
-  custody, held-object state, and detailed authoritative state.
+  custody, held-object state, raw engagement intent/reason, compiler scene,
+  proposed summary/response, rejected groups, normalized compiler arguments,
+  and detailed authoritative state.
 
 A domain event whose payload declares private visibility is captured and
 projected as `PRIVATE_RESEARCH`; an event cannot downgrade its private payload
@@ -85,11 +90,12 @@ Treat complete/private-enabled exports and SQLite databases as restricted
 research artifacts. Visibility flags are not a substitute for authentication,
 authorization, encryption, consent, retention, or redaction policy.
 
-## SQLite schema 10
+## SQLite schema
 
-The configured database accepts only `PRAGMA user_version = 10`. A new empty
-database is initialized directly. A populated database with any other version
-fails explicitly and is neither migrated nor recreated.
+The configured database accepts only the schema listed in
+[Current contracts](CURRENT_CONTRACTS.md). A new empty database is initialized
+directly. A populated database with any other version fails explicitly and is
+neither migrated nor recreated.
 
 Important projection groups:
 
@@ -100,11 +106,15 @@ Important projection groups:
 | Goals/plans/actions | `goals`, `goal_transitions`, `plans`, `goal_action_links`, `action_instances`, `action_transitions` |
 | Cognition/tools | `decisions`, `decision_options`, `model_requests`, `model_turns`, `tool_executions` |
 | Interactions | `interactions`, `interaction_participants`, `interaction_events` |
+| Engagements | `engagements`, `engagement_groups`, `engagement_invocations` |
 | Perception/memory/information | `perception_facts`, `perception_deliveries`, `memory_operations`, `memory_relations`, `information_retrievals` |
+| In-world text | private `text_content_snapshots` plus canonical `text.*` action and delivery records |
 | Derived research features | `opportunity_samples`, `transition_samples`, `action_episodes`, `decision_episodes`, `goal_episodes`, `interaction_episodes`, `population_samples`, `resource_samples`, `resource_flows` |
 
-Episodic-memory and information-document persistence is separate from the
-analytical run projections.
+Episodic-memory, information-document, and in-world text snapshot persistence
+is separate from the analytical run projections. Text snapshots preserve
+artifact revision history, collections, addresses, groups, and unread state;
+they remain research records rather than resumable runner checkpoints.
 
 Derived feature contracts are independently versioned. They cover consecutive
 state transitions, choice opportunities/non-choices, terminal action/decision/
@@ -131,6 +141,22 @@ held edges for stable filtering and reconstruction of analytical relations.
 Rows use deterministic object ordering. They are observations of ECS/index
 truth, not a mutable object graph or restart format.
 
+`engagements` normalizes actor and action/plan/decision/tool/compiler lineage,
+references, scene/catalog/prompt versions, compilation and terminal status,
+ticks/times, and private compiler material. `engagement_groups` records stable
+ordinal and required-atomic identity, validation/execution status, private
+rejection/proposal details, failure reason, and grounded outcome.
+`engagement_invocations` records stable invocation identity, capability,
+consequence tier, subject, private target/proposed/normalized/result material,
+status, and grounded outcome. Public/default queries remove the columns marked
+private by the store rather than returning redacted-looking values.
+
+Engagements also produce normalized `interaction_episodes` with
+`interaction_type=engagement`, terminal status including `partial`, and
+`initiating_engagement_id` plus ordinary action/decision/tool/correlation
+lineage. These records describe observed execution; they are not resumable
+programs.
+
 Character state samples include
 `stage0.feature.character_physical_state.v2`: 5×5 body pose/occupied cells,
 posture/support, hands, live parent relation, interaction request/execution
@@ -153,6 +179,9 @@ All per-run research queries use:
 | `/data/schema` | Generated data dictionary and observed schemas |
 | `/data/records` | Immutable raw records |
 | `/data/goals`, `/decisions`, `/actions`, `/interactions` | Normalized lifecycles |
+| `/data/engagements` | Normalized engagement lifecycle and compiler/action lineage |
+| `/data/engagement-groups` | Validation and execution status per atomic group |
+| `/data/engagement-invocations` | Capability invocation status and grounded outcomes |
 | `/data/state?kind=sample|delta` | State samples or deltas |
 | `/data/physical-object-states` | Normalized physical object states |
 | `/data/physical-relations` | Normalized parent, slot, custody, and held relations |
@@ -167,11 +196,13 @@ All per-run research queries use:
 Common filters cover record/category/schema, primary or related entity,
 physical object/room/parent/relation/phase/open/locked state, physical
 interaction verb/type, tick/time bounds, visibility, status/outcome, typed
-lineage IDs, cursor, and `limit` from 1 through 1000. Raw-record cursors are
-integer sequences; analytical cursors are stable opaque values.
+lineage IDs including `engagement_id`, `engagement_group_id`, and
+`engagement_invocation_id`, cursor, and `limit` from 1 through 1000. Raw-record
+cursors are integer sequences; analytical cursors are stable opaque values.
 
 ```powershell
 curl "http://127.0.0.1:8000/simulation/runs/RUN/data/actions?entity_id=agent-001&limit=50"
+curl "http://127.0.0.1:8000/simulation/runs/RUN/data/engagement-groups?engagement_id=ENGAGEMENT"
 curl "http://127.0.0.1:8000/simulation/runs/RUN/data/records?category=MODEL&include_private=true"
 ```
 
@@ -194,7 +225,10 @@ Exports:
 | `/simulation/runs/{run_id}/exports/bundle` | Manifest, schema, filtered raw NDJSON, normalized/derived CSVs | Private excluded by default |
 
 JSON-valued CSV columns contain canonical JSON strings. Bundle file ordering is
-stable.
+stable. Engagement lineage filters apply to filtered records and bundles.
+Private-enabled exports can include raw controller/compiler content and must be
+handled as restricted research artifacts. The complete export is always
+private-inclusive.
 
 ## Data management
 
@@ -240,5 +274,8 @@ are explicit and mark the run failed for research capture.
   deduplication, Parquet, or distributed-storage policy.
 - Live provider choices require recording/replay for reproduction.
 - Projection rebuild is not complete for every normalized table.
+- Tier 2+ engagement effects such as injury, theft/custody transfer, forced
+  movement, relationships/reputation, and arbitrary object mutation are not
+  present in the current records because the runtime does not implement them.
 - Statistical prior fitting and approximate populations are future work.
 - Datasets are not resumable checkpoints.

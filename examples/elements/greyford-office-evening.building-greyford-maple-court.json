@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "681edb72167179a98d16b76ab93ecfa839435bc78d9297e3b6c10d59fc10c945",
+        "content_hash": "8593b52a18991c99c17d24949db44a98c636e2b21165decb076018333b780895",
         "id": "greyford-office-evening.map-greyford-maple-court",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

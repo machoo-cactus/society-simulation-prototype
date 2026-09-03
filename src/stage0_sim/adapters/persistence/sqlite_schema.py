@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-DATABASE_SCHEMA_VERSION = 10
+DATABASE_SCHEMA_VERSION = 12
 @contextmanager
 def schema_initialization_lock(path: Path) -> Iterator[None]:
     lock_path = path.with_name(f"{path.name}.schema.lock")
@@ -51,6 +51,8 @@ def schema_initialization_lock(path: Path) -> Iterator[None]:
 # coverage registry for every SQLite table containing a run_id column.
 RUN_SCOPED_TABLES = (
     "perception_deliveries",
+    "engagement_invocations",
+    "engagement_groups",
     "interaction_participants",
     "interaction_events",
     "goal_action_links",
@@ -81,11 +83,13 @@ RUN_SCOPED_TABLES = (
     "decisions",
     "model_requests",
     "goals",
+    "engagements",
     "interactions",
     "record_relations",
     "records",
     "episodic_memories",
     "information_documents",
+    "text_content_snapshots",
     "runs",
 )
 
@@ -101,6 +105,15 @@ CREATE INDEX IF NOT EXISTS records_run_subject_tick
 ON records(run_id, subject_id, simulation_tick);
 CREATE INDEX IF NOT EXISTS records_run_visibility_sequence
 ON records(run_id, visibility, sequence);
+CREATE INDEX IF NOT EXISTS records_run_engagement_sequence
+ON records(
+    run_id, engagement_id, engagement_group_id,
+    engagement_invocation_id, sequence
+);
+CREATE INDEX IF NOT EXISTS records_run_engagement_group_sequence
+ON records(run_id, engagement_group_id, sequence);
+CREATE INDEX IF NOT EXISTS records_run_engagement_invocation_sequence
+ON records(run_id, engagement_invocation_id, sequence);
 
 CREATE TABLE IF NOT EXISTS record_relations (
     run_id TEXT NOT NULL,
@@ -406,6 +419,7 @@ CREATE TABLE IF NOT EXISTS interactions (
     action_id TEXT,
     decision_id TEXT,
     tool_call_id TEXT,
+    engagement_id TEXT,
     correlation_id TEXT,
     start_tick INTEGER NOT NULL,
     end_tick INTEGER,
@@ -427,7 +441,8 @@ CREATE INDEX IF NOT EXISTS interactions_actor
 ON interactions(run_id, actor_id, interaction_type, start_tick);
 CREATE INDEX IF NOT EXISTS interactions_lineage
 ON interactions(
-    run_id, action_id, decision_id, tool_call_id, correlation_id
+    run_id, engagement_id, action_id, decision_id, tool_call_id,
+    correlation_id
 );
 
 CREATE TABLE IF NOT EXISTS interaction_participants (
@@ -620,6 +635,106 @@ CREATE TABLE IF NOT EXISTS information_retrievals (
 CREATE INDEX IF NOT EXISTS information_retrievals_subject_status
 ON information_retrievals(run_id, subject_id, status);
 
+CREATE TABLE IF NOT EXISTS engagements (
+    run_id TEXT NOT NULL,
+    engagement_id TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    action_id TEXT,
+    plan_id TEXT,
+    plan_revision INTEGER,
+    decision_id TEXT,
+    tool_call_id TEXT,
+    compiler_request_id TEXT,
+    root_correlation_id TEXT,
+    referenced_ids_json TEXT,
+    scene_hash TEXT,
+    scene_version TEXT,
+    catalog_version TEXT,
+    prompt_version TEXT,
+    status TEXT NOT NULL,
+    compiler_status TEXT,
+    private_intent TEXT,
+    private_controller_reason TEXT,
+    private_compiler_summary TEXT,
+    private_proposal_json TEXT,
+    private_result_json TEXT,
+    requested_tick INTEGER NOT NULL,
+    requested_at REAL NOT NULL,
+    started_tick INTEGER,
+    started_at REAL,
+    terminal_tick INTEGER,
+    terminal_at REAL,
+    terminal_outcome TEXT,
+    PRIMARY KEY (run_id, engagement_id),
+    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
+);
+CREATE INDEX IF NOT EXISTS engagements_actor_status
+ON engagements(run_id, actor_id, status, requested_tick);
+CREATE INDEX IF NOT EXISTS engagements_lineage
+ON engagements(
+    run_id, action_id, plan_id, decision_id, tool_call_id,
+    compiler_request_id
+);
+
+CREATE TABLE IF NOT EXISTS engagement_groups (
+    run_id TEXT NOT NULL,
+    engagement_id TEXT NOT NULL,
+    engagement_group_id TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    ordinal INTEGER,
+    required_atomic INTEGER,
+    validation_status TEXT NOT NULL,
+    execution_status TEXT NOT NULL,
+    status TEXT NOT NULL,
+    private_rejection_reason TEXT,
+    failure_reason TEXT,
+    private_issues_json TEXT,
+    private_proposal_json TEXT,
+    grounded_outcome_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, engagement_id, engagement_group_id),
+    FOREIGN KEY (run_id, engagement_id)
+        REFERENCES engagements(run_id, engagement_id),
+    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
+);
+CREATE INDEX IF NOT EXISTS engagement_groups_status
+ON engagement_groups(
+    run_id, engagement_id, validation_status, execution_status, ordinal
+);
+
+CREATE TABLE IF NOT EXISTS engagement_invocations (
+    run_id TEXT NOT NULL,
+    engagement_id TEXT NOT NULL,
+    engagement_group_id TEXT NOT NULL,
+    engagement_invocation_id TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    ordinal INTEGER,
+    capability TEXT,
+    consequence_tier INTEGER,
+    subject_id TEXT,
+    target_id TEXT,
+    status TEXT NOT NULL,
+    private_proposal_arguments_json TEXT,
+    private_normalized_arguments_json TEXT,
+    private_result_json TEXT,
+    grounded_outcome_json TEXT NOT NULL,
+    PRIMARY KEY (
+        run_id, engagement_id, engagement_group_id,
+        engagement_invocation_id
+    ),
+    FOREIGN KEY (run_id, engagement_id, engagement_group_id)
+        REFERENCES engagement_groups(
+            run_id, engagement_id, engagement_group_id
+        ),
+    FOREIGN KEY (run_id, record_id) REFERENCES records(run_id, record_id)
+);
+CREATE INDEX IF NOT EXISTS engagement_invocations_status
+ON engagement_invocations(
+    run_id, engagement_id, engagement_group_id, status, ordinal
+);
+CREATE INDEX IF NOT EXISTS engagement_invocations_capability
+ON engagement_invocations(run_id, capability, status);
+
 CREATE TABLE IF NOT EXISTS interaction_episodes (
     run_id TEXT NOT NULL,
     interaction_id TEXT NOT NULL,
@@ -640,6 +755,7 @@ CREATE TABLE IF NOT EXISTS interaction_episodes (
     initiating_decision_id TEXT,
     initiating_action_id TEXT,
     initiating_tool_call_id TEXT,
+    initiating_engagement_id TEXT,
     correlation_id TEXT,
     content_visibility TEXT NOT NULL,
     episode_json TEXT NOT NULL,
@@ -657,7 +773,7 @@ ON interaction_episodes(
 CREATE INDEX IF NOT EXISTS interaction_episodes_lineage
 ON interaction_episodes(
     run_id, initiating_action_id, initiating_decision_id,
-    initiating_tool_call_id, correlation_id
+    initiating_tool_call_id, initiating_engagement_id, correlation_id
 );
 
 CREATE TABLE IF NOT EXISTS perception_facts (
@@ -821,6 +937,9 @@ CREATE TABLE records (
     model_request_id TEXT,
     tool_call_id TEXT,
     interaction_id TEXT,
+    engagement_id TEXT,
+    engagement_group_id TEXT,
+    engagement_invocation_id TEXT,
     perception_fact_id TEXT,
     memory_id TEXT,
     transaction_request_id TEXT,
@@ -861,6 +980,12 @@ CREATE TABLE information_documents (
 );
 CREATE INDEX information_run_namespace_kind
 ON information_documents(run_id, namespace_id, kind);
+
+CREATE TABLE text_content_snapshots (
+    run_id TEXT PRIMARY KEY,
+    snapshot_json TEXT NOT NULL,
+    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+);
 
 CREATE TABLE dataset_store_instances (
     instance_id TEXT PRIMARY KEY,

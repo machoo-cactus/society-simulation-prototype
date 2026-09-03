@@ -89,7 +89,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "4396489d9ff4d9aeb3c7a62b06fd7a1d8da92e11ee836c68a7205c4f1a5c04ab",
+        "content_hash": "1581a937dfbba363795094ef9d9594c158c41a191b743c7835f63de376ebf1a4",
         "id": "greyford-office-evening.station-greyford-office-mara-workstation",
         "kind": "object"
       },
@@ -115,7 +115,7 @@
     },
     {
       "element": {
-        "content_hash": "37297441c07d441365d95372c8a97d28f5c97b706c40abf1eebfa2fa30099876",
+        "content_hash": "00b7d3120c66e63441629960a683b78d5dc3ff144ae59036ea186b00a5b4e0db",
         "id": "greyford-office-evening.station-greyford-office-break-table",
         "kind": "object"
       },
@@ -141,7 +141,7 @@
     },
     {
       "element": {
-        "content_hash": "6168e61c833d8e16a1eb6d3fd90d89065ea77e1ee59a92748c88f7c0d9b75f8f",
+        "content_hash": "958688f7d7773e15d028806e74137ac55d1bb9122166fc07250c6ebe28d690c2",
         "id": "greyford-office-evening.station-greyford-office-quiet-chair",
         "kind": "object"
       },
@@ -167,7 +167,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

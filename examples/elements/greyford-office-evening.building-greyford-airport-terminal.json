@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "7e66fa033d0d3e7634f9a71031d857e744f886b4a2d31e76c64853d946640a4d",
+        "content_hash": "1f69eb4f6c8560af5eed1b44d8c61fb0453dfbb1e9cefe24b024032698ad0b19",
         "id": "greyford-office-evening.map-greyford-airport-terminal",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "be858db83dae1e5707800b3f747a081b8998ed951fdeea091ee73d600cd8742b",
+        "content_hash": "27642b7c3c9640ec782d18fdd5b0e8d1c4020a0f7882b20bd51929bd93ef6242",
         "id": "greyford-office-evening.station-greyford-medical-research-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

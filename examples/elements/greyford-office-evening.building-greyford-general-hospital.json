@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "88857552c91e1b46ef5416d6dc65c84e9bb6f547ef14415ed586186e53d8d02a",
+        "content_hash": "8ab44414182791a535b817e6440d07887dd70626f5e1aa411668bb145869bdc8",
         "id": "greyford-office-evening.map-greyford-general-hospital",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

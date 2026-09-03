@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "b842630e3002864bd10f0c34126a22c454cfdf935d9af44699b5b83dc4e90569",
+        "content_hash": "ed3b082a2630fb788cedf6a544a3c1b95098716c4b7a915034a423944b1c1c95",
         "id": "greyford-office-evening.map-greyford-rivermarket-grocer",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

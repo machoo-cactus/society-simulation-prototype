@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "663e1a81d0ad6068562d6f04727861992bed0ef6d842c4910e82d34c782afb06",
+        "content_hash": "0bcf37bd9e319cad24276ec304860ca512b90dad2dd7c4fa4535ddb8f91d6f90",
         "id": "greyford-office-evening.station-greyford-spruce-childcare-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

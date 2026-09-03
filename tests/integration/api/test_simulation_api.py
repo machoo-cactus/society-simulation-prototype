@@ -107,7 +107,7 @@ def _physical_api_source() -> tuple[
 ]:
     display = ObjectElementDefinition.model_validate(
         {
-            "schema_version": 3,
+            "schema_version": 4,
             "id": "physical-api-display",
             "name": "Display Stand",
             "kind": "object",
@@ -118,7 +118,7 @@ def _physical_api_source() -> tuple[
     )
     cabinet = ObjectElementDefinition.model_validate(
         {
-            "schema_version": 3,
+            "schema_version": 4,
             "id": "physical-api-cabinet",
             "name": "Opaque Cabinet",
             "kind": "object",
@@ -163,7 +163,7 @@ def _physical_api_source() -> tuple[
     )
     secret = ObjectElementDefinition.model_validate(
         {
-            "schema_version": 3,
+            "schema_version": 4,
             "id": "physical-api-secret",
             "name": "Private Letter",
             "kind": "object",
@@ -184,7 +184,7 @@ def _physical_api_source() -> tuple[
     )
     room = RoomElementDefinition.model_validate(
         {
-            "schema_version": 3,
+            "schema_version": 4,
             "id": "physical-api-room",
             "name": "Physical API Room",
             "kind": "room",
@@ -230,7 +230,7 @@ def _physical_api_source() -> tuple[
     )
     building = BuildingElementDefinition.model_validate(
         {
-            "schema_version": 3,
+            "schema_version": 4,
             "id": "physical-api-building",
             "name": "Physical API Building",
             "kind": "building",
@@ -251,7 +251,7 @@ def _physical_api_source() -> tuple[
     )
     source = ScenarioSourceDefinition.model_validate(
         {
-            "schema_version": 6,
+            "schema_version": 8,
             "name": "Physical API snapshot",
             "character_situation_synthesis": {"enabled": False},
             "world": {
@@ -360,7 +360,7 @@ def test_simulation_api_rejects_schema_v2_scenario_input() -> None:
         )
 
     assert response.status_code == 422
-    assert "Input should be 6" in response.text
+    assert "Input should be 8" in response.text
 
 
 def test_rest_lifecycle_step_speed_agent_and_event_history() -> None:
@@ -569,7 +569,7 @@ def test_websocket_stream_has_ordered_sequences_and_authoritative_snapshot() -> 
             second = websocket.receive_json()
 
         assert [first["type"], second["type"]] == ["hello", "world_snapshot"]
-        assert first["schema_version"] == "stage0.telemetry.v3"
+        assert first["schema_version"] == "stage0.telemetry.v5"
         assert second["sequence"] == first["sequence"] == latest
         assert second["snapshot_revision"] >= 1
         assert second["simulation_tick"] == 1
@@ -577,6 +577,179 @@ def test_websocket_stream_has_ordered_sequences_and_authoritative_snapshot() -> 
         assert snapshot["tick"] == 1
         assert snapshot["agents"][0]["position"] == {"x": 5, "y": 1}
         assert snapshot["agents"][0]["homeostasis"]["satiety"] == 9.95
+
+
+def test_api_snapshot_and_telemetry_project_engagement_without_private_content() -> None:
+    with TestClient(app) as client:
+        run_id = create_run(client)
+        manager = app.state.simulation_manager
+        assert isinstance(manager, SimulationManager)
+        managed = manager.get_run(run_id)
+        actor_id = "agent-001"
+        lineage = {
+            "engagement_id": "engagement-api-1",
+            "action_id": "action-api-1",
+            "plan_id": "plan-api-1",
+            "plan_revision": 2,
+            "decision_id": "decision-api-1",
+            "tool_call_id": "tool-api-1",
+            "root_correlation_id": "decision-api-1",
+        }
+        client.portal.call(
+            lambda: managed.runner.events.emit(
+                "engagement.requested",
+                simulation_tick=1,
+                simulation_time=1.0,
+                agent_id=actor_id,
+                payload={
+                    **lineage,
+                    "reference_ids": ["kitchen"],
+                    "intent": "PRIVATE API INTENT",
+                    "reason": "PRIVATE API REASON",
+                    "visibility": "private",
+                },
+            )
+        )
+        client.portal.call(
+            lambda: managed.runner.events.emit(
+                "engagement.compilation_completed",
+                simulation_tick=1,
+                simulation_time=1.0,
+                agent_id=actor_id,
+                payload={
+                    **lineage,
+                    "summary": "PRIVATE COMPILER SUMMARY",
+                    "scene": {"hidden": "PRIVATE SCENE"},
+                    "group_count": 2,
+                    "visibility": "private",
+                },
+            )
+        )
+        client.portal.call(
+            lambda: managed.runner.events.emit(
+                "engagement.capability_committed",
+                simulation_tick=2,
+                simulation_time=2.0,
+                agent_id=actor_id,
+                payload={
+                    **lineage,
+                    "group_id": "gesture",
+                    "group_ordinal": 0,
+                    "invocation_id": "gesture-1",
+                    "capability": "expressive_behavior",
+                    "modality": "visual",
+                    "public_text": "A grounded wave.",
+                    "expression_band": "moderate",
+                    "target_id": "kitchen",
+                    "energy_cost": 99,
+                    "visibility": "private",
+                },
+            )
+        )
+        client.portal.call(
+            lambda: managed.runner.events.emit(
+                "engagement.partial",
+                simulation_tick=2,
+                simulation_time=2.0,
+                agent_id=actor_id,
+                payload={
+                    **lineage,
+                    "completed_group_count": 1,
+                    "failed_group_count": 1,
+                    "reason": "PRIVATE TERMINAL REASON",
+                    "group_statuses": [
+                        {
+                            "group_id": "gesture",
+                            "group_ordinal": 0,
+                            "status": "completed",
+                            "failure_reason": None,
+                        },
+                        {
+                            "group_id": "blocked",
+                            "group_ordinal": 1,
+                            "status": "failed",
+                            "failure_reason": "PRIVATE GROUP REASON",
+                        },
+                    ],
+                },
+            )
+        )
+        failed_lineage = {
+            **lineage,
+            "engagement_id": "engagement-api-2",
+            "action_id": "action-api-2",
+        }
+        client.portal.call(
+            lambda: managed.runner.events.emit(
+                "engagement.compilation_failed",
+                simulation_tick=3,
+                simulation_time=3.0,
+                agent_id=actor_id,
+                payload={
+                    **failed_lineage,
+                    "reason": "PRIVATE COMPILATION FAILURE",
+                    "summary": "PRIVATE FAILED SUMMARY",
+                    "visibility": "private",
+                },
+            )
+        )
+
+        response = client.get(f"/simulation/runs/{run_id}/snapshot")
+        messages = managed.broker.messages_after(0)
+
+    assert response.status_code == 200
+    engagement = next(
+        agent["engagement"]
+        for agent in response.json()["snapshot"]["agents"]
+        if agent["id"] == actor_id
+    )
+    recent_by_id = {
+        item["engagement_id"]: item for item in engagement["recent"]
+    }
+    partial = recent_by_id["engagement-api-1"]
+    failed = recent_by_id["engagement-api-2"]
+    assert partial["status"] == "partial"
+    assert failed["status"] == "failed"
+    assert failed["compiler_status"] == "failed"
+    assert partial["reference_ids"] == ["kitchen"]
+    assert partial["participant_ids"] == [
+        "agent-001",
+        "kitchen",
+    ]
+    assert [group["status"] for group in partial["groups"]] == [
+        "completed",
+        "failed",
+    ]
+    assert partial["evidence"][0]["public_text"] == (
+        "A grounded wave."
+    )
+    engagement_messages = [
+        message.to_dict()
+        for message in messages
+        if message.message_type == "engagement_event"
+    ]
+    assert {
+        message["payload"]["event"]["payload"]["engagement_status"]
+        for message in engagement_messages
+    } >= {"requested", "succeeded", "committed", "partial", "failed"}
+    serialized = json.dumps(
+        {
+            "snapshot": response.json(),
+            "messages": engagement_messages,
+        }
+    )
+    for private_value in (
+        "PRIVATE API INTENT",
+        "PRIVATE API REASON",
+        "PRIVATE COMPILER SUMMARY",
+        "PRIVATE SCENE",
+        "PRIVATE TERMINAL REASON",
+        "PRIVATE GROUP REASON",
+        "PRIVATE COMPILATION FAILURE",
+        "PRIVATE FAILED SUMMARY",
+        "energy_cost",
+    ):
+        assert private_value not in serialized
 
 
 def test_public_physical_snapshot_contract_and_closed_container_privacy() -> None:
@@ -1238,10 +1411,10 @@ def test_physical_dataset_routes_filters_privacy_and_export_headers() -> None:
         "X-Stage0-Privacy-Warning"
     ]
     manifest = json.loads(complete.text.splitlines()[0])
-    assert manifest["schema_version"] == "stage0.dataset.v4"
+    assert manifest["schema_version"] == "stage0.dataset.v6"
     assert manifest["payload"]["private_records_included"] is True
     assert private_bundle.headers["X-Stage0-Private-Included"] == "true"
     with zipfile.ZipFile(io.BytesIO(private_bundle.content)) as archive:
         bundle_manifest = json.loads(archive.read("manifest.json"))
-        assert bundle_manifest["sqlite_schema_version"] == 10
+        assert bundle_manifest["sqlite_schema_version"] == 12
         assert bundle_manifest["private_records_included"] is True

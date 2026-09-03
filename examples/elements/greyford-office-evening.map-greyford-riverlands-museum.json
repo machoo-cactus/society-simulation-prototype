@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "12903b20f79f1217ac0c9d49ee4a86cdff586c59283b176584c8a238eca16c13",
+        "content_hash": "6ac8fbeb7855ebb94ed5c4581ffcfcea9faf7f3146916f43f582840a35c42484",
         "id": "greyford-office-evening.station-greyford-riverlands-museum-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

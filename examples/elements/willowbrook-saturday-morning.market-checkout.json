@@ -73,6 +73,7 @@
     "capabilities": {
       "consumable": null,
       "container": null,
+      "content_endpoints": [],
       "openable": null,
       "portable": null,
       "readable": null,
@@ -294,6 +295,6 @@
     "owner_id": null
   },
   "request_timeout": 60.0,
-  "schema_version": 3,
+  "schema_version": 4,
   "supported_actions": null
 }

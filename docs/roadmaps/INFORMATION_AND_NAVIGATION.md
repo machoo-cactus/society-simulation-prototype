@@ -7,9 +7,8 @@ The current implementation already provides coherent information documents,
 derived retrieval, known-topology projection, recursive route composition,
 `navigate_to`/`NAVIGATE`, and direct-experience route learning. See
 [Architecture](../ARCHITECTURE.md) and
-[Runtime semantics](../RUNTIME.md) for settled behavior. The completed proposal
-and migration phases are archived as
-[Information and Navigation Plan](../legacy/plans/INFORMATION_AND_NAVIGATION_PLAN.md).
+[Runtime semantics](../RUNTIME.md) for settled behavior. Superseded proposal
+details remain available in Git history.
 
 ## Remaining work
 

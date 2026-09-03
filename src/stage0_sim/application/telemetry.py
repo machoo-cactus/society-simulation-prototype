@@ -1,5 +1,6 @@
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, replace
+from typing import cast
 
 from stage0_sim.application.memory import EpisodicMemoryStore
 from stage0_sim.application.runner import SimulationRunner
@@ -15,11 +16,15 @@ from stage0_sim.domain.components import (
     CharacterSituationComponent,
     ConsumableComponent,
     ContainerComponent,
+    ContentEndpointComponent,
     ControllerComponent,
     ConversationComponent,
     CustodyComponent,
     DriveComponent,
     EffectiveSensesComponent,
+    EngagementExecutionComponent,
+    EngagementProgram,
+    EngagementProgramComponent,
     EquipmentStateComponent,
     HomeostasisComponent,
     InteractionExecutionComponent,
@@ -31,6 +36,7 @@ from stage0_sim.domain.components import (
     ObjectIntrinsicComponent,
     OccupancySlotsComponent,
     OpenableComponent,
+    PendingEngagementComponent,
     PerceptionComponent,
     PhysicalInteractionRegistry,
     PhysicalObjectIdentityComponent,
@@ -81,7 +87,7 @@ from stage0_sim.domain.world import (
     WorldObject,
 )
 
-TELEMETRY_SCHEMA_VERSION = "stage0.telemetry.v3"
+TELEMETRY_SCHEMA_VERSION = "stage0.telemetry.v5"
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,10 +173,11 @@ class TelemetryBroker:
         )
 
     def _on_event(self, event: DomainEvent) -> None:
-        if event_payload_is_private(event.payload):
+        projected = project_operator_event(event)
+        if projected is None:
             self._domain_event_offset += 1
             return
-        self.publish_event(event)
+        self.publish_event(projected)
 
     def publish_snapshot(self) -> TelemetryMessage:
         self._snapshot_revision += 1
@@ -196,6 +203,9 @@ class TelemetryBroker:
                 "cognition_phase": self.runner.cognition_phase.value,
                 "cognition_pending_decision_ids": list(
                     self.runner.cognition_pending_decision_ids
+                ),
+                "cognition_pending_engagement_ids": list(
+                    self.runner.cognition_pending_engagement_ids
                 ),
                 "cognition_wait_elapsed_seconds": (
                     self.runner.cognition_wait_elapsed_seconds
@@ -631,6 +641,30 @@ def _physical_capabilities_payload(
         "readable": registry.has_component(
             entity_id,
             ReadableComponent,
+        ),
+        "content_endpoints": (
+            [
+                {
+                    "id": endpoint.id,
+                    "label": endpoint.label,
+                    "kind": endpoint.kind.value,
+                    "operations": [
+                        operation.value
+                        for operation in endpoint.operations
+                    ],
+                    "access_mode": endpoint.access_mode.value,
+                    "lists_items": endpoint.lists_items,
+                    "originates_messages": endpoint.originates_messages,
+                    "notifies_owner": endpoint.notifies_owner,
+                }
+                for endpoint in registry.get_component(
+                    entity_id, ContentEndpointComponent
+                ).endpoints
+            ]
+            if registry.has_component(
+                entity_id, ContentEndpointComponent
+            )
+            else []
         ),
         "consumable": (
             {
@@ -1516,9 +1550,15 @@ def build_runtime_snapshot(runner: SimulationRunner) -> dict[str, JsonValue]:
         "cognition_phase": runner.cognition_phase.value,
         "cognition_pending_count": len(
             runner.cognition_pending_decision_ids
+        )
+        + len(
+            runner.cognition_pending_engagement_ids
         ),
         "cognition_pending_decision_ids": list(
             runner.cognition_pending_decision_ids
+        ),
+        "cognition_pending_engagement_ids": list(
+            runner.cognition_pending_engagement_ids
         ),
         "cognition_wait_elapsed_seconds": (
             runner.cognition_wait_elapsed_seconds
@@ -1859,6 +1899,7 @@ def build_agent_snapshot(
             "turn_count": len(conversation.turns),
             "latest_turn": conversation.turns[-1] if conversation.turns else None,
         }
+    payload["engagement"] = _engagement_snapshot(runner, agent_id)
     if registry.has_component(agent_id, PhysicalStateComponent):
         physical = _physical_state_payload(
             runner,
@@ -2064,6 +2105,8 @@ def _message_type_for_event(event_type: str) -> str:
         return "dialogue_event"
     if event_type.startswith(("cognition.", "tool.")):
         return "cognition_event"
+    if event_type.startswith("engagement."):
+        return "engagement_event"
     if event_type.startswith(("speech.", "perception.")):
         return "perception_event"
     if event_type.startswith(("travel.", "building.", "vehicle.", "metro.")):
@@ -2073,3 +2116,651 @@ def _message_type_for_event(event_type: str) -> str:
     ):
         return "agent_delta"
     return "event"
+
+
+_ENGAGEMENT_SAFE_EVENT_FIELDS = (
+    "engagement_id",
+    "action_id",
+    "plan_id",
+    "plan_revision",
+    "decision_id",
+    "tool_call_id",
+    "root_correlation_id",
+    "reference_ids",
+    "group_id",
+    "group_ordinal",
+    "required_atomic",
+    "invocation_id",
+    "invocation_ordinal",
+    "invocation_ids",
+    "capability",
+    "consequence_tier",
+    "modality",
+    "disclosure",
+    "public_text",
+    "expression_band",
+    "activity",
+    "duration_band",
+    "duration_seconds",
+    "effort_band",
+    "mode",
+    "sound_band",
+    "sound_range",
+    "target_id",
+    "recipient_ids",
+    "group_count",
+    "rejected_group_count",
+    "completed_group_count",
+    "failed_group_count",
+)
+
+_ENGAGEMENT_TERMINAL_STATUSES = frozenset(
+    {"partial", "completed", "failed", "cancelled"}
+)
+
+
+def project_operator_event(event: DomainEvent) -> DomainEvent | None:
+    """Return a privacy-safe event for public telemetry and operator views."""
+    if not event.event_type.startswith("engagement."):
+        return None if event_payload_is_private(event.payload) else event
+    payload: dict[str, JsonValue] = {
+        name: event.payload[name]
+        for name in _ENGAGEMENT_SAFE_EVENT_FIELDS
+        if name in event.payload
+    }
+    group_statuses = event.payload.get("group_statuses")
+    if isinstance(group_statuses, list):
+        payload["group_statuses"] = [
+            {
+                key: value[key]
+                for key in (
+                    "group_id",
+                    "group_ordinal",
+                    "required_atomic",
+                    "invocation_ids",
+                    "status",
+                )
+                if key in value
+            }
+            for value in group_statuses
+            if isinstance(value, dict)
+        ]
+    phase, status = _engagement_event_phase_status(event.event_type)
+    payload["engagement_phase"] = phase
+    payload["engagement_status"] = status
+    participant_ids = _engagement_participant_ids(
+        event.agent_id,
+        payload,
+    )
+    if participant_ids:
+        payload["participant_ids"] = participant_ids
+    return replace(event, payload=payload)
+
+
+def _engagement_event_phase_status(event_type: str) -> tuple[str, str]:
+    suffix = event_type.removeprefix("engagement.")
+    return {
+        "requested": ("execution", "requested"),
+        "compilation_requested": ("compilation", "pending"),
+        "compilation_completed": ("compilation", "succeeded"),
+        "compilation_failed": ("compilation", "failed"),
+        "compilation_cancelled": ("compilation", "cancelled"),
+        "started": ("execution", "started"),
+        "group_completed": ("execution", "group_completed"),
+        "group_failed": ("execution", "group_failed"),
+        "capability_committed": ("execution", "committed"),
+        "partial": ("execution", "partial"),
+        "completed": ("execution", "completed"),
+        "failed": ("execution", "failed"),
+        "cancelled": ("execution", "cancelled"),
+    }.get(suffix, ("execution", suffix))
+
+
+def _engagement_participant_ids(
+    actor_id: str | None,
+    payload: Mapping[str, JsonValue],
+) -> list[JsonValue]:
+    participant_ids: set[str] = {actor_id} if actor_id is not None else set()
+    for field in ("reference_ids", "recipient_ids"):
+        values = payload.get(field)
+        if isinstance(values, list):
+            participant_ids.update(
+                value for value in values if isinstance(value, str)
+            )
+    target_id = payload.get("target_id")
+    if isinstance(target_id, str):
+        participant_ids.add(target_id)
+    return list(sorted(participant_ids))
+
+
+def _engagement_snapshot(
+    runner: SimulationRunner,
+    agent_id: str,
+) -> dict[str, JsonValue]:
+    registry = runner.registry
+    projections = _engagement_event_projections(runner, agent_id)
+    projection_by_id = {
+        str(projection["engagement_id"]): projection
+        for projection in projections
+    }
+    pending: dict[str, JsonValue] | None = None
+    compiled: dict[str, JsonValue] | None = None
+    active: dict[str, JsonValue] | None = None
+    if registry.has_component(agent_id, PendingEngagementComponent):
+        pending_component = registry.get_component(
+            agent_id,
+            PendingEngagementComponent,
+        )
+        pending = _pending_engagement_payload(
+            runner,
+            agent_id,
+            pending_component,
+            projection_by_id.get(pending_component.engagement_id),
+        )
+    if registry.has_component(agent_id, EngagementProgramComponent):
+        program_component = registry.get_component(
+            agent_id,
+            EngagementProgramComponent,
+        )
+        compiled = _program_engagement_payload(
+            runner,
+            agent_id,
+            program_component.program,
+            status="compiled",
+            compiler_status="succeeded",
+            event_projection=projection_by_id.get(
+                program_component.program.engagement_id
+            ),
+        )
+    if registry.has_component(agent_id, EngagementExecutionComponent):
+        execution_component = registry.get_component(
+            agent_id,
+            EngagementExecutionComponent,
+        )
+        active = _execution_engagement_payload(
+            runner,
+            agent_id,
+            execution_component,
+            projection_by_id.get(
+                execution_component.program.engagement_id
+            ),
+        )
+    current_ids = {
+        str(item["engagement_id"])
+        for item in (pending, compiled, active)
+        if item is not None
+    }
+    recent = cast(
+        list[JsonValue],
+        [
+        projection
+        for projection in reversed(projections)
+        if (
+            str(projection.get("status")) in _ENGAGEMENT_TERMINAL_STATUSES
+            or str(projection.get("compiler_status")) in {"failed", "cancelled"}
+        )
+        and str(projection["engagement_id"]) not in current_ids
+        ][:5],
+    )
+    return {
+        "pending": pending,
+        "compiled": compiled,
+        "active": active,
+        "recent": recent,
+    }
+
+
+def _pending_engagement_payload(
+    runner: SimulationRunner,
+    agent_id: str,
+    component: PendingEngagementComponent,
+    event_projection: dict[str, JsonValue] | None,
+) -> dict[str, JsonValue]:
+    references = _current_engagement_reference_ids(
+        runner,
+        agent_id,
+        component.engagement_id,
+        event_projection,
+    )
+    return {
+        "engagement_id": component.engagement_id,
+        "actor_id": agent_id,
+        "status": "pending",
+        "compiler_status": "pending",
+        "action_id": component.action_id,
+        "plan_id": component.plan_id,
+        "plan_revision": component.plan_revision,
+        "decision_id": component.decision_id,
+        "tool_call_id": component.tool_call_id,
+        "root_correlation_id": component.root_correlation_id,
+        "requested_tick": component.requested_tick,
+        "reference_ids": _string_payloads(references),
+        "participant_ids": list(sorted({agent_id, *references})),
+        "current_group_id": None,
+        "progress": _engagement_progress([]),
+        "groups": [],
+        "evidence": (
+            _projected_evidence(event_projection)
+        ),
+    }
+
+
+def _program_engagement_payload(
+    runner: SimulationRunner,
+    agent_id: str,
+    program: EngagementProgram,
+    *,
+    status: str,
+    compiler_status: str,
+    event_projection: dict[str, JsonValue] | None,
+) -> dict[str, JsonValue]:
+    references = _current_engagement_reference_ids(
+        runner,
+        agent_id,
+        program.engagement_id,
+        event_projection,
+    )
+    groups: list[JsonValue] = [
+        {
+            "group_id": group.group_id,
+            "ordinal": group.ordinal,
+            "required_atomic": group.required_atomic,
+            "status": "pending",
+            "invocation_ids": [
+                invocation.invocation_id
+                for invocation in group.invocations
+            ],
+            "outcomes": [],
+        }
+        for group in program.groups
+    ]
+    payload: dict[str, JsonValue] = {
+        "engagement_id": program.engagement_id,
+        "actor_id": agent_id,
+        "status": status,
+        "compiler_status": compiler_status,
+        "action_id": program.action_id,
+        "plan_id": program.plan_id,
+        "plan_revision": program.plan_revision,
+        "decision_id": program.decision_id,
+        "tool_call_id": program.tool_call_id,
+        "root_correlation_id": program.root_correlation_id,
+        "requested_tick": program.requested_tick,
+        "reference_ids": _string_payloads(references),
+        "participant_ids": list(sorted({agent_id, *references})),
+        "current_group_id": None,
+        "progress": _engagement_progress(groups),
+        "groups": groups,
+        "evidence": [],
+    }
+    return _merge_engagement_evidence(payload, event_projection)
+
+
+def _execution_engagement_payload(
+    runner: SimulationRunner,
+    agent_id: str,
+    execution: EngagementExecutionComponent,
+    event_projection: dict[str, JsonValue] | None,
+) -> dict[str, JsonValue]:
+    payload = _program_engagement_payload(
+        runner,
+        agent_id,
+        execution.program,
+        status=execution.status.value,
+        compiler_status="succeeded",
+        event_projection=event_projection,
+    )
+    groups: list[JsonValue] = []
+    for index, group_state in enumerate(execution.groups):
+        group = execution.program.groups[index]
+        groups.append(
+            {
+                "group_id": group.group_id,
+                "ordinal": group.ordinal,
+                "required_atomic": group.required_atomic,
+                "status": group_state.status.value,
+                "invocation_ids": [
+                    invocation.invocation_id
+                    for invocation in group.invocations
+                ],
+                "outcomes": _group_outcomes(
+                    event_projection,
+                    group.group_id,
+                ),
+            }
+        )
+    payload["groups"] = groups
+    payload["current_group_id"] = execution.active_group_id
+    payload["started_tick"] = execution.started_tick
+    payload["progress"] = _engagement_progress(
+        groups,
+        current_group_id=execution.active_group_id,
+    )
+    return payload
+
+
+def _merge_engagement_evidence(
+    payload: dict[str, JsonValue],
+    event_projection: dict[str, JsonValue] | None,
+) -> dict[str, JsonValue]:
+    if event_projection is None:
+        return payload
+    evidence = event_projection.get("evidence")
+    if isinstance(evidence, list):
+        payload["evidence"] = evidence
+    participant_ids = event_projection.get("participant_ids")
+    if isinstance(participant_ids, list):
+        payload["participant_ids"] = participant_ids
+    return payload
+
+
+def _group_outcomes(
+    event_projection: dict[str, JsonValue] | None,
+    group_id: str,
+) -> list[JsonValue]:
+    if event_projection is None:
+        return []
+    evidence = event_projection.get("evidence")
+    if not isinstance(evidence, list):
+        return []
+    return [
+        item
+        for item in evidence
+        if isinstance(item, dict) and item.get("group_id") == group_id
+    ]
+
+
+def _engagement_progress(
+    groups: list[JsonValue],
+    *,
+    current_group_id: str | None = None,
+) -> dict[str, JsonValue]:
+    statuses = [
+        str(group.get("status"))
+        for group in groups
+        if isinstance(group, dict)
+    ]
+    return {
+        "group_count": len(statuses),
+        "completed_group_count": statuses.count("completed"),
+        "failed_group_count": statuses.count("failed"),
+        "cancelled_group_count": statuses.count("cancelled"),
+        "current_group_id": current_group_id,
+    }
+
+
+def _current_engagement_reference_ids(
+    runner: SimulationRunner,
+    agent_id: str,
+    engagement_id: str,
+    event_projection: dict[str, JsonValue] | None,
+) -> list[str]:
+    registry = runner.registry
+    if registry.has_component(agent_id, PlanComponent):
+        plan = registry.get_component(agent_id, PlanComponent)
+        for action in (plan.current, *plan.queue):
+            if (
+                action is not None
+                and action.engagement is not None
+                and action.engagement.engagement_id == engagement_id
+            ):
+                return list(sorted(action.engagement.reference_ids))
+    if event_projection is not None:
+        references = event_projection.get("reference_ids")
+        if isinstance(references, list):
+            return list(
+                sorted(
+                    value
+                    for value in references
+                    if isinstance(value, str)
+                )
+            )
+    return []
+
+
+def _engagement_event_projections(
+    runner: SimulationRunner,
+    agent_id: str,
+) -> list[dict[str, JsonValue]]:
+    projections: dict[str, dict[str, object]] = {}
+    for source_event in runner.events.events:
+        if source_event.agent_id != agent_id:
+            continue
+        event = project_operator_event(source_event)
+        if event is None or not event.event_type.startswith("engagement."):
+            continue
+        engagement_id = event.payload.get("engagement_id")
+        if not isinstance(engagement_id, str):
+            continue
+        projection = projections.setdefault(
+            engagement_id,
+            {
+                "engagement_id": engagement_id,
+                "actor_id": agent_id,
+                "status": "requested",
+                "compiler_status": None,
+                "action_id": None,
+                "plan_id": None,
+                "plan_revision": None,
+                "decision_id": None,
+                "tool_call_id": None,
+                "root_correlation_id": None,
+                "requested_tick": source_event.simulation_tick,
+                "started_tick": None,
+                "terminal_tick": None,
+                "reference_ids": [],
+                "participant_ids": {agent_id},
+                "current_group_id": None,
+                "groups": {},
+                "evidence": [],
+                "last_tick": source_event.simulation_tick,
+            },
+        )
+        projection["last_tick"] = source_event.simulation_tick
+        for name in (
+            "action_id",
+            "plan_id",
+            "plan_revision",
+            "decision_id",
+            "tool_call_id",
+            "root_correlation_id",
+        ):
+            if name in event.payload:
+                projection[name] = event.payload[name]
+        references = event.payload.get("reference_ids")
+        if isinstance(references, list):
+            projection["reference_ids"] = [
+                value for value in references if isinstance(value, str)
+            ]
+        participants = projection["participant_ids"]
+        if isinstance(participants, set):
+            participants.update(
+                value
+                for value in _engagement_participant_ids(
+                    agent_id,
+                    event.payload,
+                )
+                if isinstance(value, str)
+            )
+        phase = event.payload.get("engagement_phase")
+        event_status = event.payload.get("engagement_status")
+        if phase == "compilation":
+            projection["compiler_status"] = event_status
+            if event_status == "failed":
+                projection["status"] = "failed"
+                projection["terminal_tick"] = source_event.simulation_tick
+            elif event_status == "cancelled":
+                projection["status"] = "cancelled"
+                projection["terminal_tick"] = source_event.simulation_tick
+            elif event_status == "succeeded":
+                projection["status"] = "compiled"
+        elif event.event_type == "engagement.started":
+            projection["status"] = "running"
+            projection["started_tick"] = source_event.simulation_tick
+        elif event_status in _ENGAGEMENT_TERMINAL_STATUSES:
+            projection["status"] = event_status
+            projection["terminal_tick"] = source_event.simulation_tick
+        if event.event_type in {
+            "engagement.group_completed",
+            "engagement.group_failed",
+        }:
+            _update_projected_group(projection, event)
+        elif event.event_type == "engagement.capability_committed":
+            _append_projected_evidence(projection, event)
+        group_statuses = event.payload.get("group_statuses")
+        if isinstance(group_statuses, list):
+            for group_status in group_statuses:
+                if isinstance(group_status, dict):
+                    _update_projected_group_status(
+                        projection,
+                        group_status,
+                    )
+    results: list[dict[str, JsonValue]] = []
+    for projection in sorted(
+        projections.values(),
+        key=_engagement_projection_sort_key,
+    ):
+        groups = projection.pop("groups")
+        participants = projection.pop("participant_ids")
+        projection.pop("last_tick")
+        group_rows = (
+            sorted(
+                groups.values(),
+                key=lambda item: (
+                    (
+                        item.get("ordinal")
+                        if isinstance(item.get("ordinal"), int)
+                        else 1_000_000
+                    ),
+                    str(item["group_id"]),
+                ),
+            )
+            if isinstance(groups, dict)
+            else []
+        )
+        projection["groups"] = group_rows
+        projection["progress"] = _engagement_progress(
+            cast(list[JsonValue], group_rows),
+        )
+        projection["participant_ids"] = (
+            list(sorted(participants))
+            if isinstance(participants, set)
+            else []
+        )
+        results.append(cast(dict[str, JsonValue], projection))
+    return results
+
+
+def _projected_evidence(
+    event_projection: dict[str, JsonValue] | None,
+) -> list[JsonValue]:
+    if event_projection is None:
+        return []
+    evidence = event_projection.get("evidence")
+    return evidence if isinstance(evidence, list) else []
+
+
+def _engagement_projection_sort_key(
+    projection: Mapping[str, object],
+) -> tuple[int, str]:
+    last_tick = projection.get("last_tick")
+    return (
+        last_tick if isinstance(last_tick, int) else -1,
+        str(projection.get("engagement_id", "")),
+    )
+
+
+def _update_projected_group(
+    projection: dict[str, object],
+    event: DomainEvent,
+) -> None:
+    group_id = event.payload.get("group_id")
+    if not isinstance(group_id, str):
+        return
+    groups = projection["groups"]
+    if not isinstance(groups, dict):
+        return
+    group = groups.setdefault(group_id, {"group_id": group_id, "outcomes": []})
+    if not isinstance(group, dict):
+        return
+    for source, target in (
+        ("group_ordinal", "ordinal"),
+        ("required_atomic", "required_atomic"),
+        ("invocation_ids", "invocation_ids"),
+    ):
+        if source in event.payload:
+            group[target] = event.payload[source]
+    group["status"] = (
+        "completed"
+        if event.event_type == "engagement.group_completed"
+        else "failed"
+    )
+
+
+def _update_projected_group_status(
+    projection: dict[str, object],
+    group_status: Mapping[str, JsonValue],
+) -> None:
+    group_id = group_status.get("group_id")
+    if not isinstance(group_id, str):
+        return
+    groups = projection["groups"]
+    if not isinstance(groups, dict):
+        return
+    group = groups.setdefault(group_id, {"group_id": group_id, "outcomes": []})
+    if not isinstance(group, dict):
+        return
+    for source, target in (
+        ("group_ordinal", "ordinal"),
+        ("required_atomic", "required_atomic"),
+        ("invocation_ids", "invocation_ids"),
+        ("status", "status"),
+    ):
+        if source in group_status:
+            group[target] = group_status[source]
+
+
+def _append_projected_evidence(
+    projection: dict[str, object],
+    event: DomainEvent,
+) -> None:
+    evidence = projection["evidence"]
+    if not isinstance(evidence, list):
+        return
+    item = {
+        name: value
+        for name, value in event.payload.items()
+        if name
+        in {
+            "group_id",
+            "group_ordinal",
+            "invocation_id",
+            "capability",
+            "modality",
+            "disclosure",
+            "public_text",
+            "expression_band",
+            "activity",
+            "duration_band",
+            "duration_seconds",
+            "effort_band",
+            "mode",
+            "sound_band",
+            "sound_range",
+            "target_id",
+            "recipient_ids",
+        }
+    }
+    item["simulation_tick"] = event.simulation_tick
+    evidence.append(item)
+    group_id = event.payload.get("group_id")
+    groups = projection["groups"]
+    if isinstance(group_id, str) and isinstance(groups, dict):
+        group = groups.setdefault(
+            group_id,
+            {"group_id": group_id, "status": "running", "outcomes": []},
+        )
+        if isinstance(group, dict):
+            outcomes = group.setdefault("outcomes", [])
+            if isinstance(outcomes, list):
+                outcomes.append(item)

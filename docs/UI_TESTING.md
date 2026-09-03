@@ -62,6 +62,21 @@ Operator access is intentionally authoritative and may include hidden state
 under operator conventions. Browser rendering must not reinterpret that state
 as character perception.
 
+## Engagement operator contract
+
+The selected-character inspector renders current and recent engagement state
+from Python telemetry projection. It must distinguish pending compilation,
+compiled work, active execution, group progress, required-atomic status,
+grounded evidence, partial completion, failure, and cancellation. The event
+filter exposes the `engagement.*` family. Raw intent/reason, compiler
+scene/summary/response, rejected proposal details, and private normalized
+arguments must not appear in ordinary operator HTML.
+
+Auditory evidence shows domain-resolved recipients/effects, not compiler
+claims. Visual/heard state requires text and semantic markup in addition to
+color. Staging a scenario with engagement compiler settings remains separate
+from starting or stepping it.
+
 ## Accessibility contract
 
 Every page keeps:
@@ -109,8 +124,9 @@ For every behavior or layout change:
 4. Run the smallest affected test with `-k`.
 5. Use the ARIA snapshot to distinguish test error, accessibility defect, and
    application bug.
-6. Fix the root cause, rerun the focused test, then run `tests\e2e\web`.
-7. Run the standard pytest, Ruff, mypy, and package-build gates.
+6. Fix the root cause and rerun the focused browser and closest HTTP tests.
+7. Delegate complete browser and repository regression to CI unless this is an
+   explicit release or diagnostic run.
 
 Source inspection, JavaScript syntax checks, HTTP 200 responses, and generated
 HTML do not prove browser behavior.
@@ -145,7 +161,8 @@ The suite must retain:
 - character CRUD, import/download, validation, and conflicts;
 - world inspection, semantic zoom, pan/follow/focus, accessible SVG, vital
   mutation, physical footprints/body/posture/held/doors/paths/anchors, bounded
-  SVG markup, event filtering/detail/copy/clear, transcript, and downloads;
+  SVG markup, event filtering/detail/copy/clear, transcript, engagement
+  pending/active/recent inspection, partial/cancelled outcomes, and downloads;
 - dataset summary/schema, filters, pagination, details, filtered exports,
   private-data rejection/opt-in, and no-JavaScript fallback;
 - dataset-catalog selection, pooled versus macro aggregation, privacy warnings,
@@ -157,6 +174,12 @@ The suite must retain:
 
 Research tests must use deliberately synthetic private content and must not copy
 real prompts, memories, profiles, or model text into failure output.
+
+Changes to engagement projection, event filtering, selected-character
+inspection, or scenario forms require focused Playwright coverage with
+`STAGE0_RUN_PLAYWRIGHT=1`. Complete browser, no-JavaScript, accessibility, and
+partial-refresh regression runs in CI; Python unit or HTTP tests alone do not
+prove browser behavior.
 
 ## Focused debugging
 

@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "8e90c03c4ebfc40d9a7230a26d00acc2f1071a32b76a4a6726046da21cdd720b",
+        "content_hash": "235e1f6c35077733747a5c584a02450b65140d90c190c6371de011730170771f",
         "id": "greyford-office-evening.station-greyford-grid-operations-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

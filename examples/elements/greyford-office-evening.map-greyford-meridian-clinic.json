@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "28b269e8499d197ef438d639db6f30c364b7e2b5e55c7d694f1d042ec59f1817",
+        "content_hash": "c6ba17df1d624f6744e13e2b250d13c6c0bd8edc080fdfdbca010eed3f75fe37",
         "id": "greyford-office-evening.station-greyford-meridian-clinic-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     },
     {
       "element": {
-        "content_hash": "59d741328fdadeefc4d70c3719b0c92ca4921a2fe77da562017afca690cfbc61",
+        "content_hash": "367b16dda4fcccf438031d206e567013426fc00b74481251ec78e2b259357ab3",
         "id": "greyford-office-evening.transaction-point-greyford-meridian-check-in",
         "kind": "object"
       },
@@ -76,7 +76,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

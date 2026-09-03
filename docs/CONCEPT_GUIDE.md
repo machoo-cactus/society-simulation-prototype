@@ -48,7 +48,7 @@ The project is designed to test:
 | **equipment** | A wearable object's live slotted `ATTACHED_TO` relation to a character |
 | **effective senses** | Base vision, recognition, hearing, and smell ranges after deterministic equipped effects |
 | **custody** | Current physical control of an object; independent of descriptive ownership and abstract possessions |
-| **scenario** | Strict schema-version-6 portable initial configuration |
+| **scenario** | Strict schema-version-8 portable initial configuration |
 | **prepared scenario** | Scenario plus frozen resolved characters, elements, assignments, and optional situations |
 | **run** | One process-local clock, ECS registry, event stream, and dataset |
 

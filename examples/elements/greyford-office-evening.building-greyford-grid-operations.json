@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "206a091341a0b0b297abe61119bf8a9e343cd8e27b6ef0b57239c6f74ac70286",
+        "content_hash": "2d8926843f02663629083dcd76a3781e59c956e6278df61458984691817b5ee8",
         "id": "greyford-office-evening.map-greyford-grid-operations",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

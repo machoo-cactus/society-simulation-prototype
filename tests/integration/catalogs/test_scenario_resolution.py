@@ -172,7 +172,7 @@ def _source(
     )
     return ScenarioSourceDefinition.model_validate(
         {
-            "schema_version": 6,
+            "schema_version": 8,
             "name": "Two restaurants",
             "items": [
                 {"id": "credit", "name": "Credit", "unit": "credit"},
@@ -338,6 +338,6 @@ def test_loader_rejects_schema_v2_with_explicit_message(
 
     with pytest.raises(
         ScenarioResolutionError,
-        match="scenario schema version 6 is required",
+        match="scenario schema version 8 is required",
     ):
         load_and_resolve_scenario(scenario_path, library)

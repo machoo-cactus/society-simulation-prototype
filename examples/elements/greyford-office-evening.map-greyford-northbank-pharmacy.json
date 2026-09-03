@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "d06d38cd4500d9ec29468affec60fdb23a7a42f1db7c8cd3cdf0c7f743668cb2",
+        "content_hash": "0eb5328013c5a71e64ee85befbb4c33fffc69c81d5e74755e8884de83eb0e2af",
         "id": "greyford-office-evening.station-greyford-northbank-pharmacy-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     },
     {
       "element": {
-        "content_hash": "d6b934602dd7e1f9f4c1ffc2b8c782d8af38aadb5918072f93ad2febe6c2b530",
+        "content_hash": "914e9af0c7cde92508b6765b40300ef58adb6f1c6701749403d5165122d740bd",
         "id": "greyford-office-evening.transaction-point-greyford-northbank-dispensary",
         "kind": "object"
       },
@@ -76,7 +76,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

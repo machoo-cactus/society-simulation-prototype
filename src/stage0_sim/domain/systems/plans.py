@@ -12,6 +12,9 @@ from stage0_sim.domain.components import (
     CharacterPostureComponent,
     ConversationComponent,
     DriveComponent,
+    EngagementExecutionComponent,
+    EngagementProgramComponent,
+    EngagementStatus,
     InteractionExecutionComponent,
     InteractionRequestComponent,
     MovementComponent,
@@ -29,6 +32,8 @@ from stage0_sim.domain.components import (
     SpatialIndexEntry,
     SpatialLocationComponent,
     System1State,
+    TextActionExecutionComponent,
+    TextActionRequestComponent,
     TransactionExecutionComponent,
     TransactionRequestComponent,
     TravelComponent,
@@ -121,6 +126,8 @@ def reset_current_plan_action(plan: PlanComponent) -> None:
     plan.waiting_for_affordance = False
     plan.waiting_for_transaction = False
     plan.waiting_for_interaction = False
+    plan.waiting_for_engagement = False
+    plan.waiting_for_text = False
     plan.current_started = False
 
 
@@ -160,6 +167,12 @@ def complete_plan_action(
     action = plan.current
     if action is not None:
         emit_action_lifecycle(context, "action.completed", agent_id, action)
+        if action.action is ActionType.ENGAGE:
+            from stage0_sim.domain.systems.engagements import (
+                remove_engagement_state,
+            )
+
+            remove_engagement_state(context, agent_id)
     reset_current_plan_action(plan)
     if not plan.queue:
         finish_plan(context, agent_id, plan, "completed")
@@ -180,6 +193,12 @@ def fail_plan_action(
             action,
             {"reason": reason},
         )
+        if action.action is ActionType.ENGAGE:
+            from stage0_sim.domain.systems.engagements import (
+                remove_engagement_state,
+            )
+
+            remove_engagement_state(context, agent_id)
     reset_current_plan_action(plan)
     clear_plan_lineage(
         context,
@@ -205,6 +224,12 @@ def interrupt_plan_action(
             action,
             {"reason": reason},
         )
+        if action.action is ActionType.ENGAGE:
+            from stage0_sim.domain.systems.engagements import (
+                remove_engagement_state,
+            )
+
+            remove_engagement_state(context, agent_id)
     reset_current_plan_action(plan)
     clear_plan_lineage(
         context,
@@ -254,6 +279,10 @@ class PlanExecutionSystem:
                     self._check_transaction(context, agent_id, plan)
                 elif plan.waiting_for_interaction:
                     self._check_interaction(context, agent_id, plan)
+                elif plan.waiting_for_engagement:
+                    self._check_engagement(context, agent_id, plan)
+                elif plan.waiting_for_text:
+                    self._check_text(context, agent_id, plan)
                 return_if_active = plan.current is not None
                 if return_if_active:
                     continue
@@ -287,6 +316,48 @@ class PlanExecutionSystem:
             return
         plan.current_started = True
         self._emit_action(context, "action.started", agent_id, action)
+
+        if action.action is ActionType.ENGAGE:
+            if (
+                action.engagement is None
+                or not context.registry.has_component(
+                    agent_id,
+                    EngagementProgramComponent,
+                )
+                or context.registry.has_component(
+                    agent_id,
+                    EngagementExecutionComponent,
+                )
+            ):
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "engagement_program_unavailable",
+                )
+                return
+            program_component = context.registry.get_component(
+                agent_id,
+                EngagementProgramComponent,
+            )
+            if (
+                program_component.program.engagement_id
+                != action.engagement.engagement_id
+                or program_component.program.action_id != action.action_id
+            ):
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "engagement_program_mismatch",
+                )
+                return
+            context.registry.add_component(
+                agent_id,
+                EngagementExecutionComponent(program_component.program),
+            )
+            plan.waiting_for_engagement = True
+            return
 
         if action.action is ActionType.NAVIGATE:
             if (
@@ -395,6 +466,50 @@ class PlanExecutionSystem:
                 ),
             )
             plan.waiting_for_interaction = True
+            return
+
+        if action.action in {
+            ActionType.READ_TEXT,
+            ActionType.WRITE_TEXT,
+        }:
+            if context.registry.has_component(
+                agent_id, TextActionRequestComponent
+            ):
+                self._fail(
+                    context,
+                    agent_id,
+                    plan,
+                    "text_action_precondition_failed",
+                )
+                return
+            if action.action is ActionType.READ_TEXT:
+                if action.text_read is None:
+                    self._fail(
+                        context,
+                        agent_id,
+                        plan,
+                        "text_read_specification_missing",
+                    )
+                    return
+                text_request = TextActionRequestComponent(
+                    read=action.text_read,
+                    action_instance=action,
+                )
+            else:
+                if action.text_write is None:
+                    self._fail(
+                        context,
+                        agent_id,
+                        plan,
+                        "text_write_specification_missing",
+                    )
+                    return
+                text_request = TextActionRequestComponent(
+                    write=action.text_write,
+                    action_instance=action,
+                )
+            context.registry.add_component(agent_id, text_request)
+            plan.waiting_for_text = True
             return
 
         if action.action is ActionType.TRANSACT:
@@ -1370,6 +1485,81 @@ class PlanExecutionSystem:
                 agent_id,
                 plan,
                 "interaction_request_lost",
+            )
+
+    def _check_engagement(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        plan: PlanComponent,
+    ) -> None:
+        if not context.registry.has_component(
+            agent_id,
+            EngagementExecutionComponent,
+        ):
+            self._fail(
+                context,
+                agent_id,
+                plan,
+                "engagement_execution_lost",
+            )
+            return
+        execution = context.registry.get_component(
+            agent_id,
+            EngagementExecutionComponent,
+        )
+        if execution.status in {
+            EngagementStatus.COMPLETED,
+            EngagementStatus.PARTIAL,
+        }:
+            self._complete(context, agent_id, plan)
+        elif execution.status is EngagementStatus.FAILED:
+            self._fail(
+                context,
+                agent_id,
+                plan,
+                execution.failure_reason or "engagement_failed",
+            )
+        elif execution.status is EngagementStatus.CANCELLED:
+            self._interrupt(
+                context,
+                agent_id,
+                plan,
+                execution.failure_reason or "engagement_cancelled",
+            )
+
+    def _check_text(
+        self,
+        context: SystemContext,
+        agent_id: str,
+        plan: PlanComponent,
+    ) -> None:
+        if context.registry.has_component(
+            agent_id, TextActionRequestComponent
+        ):
+            request = context.registry.get_component(
+                agent_id, TextActionRequestComponent
+            )
+            if request.status == "failed":
+                reason = request.failure_reason or "text_action_failed"
+                context.registry.remove_component(
+                    agent_id, TextActionRequestComponent
+                )
+                self._fail(context, agent_id, plan, reason)
+            elif request.status == "completed":
+                context.registry.remove_component(
+                    agent_id, TextActionRequestComponent
+                )
+                self._complete(context, agent_id, plan)
+            return
+        if not context.registry.has_component(
+            agent_id, TextActionExecutionComponent
+        ):
+            self._fail(
+                context,
+                agent_id,
+                plan,
+                "text_action_request_lost",
             )
 
     @staticmethod

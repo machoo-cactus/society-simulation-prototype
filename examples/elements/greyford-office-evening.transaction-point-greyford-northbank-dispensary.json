@@ -14,7 +14,7 @@
   "kind": "object",
   "name": "Northbank Pharmacy Counter",
   "npc_role": {
-    "content_hash": "80cd99ccd2825138dbada23d905fef2e9dc03d2a1a055bc1d98f9182aa2008b6",
+    "content_hash": "ed40eb14a002dea79c07ce8d121acf39bdd2cebf0ed82a9916eff8570a22abfb",
     "id": "northbank-pharmacy-clerk",
     "kind": "npc_role"
   },
@@ -43,6 +43,7 @@
     "capabilities": {
       "consumable": null,
       "container": null,
+      "content_endpoints": [],
       "openable": null,
       "portable": null,
       "readable": null,
@@ -76,6 +77,6 @@
     "owner_id": null
   },
   "request_timeout": 90.0,
-  "schema_version": 3,
+  "schema_version": 4,
   "supported_actions": null
 }

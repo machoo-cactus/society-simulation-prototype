@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "d7a4b838397799a30227f863ce4955864849ea09d204d7321ffd3fd60b9865c5",
+        "content_hash": "3d42a5cc7fff141bb729daa04dd565eccba449e1d87a78bb6f6dcc59474fc316",
         "id": "greyford-office-evening.station-greyford-maple-court-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

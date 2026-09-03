@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "d9f6b5eb56121b229b3e5cbc24995c6903856b71fccf7568594477f6c85c2f4f",
+        "content_hash": "a5258f4d7bee83cebd78b8ec12d99310a1df934ab015ab330dc710bf05aae5e1",
         "id": "greyford-office-evening.map-greyford-mobility-centre",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

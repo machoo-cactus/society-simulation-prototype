@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "0af7b9add1438cd653798f5c11e783f7fa3fd2063c10368ba2ad31463311c209",
+        "content_hash": "7fce1195ab5a5b8d76eaf2fb5700295c4df6fb0c04344fa317d457c67db0b7ec",
         "id": "greyford-office-evening.map-greyford-lantern-coworking",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

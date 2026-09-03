@@ -30,6 +30,7 @@ from stage0_sim.application.agents.contracts import (
 from stage0_sim.application.agents.coordinator import AgentWorkCoordinator
 from stage0_sim.application.agents.tools import ToolRegistry, ToolValidationError
 from stage0_sim.application.cognition import EmbeddingError
+from stage0_sim.application.information import InformationStore
 from stage0_sim.application.manager import (
     SimulationConflictError,
     SimulationManager,
@@ -59,7 +60,8 @@ from stage0_sim.domain.components import (
     SpatialIndexEntry,
     SpatialParentRelationComponent,
 )
-from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.content import TextContentRegistry
+from stage0_sim.domain.events import JsonValue, event_payload_is_private
 from stage0_sim.domain.world import (
     Coordinate,
     Footprint,
@@ -95,6 +97,21 @@ class _CapturingModelClient(ModelClient):
     async def complete(self, request: ModelRequest) -> ModelTurn:
         self.requests.append(request)
         return _turn("skip", {"reconsider_after_seconds": 30})
+
+
+class _CapturingSequenceModelClient(ModelClient):
+    synchronous = True
+    provider_name = "capturing-sequence"
+
+    def __init__(self, turns: tuple[ModelTurn, ...]) -> None:
+        self.requests: list[ModelRequest] = []
+        self.turns = list(turns)
+
+    async def complete(self, request: ModelRequest) -> ModelTurn:
+        self.requests.append(request)
+        if not self.turns:
+            raise RuntimeError("capturing sequence is exhausted")
+        return self.turns.pop(0)
 
 
 class _ZeroEmbeddingProvider:
@@ -408,6 +425,131 @@ def test_controller_information_retrieval_failure_is_explicit() -> None:
     runner.stop()
 
 
+def test_embodied_text_read_is_delivered_on_the_next_decision() -> None:
+    payload = json.loads(
+        Path("examples/scenarios/text-content-demo.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    payload["entities"][1]["components"]["controller"]["enabled"] = False
+    client = _CapturingSequenceModelClient(
+        (
+            _turn(
+                "read_text",
+                {
+                    "target_id": "shared-terminal",
+                    "endpoint_id": "shared-documents",
+                    "artifact_id": "shared-morning-notes",
+                    "block_ids": ["entry-1"],
+                },
+            ),
+            _turn("skip", {"reconsider_after_seconds": 30}),
+        )
+    )
+    runner = create_runner(
+        ScenarioDefinition.model_validate(payload),
+        model_client=client,
+    )
+
+    runner.run_for(4)
+
+    assert len(client.requests) == 2
+    dynamic = json.loads(client.requests[1].messages[3].content or "{}")
+    assert dynamic["completed_text_reads"] == [
+        {
+            "artifact_id": "shared-morning-notes",
+            "artifact_revision": 1,
+            "block_ids": ["entry-1"],
+            "text": "The library opens at nine.",
+            "endpoint_id": "shared-documents",
+            "target_id": "shared-terminal",
+            "content_hash": dynamic["completed_text_reads"][0][
+                "content_hash"
+            ],
+        }
+    ]
+    documents = runner.registry.get_resource(InformationStore).documents(
+        namespace_id="character:alex",
+        kinds=("world.text.read",),
+    )
+    assert len(documents) == 1
+    assert documents[0].content["text"] == "The library opens at nine."
+    public_events = json.dumps(
+        [
+            event.to_dict()
+            for event in runner.events.events
+            if not event_payload_is_private(event.payload)
+        ],
+        ensure_ascii=False,
+    )
+    assert "The library opens at nine." not in public_events
+    runner.stop()
+
+
+def test_write_text_sends_one_recipient_message_atomically() -> None:
+    payload = json.loads(
+        Path("examples/scenarios/text-content-demo.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    payload["entities"][1]["components"]["controller"]["enabled"] = False
+    runner = create_runner(
+        ScenarioDefinition.model_validate(payload),
+        model_client=ScriptedModelClient(
+            (
+                _turn(
+                    "write_text",
+                    {
+                        "operation": "create",
+                        "target_id": "alex-phone",
+                        "endpoint_id": "sms",
+                        "expected_collection_revision": 1,
+                        "expected_sent_collection_revision": 1,
+                        "recipient_address_id": "jordan.sms",
+                        "blocks": [
+                            {
+                                "kind": "paragraph",
+                                "text": "Meet at the library.",
+                            }
+                        ],
+                        "attribution": {
+                            "display": "verified",
+                            "sender_address_id": "alex.sms",
+                        },
+                    },
+                ),
+            )
+        ),
+    )
+
+    runner.run_for(2)
+
+    content = runner.registry.get_resource(TextContentRegistry)
+    assert content.collection("jordan-inbox").members
+    assert content.collection("alex-sent").members == content.collection(
+        "jordan-inbox"
+    ).members
+    assert content.unread_count("jordan.sms") == 1
+    message_id = content.collection("jordan-inbox").members[0]
+    assert content.artifact(message_id).current.blocks[0].text == (
+        "Meet at the library."
+    )
+    public_events = json.dumps(
+        [
+            event.to_dict()
+            for event in runner.events.events
+            if not event_payload_is_private(event.payload)
+        ],
+        ensure_ascii=False,
+    )
+    assert "Meet at the library." not in public_events
+    assert any(
+        event.event_type == "text.delivery_completed"
+        for event in runner.events.events
+    )
+    runner.stop()
+
+
 def test_perception_reveals_zone_departure_not_private_destination() -> None:
     scenario = ScenarioDefinition.model_validate(
         {
@@ -603,6 +745,100 @@ def test_tool_registry_rejects_extra_fields_and_unknown_targets() -> None:
     assert target.value.reason == "destination_not_known"
 
 
+def test_engage_tool_keeps_a_stable_free_form_boundary() -> None:
+    observation = CharacterObservation(
+        agent_id="alex",
+        display_name="Alex",
+        simulation_time=0,
+        location_id="room",
+        activity="IDLE",
+        satiety=100,
+        energy=100,
+        stress=0,
+        targets=(
+            ObservedTarget(
+                id="blair",
+                kind="character",
+                name="Blair",
+            ),
+        ),
+        facts=(),
+        recent_outcome=None,
+    )
+    request = CharacterDecisionRequest(
+        decision_id="decision-1",
+        run_id="run",
+        agent_id="alex",
+        requested_tick=1,
+        state_revision=0,
+        trigger="idle",
+        character_description="Alex",
+        profile_id="alex",
+        profile_template_version=1,
+        profile_content_hash="hash",
+        observation=observation,
+        memories=(),
+        allowed_tools=("engage",),
+    )
+    registry = ToolRegistry()
+
+    intent = registry.propose(
+        request,
+        ModelToolCall(
+            "call-1",
+            "engage",
+            {
+                "intent": "Wave Blair over and begin an improvised dance.",
+                "reference_ids": ["blair"],
+                "reason": "Celebrate the good news.",
+            },
+        ),
+    )
+
+    assert intent.kind.value == "engage"
+    assert intent.intent == "Wave Blair over and begin an improvised dance."
+    assert intent.reference_ids == ("blair",)
+
+    with pytest.raises(ToolValidationError) as hidden:
+        registry.propose(
+            request,
+            ModelToolCall(
+                "call-2",
+                "engage",
+                {
+                    "intent": "Signal someone out of sight.",
+                    "reference_ids": ["hidden"],
+                },
+            ),
+        )
+    assert hidden.value.reason == "reference_not_observable"
+
+    with pytest.raises(ToolValidationError) as duplicate:
+        registry.propose(
+            request,
+            ModelToolCall(
+                "call-3",
+                "engage",
+                {
+                    "intent": "Wave repeatedly.",
+                    "reference_ids": ["blair", "blair"],
+                },
+            ),
+        )
+    assert duplicate.value.reason == "invalid_arguments"
+
+    with pytest.raises(ToolValidationError) as blank:
+        registry.propose(
+            request,
+            ModelToolCall(
+                "call-4",
+                "engage",
+                {"intent": "   "},
+            ),
+        )
+    assert blank.value.reason == "invalid_arguments"
+
+
 def test_skip_tool_accepts_defaults_and_rejects_invalid_delay() -> None:
     observation = CharacterObservation(
         agent_id="alex",
@@ -738,6 +974,7 @@ def test_skip_defers_cognition_without_creating_a_plan() -> None:
     runner.stop()
 
 
+@pytest.mark.model_contract
 def test_recording_and_replay_round_trip(tmp_path: Path) -> None:
     request = ModelRequest(
         request_id="request-1",
@@ -1007,6 +1244,7 @@ def test_multiple_tool_calls_are_rejected_as_one_invalid_decision() -> None:
     runner.stop()
 
 
+@pytest.mark.model_contract
 def test_none_tool_choice_is_rejected_for_tool_agent_client() -> None:
     with pytest.raises(ValueError, match="incompatible"):
         create_model_client(
@@ -1060,6 +1298,7 @@ class _HTTPResponse:
         return self._content
 
 
+@pytest.mark.model_contract
 def test_openai_client_retries_llamacpp_503_and_accepts_root_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1116,6 +1355,7 @@ def test_openai_client_retries_llamacpp_503_and_accepts_root_url(
         OpenAICompatibleConfiguration(
             base_url="http://127.0.0.1:8080",
             model="local",
+            api_key="test-secret",
             retry_attempts=2,
             retry_delay_seconds=0,
         )
@@ -1147,4 +1387,5 @@ def test_openai_client_retries_llamacpp_503_and_accepts_root_url(
     assert sent.data is not None
     sent_payload = json.loads(sent.data.decode("utf-8"))
     assert sent_payload["tool_choice"] == "required"
+    assert sent.headers["Authorization"] == "Bearer test-secret"
     assert result.tool_calls[0].name == "wait"

@@ -48,10 +48,13 @@ class ControllerComponent:
         "navigate_to",
         "perform",
         "say",
+        "engage",
         "wait",
         "skip",
         "transact",
         "check_environment",
+        "read_text",
+        "write_text",
     )
     state_revision: int = 0
     decision_sequence: int = 0

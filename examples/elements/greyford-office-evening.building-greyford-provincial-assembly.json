@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "c2065302b241cb7b9dd0c9e0ed86ea414c804468b0fe88bf7b0c709d05a7b73a",
+        "content_hash": "83c635ac1098af4d4ebfda38e03474af8beb352e07e8375a25c7ffea16f4fe7b",
         "id": "greyford-office-evening.map-greyford-provincial-assembly",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

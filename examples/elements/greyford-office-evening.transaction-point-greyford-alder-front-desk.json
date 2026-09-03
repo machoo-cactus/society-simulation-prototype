@@ -14,7 +14,7 @@
   "kind": "object",
   "name": "Alder Hotel Front Desk",
   "npc_role": {
-    "content_hash": "b0c6f607aa9adc59fbe09c74c15eb518eff9a757446e742bc5eed188482ce3d3",
+    "content_hash": "5e300ca130b508a27d8fde6e7ca644e1c543fca661b933ecd517eab76d7fb165",
     "id": "alder-receptionist",
     "kind": "npc_role"
   },
@@ -43,6 +43,7 @@
     "capabilities": {
       "consumable": null,
       "container": null,
+      "content_endpoints": [],
       "openable": null,
       "portable": null,
       "readable": null,
@@ -76,6 +77,6 @@
     "owner_id": null
   },
   "request_timeout": 120.0,
-  "schema_version": 3,
+  "schema_version": 4,
   "supported_actions": null
 }

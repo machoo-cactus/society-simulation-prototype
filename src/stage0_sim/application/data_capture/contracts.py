@@ -6,7 +6,7 @@ from typing import NewType, Self, cast
 from stage0_sim.domain.events import JsonValue
 
 DATASET_SCHEMA_ID = "stage0.dataset"
-DATASET_SCHEMA_VERSION = "stage0.dataset.v4"
+DATASET_SCHEMA_VERSION = "stage0.dataset.v6"
 
 GoalId = NewType("GoalId", str)
 PlanId = NewType("PlanId", str)
@@ -15,6 +15,9 @@ DecisionId = NewType("DecisionId", str)
 ModelRequestId = NewType("ModelRequestId", str)
 ToolCallId = NewType("ToolCallId", str)
 InteractionId = NewType("InteractionId", str)
+EngagementId = NewType("EngagementId", str)
+EngagementGroupId = NewType("EngagementGroupId", str)
+EngagementInvocationId = NewType("EngagementInvocationId", str)
 PerceptionFactId = NewType("PerceptionFactId", str)
 MemoryId = NewType("MemoryId", str)
 TransactionRequestId = NewType("TransactionRequestId", str)
@@ -48,6 +51,7 @@ class RecordCategory(StrEnum):
     TOOL = "TOOL"
     ACTION = "ACTION"
     INTERACTION = "INTERACTION"
+    ENGAGEMENT = "ENGAGEMENT"
     PERCEPTION = "PERCEPTION"
     MEMORY = "MEMORY"
     INFORMATION = "INFORMATION"
@@ -77,6 +81,9 @@ class RecordJoinIds:
     model_request_id: ModelRequestId | None = None
     tool_call_id: ToolCallId | None = None
     interaction_id: InteractionId | None = None
+    engagement_id: EngagementId | None = None
+    engagement_group_id: EngagementGroupId | None = None
+    engagement_invocation_id: EngagementInvocationId | None = None
     perception_fact_id: PerceptionFactId | None = None
     memory_id: MemoryId | None = None
     transaction_request_id: TransactionRequestId | None = None
@@ -93,6 +100,9 @@ class RecordJoinIds:
                 ("model_request_id", self.model_request_id),
                 ("tool_call_id", self.tool_call_id),
                 ("interaction_id", self.interaction_id),
+                ("engagement_id", self.engagement_id),
+                ("engagement_group_id", self.engagement_group_id),
+                ("engagement_invocation_id", self.engagement_invocation_id),
                 ("perception_fact_id", self.perception_fact_id),
                 ("memory_id", self.memory_id),
                 ("transaction_request_id", self.transaction_request_id),
@@ -111,6 +121,17 @@ class RecordJoinIds:
             model_request_id=_typed_id(content, "model_request_id", ModelRequestId),
             tool_call_id=_typed_id(content, "tool_call_id", ToolCallId),
             interaction_id=_typed_id(content, "interaction_id", InteractionId),
+            engagement_id=_typed_id(content, "engagement_id", EngagementId),
+            engagement_group_id=_typed_id(
+                content,
+                "engagement_group_id",
+                EngagementGroupId,
+            ),
+            engagement_invocation_id=_typed_id(
+                content,
+                "engagement_invocation_id",
+                EngagementInvocationId,
+            ),
             perception_fact_id=_typed_id(content, "perception_fact_id", PerceptionFactId),
             memory_id=_typed_id(content, "memory_id", MemoryId),
             transaction_request_id=_typed_id(
@@ -265,6 +286,9 @@ class DatasetRecordFilter:
     model_request_id: str | None = None
     tool_call_id: str | None = None
     interaction_id: str | None = None
+    engagement_id: str | None = None
+    engagement_group_id: str | None = None
+    engagement_invocation_id: str | None = None
     perception_fact_id: str | None = None
     memory_id: str | None = None
     transaction_request_id: str | None = None
@@ -329,6 +353,9 @@ class DatasetQueryFilter:
     model_request_id: str | None = None
     tool_call_id: str | None = None
     interaction_id: str | None = None
+    engagement_id: str | None = None
+    engagement_group_id: str | None = None
+    engagement_invocation_id: str | None = None
     perception_fact_id: str | None = None
     memory_id: str | None = None
     transaction_request_id: str | None = None

@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "8554de6e29bc9f44edc8130a178da2bcb4706782d36666f9fdfa0fa315f64759",
+        "content_hash": "0c5e50bc8ea4b397d0a9c0980c1743d4ecf91770b720ded5b52ff178c0ad7595",
         "id": "willowbrook-saturday-morning.townhouse-18-room",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

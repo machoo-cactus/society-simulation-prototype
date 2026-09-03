@@ -611,6 +611,21 @@ def test_physical_object_selection_remains_usable_without_javascript(
         assert character_value
         character_picker.select_option(character_value)
         page.get_by_role("button", name="Inspect", exact=True).click()
+        engagement_panel = page.get_by_role(
+            "region",
+            name="Current and recent engagement",
+        )
+        expect(engagement_panel).to_contain_text(
+            "No pending, compiled, or active engagement."
+        )
+        page.get_by_role("combobox", name="Category").select_option(
+            "engagement"
+        )
+        page.get_by_role("button", name="Apply filters").click()
+        expect(page.get_by_role("combobox", name="Category")).to_have_value(
+            "engagement"
+        )
+        expect(page.get_by_text("No matching events.", exact=True)).to_be_visible()
         page.get_by_label("Follow inspected character").check()
         page.get_by_text("Advanced scale override", exact=True).click()
         page.get_by_role("combobox", name="Scale").select_option("room")

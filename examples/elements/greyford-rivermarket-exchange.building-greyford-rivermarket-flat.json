@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "133f48fa8762bec015ab418909746d51675d9d4d9a783cb8b00623a2c5bcff15",
+        "content_hash": "a3d8573d9f745c7a7e94c797561d8ed4d4c66bccbd719cc61cdd4e159c00c88e",
         "id": "greyford-rivermarket-exchange.map-greyford-rivermarket-flat",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

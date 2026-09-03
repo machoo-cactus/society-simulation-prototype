@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "cd80264a279889e32db469abf5edabeaed4dbf8e0b942274bff2eb2a60630162",
+        "content_hash": "cdb2e7d392990a1a64f318a3435957c830e306d8e96a559dd9df37fa4d30cadb",
         "id": "greyford-rivermarket-exchange.station-greyford-rivermarket-flat-sofa",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

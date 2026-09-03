@@ -85,7 +85,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "967d2951db8f1a3e5c8ce0419f89cdd214bc08a6016292fad10983fa06fe92e5",
+        "content_hash": "86007bf30b946fe90fc5fb11e36b2f91b6c6a6f2b09e0f2d6240527082a890c7",
         "id": "greyford-office-evening.station-greyford-rowan-home-sofa",
         "kind": "object"
       },
@@ -111,7 +111,7 @@
     },
     {
       "element": {
-        "content_hash": "38a8b76a487bd7c9f082185acc503edc7d775995d8d8c3c10125c3270dd91c2f",
+        "content_hash": "88b770b11dbae268b8c5e30c1529f5f57787d5fe58d1464c8472015777dd3d99",
         "id": "greyford-office-evening.station-greyford-rowan-home-bed",
         "kind": "object"
       },
@@ -137,7 +137,7 @@
     },
     {
       "element": {
-        "content_hash": "9e7ccdcf9582d8b3f7c1eaaba5ebbdbcf6957e429ecae880dcbeaf32e1ef44c0",
+        "content_hash": "454739a8429173ed79ecc3c10bb166fa2004715edb94415d167b0948deeb7cd0",
         "id": "greyford-office-evening.station-greyford-rowan-home-dining-table",
         "kind": "object"
       },
@@ -163,7 +163,7 @@
     },
     {
       "element": {
-        "content_hash": "eb0c61bf24ba5ac913894419302ba4ccedfbc56fd26a17fc7b56d81abce5fb93",
+        "content_hash": "69519248f52e9d3f331a2ddff73335bc172940a5f1b5b0bb6b12113bf0973bd4",
         "id": "greyford-office-evening.station-greyford-rowan-home-study-desk",
         "kind": "object"
       },
@@ -189,7 +189,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

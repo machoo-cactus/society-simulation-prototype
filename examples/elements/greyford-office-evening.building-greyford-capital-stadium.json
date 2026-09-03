@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "4d5245c376be76d5331fa06f9c115e4b57327b1e0ec7d039bec0642d23d31b50",
+        "content_hash": "2e039931daf92b9425b6a084f0192eba7568128e69afb8ecb98d48f6f35d1f7e",
         "id": "greyford-office-evening.map-greyford-capital-stadium",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

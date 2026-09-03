@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "f1d7cc35f913e24312ead02dd3cb23c95e269aab59d72af55603563b0dc0d4cc",
+        "content_hash": "05bebe90d51ce5128fd1f84d0278b36e18dbd98b2a30556d93fae4c341a565d1",
         "id": "sparse-city-car-demo.map-office",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

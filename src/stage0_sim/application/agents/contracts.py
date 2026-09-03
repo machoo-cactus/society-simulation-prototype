@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from stage0_sim.application.information_context import InformationContextCapsule
+from stage0_sim.domain.content import TextReadReceipt
 from stage0_sim.domain.events import JsonValue
 
 
@@ -18,6 +19,45 @@ class ToolDefinition:
     name: str
     description: str
     input_schema: dict[str, JsonValue]
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedTextBlock:
+    id: str
+    revision: int
+    kind: str
+    text_length: int
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedTextArtifact:
+    id: str
+    media_kind: str
+    mode: str
+    revision: int
+    content_hash: str
+    blocks: tuple[ObservedTextBlock, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedContentEndpoint:
+    id: str
+    label: str
+    kind: str
+    operations: tuple[str, ...]
+    resource_id: str
+    collection_revision: int | None = None
+    artifacts: tuple[ObservedTextArtifact, ...] = ()
+    originates_messages: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedTextAddress:
+    id: str
+    display_label: str
+    mailbox_revision: int
+    unread_count: int | None = None
+    controlled: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +114,7 @@ class ObservedTarget:
         "outdoor",
         "room",
         "physical_object",
+        "content_endpoint",
     ]
     name: str
     supported_actions: tuple[str, ...] = ()
@@ -82,6 +123,7 @@ class ObservedTarget:
     last_observed_tick: int | None = None
     available_interactions: tuple[str, ...] = ()
     public_state: dict[str, JsonValue] | None = None
+    content_endpoints: tuple[ObservedContentEndpoint, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,6 +219,7 @@ class CharacterObservation:
     possessions: tuple[ObservedPossession, ...] = ()
     service_requests: tuple[ObservedServiceRequest, ...] = ()
     structured_goals: tuple[ObservedGoal, ...] = ()
+    text_addresses: tuple[ObservedTextAddress, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +244,7 @@ class CharacterDecisionRequest:
     retrieved_information: tuple[InformationContextCapsule, ...] = ()
     information_retrieval_performed: bool = False
     information_query: str = ""
+    completed_text_reads: tuple[TextReadReceipt, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

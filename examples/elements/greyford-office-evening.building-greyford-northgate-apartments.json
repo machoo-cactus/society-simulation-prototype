@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "cc5fe6ae5eafadb8efdf4e337a4f8ec52da0528e97c1d7b6dcd8e526f67e4e61",
+        "content_hash": "93d134be621936137aec6768b3de6a730b3e4f41bed49b13e7edda3dd67b9dbf",
         "id": "greyford-office-evening.map-greyford-northgate-apartments",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

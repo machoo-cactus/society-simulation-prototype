@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "8cc82b9029978060ce30a21738428166f96199affbefac89e6a189f6412d63c7",
+        "content_hash": "c2b531f6929d225d4a5cf70c3a493d8eb639138529598920b31358e10ed3a310",
         "id": "greyford-office-evening.map-greyford-state-university",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

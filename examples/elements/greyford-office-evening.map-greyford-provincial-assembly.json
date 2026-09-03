@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "a150835768d67b6f8984549df5c0db476df5bff232b449afdb309e4bf1d8e4b9",
+        "content_hash": "657335d63944978ef8dbf79b2ceb085e77da753cb76bd9a1ba40cfff6f68e77b",
         "id": "greyford-office-evening.station-greyford-provincial-assembly-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

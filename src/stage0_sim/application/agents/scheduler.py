@@ -10,18 +10,34 @@ from stage0_sim.application.data_capture import (
     RecordJoinIds,
     RecordSource,
 )
+from stage0_sim.application.information import InformationStore
 from stage0_sim.domain.components import (
     AffordanceExecutionComponent,
     CharacterProfileComponent,
     CharacterSituationComponent,
     ControllerComponent,
     DriveComponent,
+    EngagementExecutionComponent,
+    InformationNamespaceComponent,
     NpcComponent,
     PendingSpeechComponent,
+    PendingTextReceiptsComponent,
     PerceptionComponent,
     PlanComponent,
     System1State,
     TransactionRequestComponent,
+)
+from stage0_sim.domain.content import (
+    TextAttributionDisplay,
+    TextContentRegistry,
+    TextReadReceipt,
+)
+from stage0_sim.domain.events import JsonValue
+from stage0_sim.domain.information import (
+    InformationDocument,
+    InformationSource,
+    VisibilityLevel,
+    VisibilityPolicy,
 )
 from stage0_sim.domain.systems import SystemContext
 
@@ -54,12 +70,33 @@ class CognitionScheduler:
                 }
             }
             environment_update_due = bool(environment_fact_types)
+            interaction_fact_ids = {
+                item.fact.fact_id
+                for item in context.registry.get_component(
+                    agent_id,
+                    PerceptionComponent,
+                ).inbox
+                if item.fact.fact_type
+                in {
+                    "engagement_evidence_observed",
+                    "engagement_evidence_heard",
+                    "text_arrived",
+                }
+            }
+            interaction_update_due = bool(interaction_fact_ids)
+            text_update_due = context.registry.has_component(
+                agent_id, PendingTextReceiptsComponent
+            )
             trigger = (
                 "environment_update"
                 if environment_fact_types
                 & {"weather_changed", "availability_changed"}
                 else "time_update"
                 if environment_update_due
+                else "interaction_update"
+                if interaction_update_due
+                else "text_read_completed"
+                if text_update_due
                 else "idle"
             )
             is_npc = context.registry.has_component(agent_id, NpcComponent)
@@ -83,6 +120,10 @@ class CognitionScheduler:
                     or environment_update_due
                 ),
                 "plan_idle": plan.current is None and not plan.queue,
+                "engagement_idle": not context.registry.has_component(
+                    agent_id,
+                    EngagementExecutionComponent,
+                ),
                 "system1_normal": drive.state is System1State.NORMAL,
                 "affordance_idle": not context.registry.has_component(
                     agent_id, AffordanceExecutionComponent
@@ -117,6 +158,9 @@ class CognitionScheduler:
                     "actor_kind": actor_kind,
                     "environment_fact_types": sorted(
                         environment_fact_types
+                    ),
+                    "interaction_fact_ids": sorted(
+                        interaction_fact_ids
                     ),
                     "next_decision_time": controller.next_decision_time,
                     "state_revision": controller.state_revision,
@@ -198,7 +242,22 @@ class CognitionScheduler:
                 memories=(),
                 allowed_tools=controller.tool_allowlist,
                 actor_kind=actor_kind,
+                completed_text_reads=(
+                    tuple(
+                        context.registry.get_component(
+                            agent_id, PendingTextReceiptsComponent
+                        ).receipts
+                    )
+                    if text_update_due
+                    else ()
+                ),
             )
+            if request.completed_text_reads:
+                _record_completed_text_reads(
+                    context,
+                    request.decision_id,
+                    request.completed_text_reads,
+                )
             controller.request_pending = True
             controller.current_decision_id = decision_id
             context.events.emit(
@@ -223,3 +282,80 @@ class CognitionScheduler:
                 correlation_id=decision_id,
             )
             coordinator.submit(request)
+            if text_update_due:
+                context.registry.remove_component(
+                    agent_id, PendingTextReceiptsComponent
+                )
+
+
+def _record_completed_text_reads(
+    context: SystemContext,
+    decision_id: str,
+    receipts: tuple[TextReadReceipt, ...],
+) -> None:
+    if not (
+        context.registry.has_resource(InformationStore)
+        and context.registry.has_resource(TextContentRegistry)
+    ):
+        return
+    information = context.registry.get_resource(InformationStore)
+    content = context.registry.get_resource(TextContentRegistry)
+    for index, receipt in enumerate(receipts, start=1):
+        artifact = content.artifact(receipt.artifact_id)
+        revision = artifact.history[receipt.artifact_revision - 1]
+        attribution = revision.attribution
+        display_attribution: dict[str, JsonValue] = {
+            "mode": attribution.display.value,
+            "sender_address_id": attribution.sender_address_id,
+            "display_label": attribution.display_label,
+            "verified": attribution.display is TextAttributionDisplay.VERIFIED,
+        }
+        document = information.register(
+            InformationDocument.create(
+                id=f"world-text-read:{receipt.reader_id}:{decision_id}:{index}",
+                namespace_id=f"character:{receipt.reader_id}",
+                kind="world.text.read",
+                schema_id="world-text-read.v1",
+                subject_ids=(receipt.reader_id, receipt.artifact_id),
+                content={
+                    "artifact_id": receipt.artifact_id,
+                    "artifact_revision": receipt.artifact_revision,
+                    "block_ids": list(receipt.block_ids),
+                    "text": receipt.rendered_text,
+                    "content_hash": receipt.content_hash,
+                    "display_attribution": display_attribution,
+                },
+                source=InformationSource(
+                    type="DIRECT_READING",
+                    observer_id=receipt.reader_id,
+                    reference_ids=(
+                        receipt.artifact_id,
+                        receipt.endpoint_id,
+                        receipt.target_id,
+                    ),
+                    metadata={
+                        "artifact_revision": receipt.artifact_revision,
+                        "rendered_hash": receipt.rendered_hash,
+                    },
+                ),
+                recorded_at=receipt.simulation_time,
+                visibility=VisibilityPolicy(
+                    level=VisibilityLevel.PRIVATE,
+                    owner_ids=(receipt.reader_id,),
+                ),
+            )
+        )
+        if context.registry.has_component(
+            receipt.reader_id, InformationNamespaceComponent
+        ):
+            namespace = context.registry.get_component(
+                receipt.reader_id, InformationNamespaceComponent
+            )
+            if document.id not in namespace.document_ids:
+                context.registry.set_component(
+                    receipt.reader_id,
+                    InformationNamespaceComponent(
+                        namespace.namespace_id,
+                        (*namespace.document_ids, document.id),
+                    ),
+                )

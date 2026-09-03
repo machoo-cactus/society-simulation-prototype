@@ -1,18 +1,18 @@
 # Scenario and Element Authoring
 
-**Owner:** Portable scenario source schema version 6, reusable element schema,
+**Owner:** Portable scenario source schema version 8, reusable element schema,
 and structured authoring/staging workflow.
 
 Writable libraries default to `data\scenarios\` and `data\elements\`. Tracked
 references live under `examples\scenarios\` and `examples\elements\`.
 
-## Scenario source version 6
+## Scenario source version 8
 
 Every accepted source has this strict root:
 
 ```json
 {
-  "schema_version": 5,
+  "schema_version": 8,
   "name": "example",
   "seed": 42,
   "dt": 1.0,
@@ -30,8 +30,8 @@ Every accepted source has this strict root:
 
 Root fields are `schema_version`, `name`, `seed`, `dt`, `speed`, optional
 `run_id`, `items`, `calendar`, `weather`, `world`, `homeostasis`, `system1`,
-`memory`, `perception`, `cognition`, `character_situation_synthesis`, and
-`entities`. Extra fields are rejected.
+`memory`, `perception`, `cognition`, `engagement`, `text_content`,
+`character_situation_synthesis`, and `entities`. Extra fields are rejected.
 
 Grid worlds define an inline local map. City worlds define `type: "city"`,
 city bounds, city zones, hash-pinned building instances, outdoor places,
@@ -46,6 +46,8 @@ Use the Pydantic model and tracked examples as the exhaustive field reference:
 - `examples\scenarios\reference-city-restaurants.json` — element references;
 - `examples\scenarios\greyford-rivermarket-exchange.json` — staffed exchange;
 - `examples\scenarios\provider-character-controller.json` — character slots and controller.
+- `examples\scenarios\engagement-demo.json` — fake-provider engagement compilation,
+  auditory recipients, and structural hearing blocking.
 
 ## Entity components
 
@@ -74,8 +76,8 @@ Character slots refer to external schema-version-2 profiles. See
 
 ## Reusable elements
 
-Element files use `schema_version: 3`; scenario sources that reference them use
-version 6. Each element is one strict, hash-protected resource:
+Element files use `schema_version: 4`; scenario sources that reference them use
+version 8. Each element is one strict, hash-protected resource:
 
 | `kind` | Purpose |
 | --- | --- |
@@ -84,8 +86,8 @@ version 6. Each element is one strict, hash-protected resource:
 | `object` | Affordance or transaction point |
 | `npc_role` | Run-scoped service-character briefing, senses, and restricted tools |
 
-Version-3 objects require an explicit physical footprint, obstruction, and
-composable capability record. Version-3 rooms use the fixed metric of 9
+Version-4 objects require an explicit physical footprint, obstruction, and
+composable capability record. Version-4 rooms use the fixed metric of 9
 microcells per legacy cell. Source `width`, `height`, blocked cells, zones,
 ordinary object `position`, portal coordinates, entrance coordinates, and
 staff positions remain coarse legacy-cell authoring fields. Materialization
@@ -101,7 +103,7 @@ Physical object fields are:
 | `physical.intrinsics` | Optional positive `mass_kg`, SI `dimensions_cm`, and `TINY|SMALL|MEDIUM|LARGE|BULKY` semantic size independent from footprint |
 | `physical.obstruction` | Independent movement, vision, hearing, and smell closed-state behavior |
 | `physical.capabilities.slots` | Stable slot IDs, accepted live relation kinds, and positive capacities |
-| capability records | Optional support, container, portable/two-handed, readable, consumable, usable, openable, wearable typed effects, and scent-source behavior |
+| capability records | Optional support, container, portable/two-handed, readable, content endpoints, consumable, usable, openable, wearable typed effects, and scent-source behavior |
 | `physical.initial_open` | Initial open state; requires `openable` and cannot combine with initial locking |
 | `physical.owner_id`, `custodian_id` | Descriptive owner and initial physical custodian; they do not create abstract possessions |
 | `placement` | Microcell anchor, cardinal orientation, and initial parent relation/slot |
@@ -179,7 +181,7 @@ cross-reference failures, duplicate keys, malformed JSON, and invalid IDs are
 reported explicitly.
 
 The structured forms are generated from reviewed schema descriptors for every
-scenario-version-6 and element-version-3 field, including room metric,
+scenario-version-8 and element-version-4 field, including room metric,
 footprints, obstruction, capabilities/slots, initial state, physical anchor,
 orientation, relation/slot, and entrance/portal door links. Submitted values
 remain in the server-side draft when strict validation fails, so malformed or

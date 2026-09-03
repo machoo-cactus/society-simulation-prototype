@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "8c7a4c1a8ef1bccf21062d10645b262a9f13510b5520cb3abfbe28584c737c1c",
+        "content_hash": "438275c2993c67723ddea4bd08a8c7b1de6bd06f05def93f9632d9aed02197ed",
         "id": "greyford-office-evening.map-greyford-rowan-home",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

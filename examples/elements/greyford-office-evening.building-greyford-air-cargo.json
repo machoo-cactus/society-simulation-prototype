@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "000ce015ec5a34b4142d1d1efa4ec16e43ae5eacafcaa804644376200c893aea",
+        "content_hash": "2e1b129e60ca9bf3e40b3968409dc495957cb49959f75190cdf263f22e033f58",
         "id": "greyford-office-evening.map-greyford-air-cargo",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

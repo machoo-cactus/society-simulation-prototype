@@ -25,7 +25,7 @@ def scenario(
     world: dict[str, object] | None = None,
 ) -> ScenarioSourceDefinition:
     payload: dict[str, object] = {
-        "schema_version": 6,
+        "schema_version": 8,
         "name": name,
         "entities": [
             {
@@ -102,7 +102,7 @@ def test_scenario_library_reports_malformed_and_invalid_files(
     library = FileSystemScenarioLibrary(tmp_path)
     (tmp_path / "malformed.json").write_text("{", encoding="utf-8")
     (tmp_path / "invalid.json").write_text(
-        json.dumps({"schema_version": 6, "name": ""}),
+        json.dumps({"schema_version": 8, "name": ""}),
         encoding="utf-8",
     )
 
@@ -134,7 +134,7 @@ def test_scenario_summaries_are_sorted_and_report_world_kind(
     assert [item.id for item in summaries] == ["a-grid", "m-city", "z-none"]
     assert [item.world_kind for item in summaries] == ["grid", "city", "none"]
     assert summaries[0].name == "Grid world"
-    assert summaries[0].schema_version == 6
+    assert summaries[0].schema_version == 8
     assert summaries[0].entity_count == 1
     assert summaries[0].content_hash == scenario_content_hash(
         library.get("a-grid")
@@ -184,7 +184,7 @@ def test_scenario_api_crud_statuses_and_payloads(tmp_path: Path) -> None:
             },
         )
         assert legacy_request.status_code == 422
-        assert "Input should be 6" in legacy_request.text
+        assert "Input should be 8" in legacy_request.text
 
         created = client.post(
             "/scenarios",
@@ -285,12 +285,12 @@ def test_schema_v2_saved_scenario_has_clear_validation_error(
 
     with pytest.raises(
         ScenarioLibraryError,
-        match="requires schema version 6",
+        match="requires schema version 8",
     ):
         library.get("legacy")
     with pytest.raises(
         ScenarioLibraryError,
-        match="requires schema version 6",
+        match="requires schema version 8",
     ):
         library.list()
 

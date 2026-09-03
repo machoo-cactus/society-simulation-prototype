@@ -5,6 +5,7 @@ from stage0_sim.domain.components.planning import (
     ActionGoalLink,
     ActionInstance,
     ActionOrigin,
+    ActionType,
     GoalLinkKind,
     LineageIdGenerator,
     PlanAction,
@@ -75,6 +76,10 @@ def new_action_instance(
 
 def new_operator_intervention_id(context: "SystemContext") -> str:
     return _generator(context).new_intervention_id()
+
+
+def new_engagement_id(context: "SystemContext") -> str:
+    return _generator(context).new_engagement_id()
 
 
 def queue_plan_actions(
@@ -161,6 +166,15 @@ def clear_plan_lineage(
     root_correlation_id = plan.root_correlation_id
     current = plan.current
     queued = tuple(plan.queue)
+    if (
+        (current is not None and current.action is ActionType.ENGAGE)
+        or any(action.action is ActionType.ENGAGE for action in queued)
+    ):
+        from stage0_sim.domain.systems.engagements import (
+            cancel_engagement_state,
+        )
+
+        cancel_engagement_state(context, agent_id, reason)
     if current is not None:
         emit_action_lifecycle(
             context,
@@ -233,6 +247,39 @@ def action_specification_payload(action: ActionInstance) -> dict[str, JsonValue]
             "target_id": action.interaction.target_id,
             "destination_id": action.interaction.destination_id,
             "slot_id": action.interaction.slot_id,
+        }
+    if action.engagement is not None:
+        payload["engagement_id"] = action.engagement.engagement_id
+    if action.text_read is not None:
+        payload["text_read"] = {
+            "target_id": action.text_read.target_id,
+            "endpoint_id": action.text_read.endpoint_id,
+            "artifact_id": action.text_read.artifact_id,
+            "block_ids": list(action.text_read.block_ids),
+        }
+    if action.text_write is not None:
+        payload["text_write"] = {
+            "operation": action.text_write.operation.value,
+            "target_id": action.text_write.target_id,
+            "endpoint_id": action.text_write.endpoint_id,
+            "artifact_id": action.text_write.artifact_id,
+            "block_id": action.text_write.block_id,
+            "recipient_address_id": action.text_write.recipient_address_id,
+            "expected_artifact_revision": (
+                action.text_write.expected_artifact_revision
+            ),
+            "expected_block_revision": action.text_write.expected_block_revision,
+            "expected_collection_revision": (
+                action.text_write.expected_collection_revision
+            ),
+            "expected_sent_collection_revision": (
+                action.text_write.expected_sent_collection_revision
+            ),
+            "text_length": sum(
+                len(block.text) for block in action.text_write.blocks
+            )
+            + len(action.text_write.text or ""),
+            "attribution_display": action.text_write.attribution.display.value,
         }
     return payload
 

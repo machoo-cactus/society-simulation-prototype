@@ -14,7 +14,7 @@
   "kind": "object",
   "name": "Riverfront Cycle Service Counter",
   "npc_role": {
-    "content_hash": "47160d0233152cbd270c073b477fe72ba80b6aa8baba762cc48c900b1467edd4",
+    "content_hash": "22fcb5ce2b590591c24f760ed69cbdf55b6b7c3f9ccd8d74cd0f0a2c65e06892",
     "id": "riverfront-service-clerk",
     "kind": "npc_role"
   },
@@ -43,6 +43,7 @@
     "capabilities": {
       "consumable": null,
       "container": null,
+      "content_endpoints": [],
       "openable": null,
       "portable": null,
       "readable": null,
@@ -76,6 +77,6 @@
     "owner_id": null
   },
   "request_timeout": 120.0,
-  "schema_version": 3,
+  "schema_version": 4,
   "supported_actions": null
 }

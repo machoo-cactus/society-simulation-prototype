@@ -8,6 +8,15 @@
   },
   "cognition": {
     "decision_timeout_seconds": 30.0,
+    "engagement_compiler": {
+      "max_concurrency": 2,
+      "max_input_tokens": null,
+      "max_output_tokens": 768,
+      "max_requests": null,
+      "max_total_output_tokens": null,
+      "model_profile": "default",
+      "timeout_seconds": 30.0
+    },
     "max_concurrency": 3,
     "max_input_tokens": null,
     "max_output_tokens": 512,
@@ -29,6 +38,23 @@
     ]
   },
   "dt": 1.0,
+  "engagement": {
+    "activating_stress_delta": 2.0,
+    "alarming_listener_stress_delta": 2.0,
+    "calming_stress_delta": -2.0,
+    "high_effort_energy_cost": 6.0,
+    "long_activity_seconds": 30.0,
+    "loud_sound_range": 20,
+    "low_effort_energy_cost": 1.0,
+    "max_groups": 4,
+    "max_invocations_per_group": 4,
+    "max_public_text_chars": 280,
+    "medium_activity_seconds": 15.0,
+    "medium_effort_energy_cost": 3.0,
+    "normal_sound_range": 10,
+    "quiet_sound_range": 2,
+    "short_activity_seconds": 5.0
+  },
   "entities": [
     {
       "components": {
@@ -704,7 +730,7 @@
     "whisper_range": 2
   },
   "run_id": null,
-  "schema_version": 6,
+  "schema_version": 8,
   "seed": 20260905,
   "speed": 20.0,
   "system1": {
@@ -714,6 +740,12 @@
       "ENERGY",
       "STRESS"
     ]
+  },
+  "text_content": {
+    "addresses": [],
+    "artifacts": [],
+    "collections": [],
+    "groups": []
   },
   "weather": {
     "effects": {},
@@ -767,7 +799,7 @@
               "y": 550.0
             },
             "element": {
-              "content_hash": "ea6edb8dc0193a17efa22173e5273e9b11393ba432b01e1f53d354d8ecf28121",
+              "content_hash": "5ab793eee9f739e6486b6c9c6de0924d08192c342247118ff58ec65b8c60ff19",
               "id": "willowbrook-saturday-morning.apartment-building",
               "kind": "building"
             },
@@ -789,7 +821,7 @@
               "y": 250.0
             },
             "element": {
-              "content_hash": "8ef97bdcd56633548381f1c58dcddb572aaa0f5833c4fe33dcea0bf4eb16a8f1",
+              "content_hash": "31a883b7b221b4195c0de55418308b5740beec12b86154fc8ba222277245e5a7",
               "id": "willowbrook-saturday-morning.townhouse-building",
               "kind": "building"
             },
@@ -811,7 +843,7 @@
               "y": 150.0
             },
             "element": {
-              "content_hash": "6b86fc13d578cef0800552e8c120e12700f01960ab0f225f3a18c6c8a5887cf7",
+              "content_hash": "ad102fe9f0673eabd979efcdb8b0033394135fccbfc5edb62320f47a2da99787",
               "id": "willowbrook-saturday-morning.townhouse-18-building",
               "kind": "building"
             },
@@ -833,7 +865,7 @@
               "y": 400.0
             },
             "element": {
-              "content_hash": "a7d2facc6827466805841898181ce67bff9d93cc0f8e586156789e62ebef85f3",
+              "content_hash": "1e36b9da4cf3e5d9e4fd44abf790fdc0cdb4caa93a69846e6cc8350425220cb2",
               "id": "willowbrook-saturday-morning.cafe-building",
               "kind": "building"
             },
@@ -855,7 +887,7 @@
               "y": 450.0
             },
             "element": {
-              "content_hash": "57a3b9a40c7b60cbc026c95ad2b00e9875d722b039d37657f94fde50e2369a26",
+              "content_hash": "d40ae9d9506b4ef0508fc5ddab3db2098272ea1e73cf39988ace023c71561a9a",
               "id": "willowbrook-saturday-morning.market-building",
               "kind": "building"
             },
@@ -877,7 +909,7 @@
               "y": 200.0
             },
             "element": {
-              "content_hash": "9283b456f9911e93fbace072e7166d4ba152db23bebbd6d816118ab4d7d9ed18",
+              "content_hash": "a1d7aa6b5dc2d02b3d5c3b7a30f964c6dbb091b88d69c5237c825a49d594cf9c",
               "id": "willowbrook-saturday-morning.library-building",
               "kind": "building"
             },

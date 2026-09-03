@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "0fa0eccc2ca5be1001bf13279a8f3286b63fc5139b3c17f1ea1e168eed8dea5b",
+        "content_hash": "1d2f25510ed736ec3e68bc56c31fa5a3abc146785325ccbc4524db101b613f32",
         "id": "greyford-office-evening.station-greyford-water-treatment-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

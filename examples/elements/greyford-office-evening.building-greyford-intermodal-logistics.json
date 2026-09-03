@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "b988a6c2fd41e66c2c2ffc80474d466dc80df1ab7ee385d2cd6a85c2db21539a",
+        "content_hash": "64e7e81b5dbc333afe3222aec533c43aef4d05576fb9ae583a7e302e33166727",
         "id": "greyford-office-evening.map-greyford-intermodal-logistics",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

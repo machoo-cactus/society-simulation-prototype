@@ -19,6 +19,7 @@ from stage0_sim.domain.systems import SystemContext
 _EVENT_IMPORTANCE = {
     "action.completed": 0.55,
     "action.failed": 0.75,
+    "engagement.capability_committed": 0.7,
     "speech.delivered": 0.7,
     "system1.activated": 0.9,
     "system1.resolved": 0.85,
@@ -239,41 +240,72 @@ class MemoryRecordingSystem:
         pending = events[self._event_cursor :]
         self._event_cursor = len(events)
         for event in pending:
-            if event.event_type not in _EVENT_IMPORTANCE:
-                continue
-            for recipient_id in _memory_recipients(event):
-                if not context.registry.has_component(
-                    recipient_id, MemoryComponent
-                ):
-                    continue
-                text = _event_text(event)
-                requested = context.events.emit(
-                    "memory.requested",
-                    simulation_tick=context.clock.tick,
-                    simulation_time=context.clock.simulation_time,
-                    agent_id=recipient_id,
-                    payload={
-                        "source_event_type": event.event_type,
-                        "importance": _EVENT_IMPORTANCE[event.event_type],
-                    },
-                    causation_id=event.event_id,
-                    correlation_id=event.correlation_id,
-                )
-                coordinator.enqueue(
-                    MemoryWork(
-                        agent_id=recipient_id,
-                        text=text,
-                        simulation_time=event.simulation_time,
+            if event.event_type in _EVENT_IMPORTANCE:
+                for recipient_id in _memory_recipients(event):
+                    self._enqueue(
+                        context,
+                        coordinator,
+                        event,
+                        recipient_id,
+                        text=_event_text(event),
                         importance=_EVENT_IMPORTANCE[event.event_type],
-                        metadata={
-                            "event_id": event.event_id,
-                            "event_type": event.event_type,
-                            "payload": dict(event.payload),
-                        },
-                        requested_event_id=requested.event_id,
-                        correlation_id=event.correlation_id,
+                        metadata=_event_metadata(event),
                     )
+            grounded = _grounded_engagement_delivery(event)
+            if grounded is not None:
+                recipient_id, text, metadata = grounded
+                self._enqueue(
+                    context,
+                    coordinator,
+                    event,
+                    recipient_id,
+                    text=text,
+                    importance=_EVENT_IMPORTANCE[
+                        "engagement.capability_committed"
+                    ],
+                    metadata=metadata,
                 )
+
+    @staticmethod
+    def _enqueue(
+        context: SystemContext,
+        coordinator: MemoryWorkCoordinator,
+        event: DomainEvent,
+        recipient_id: str,
+        *,
+        text: str,
+        importance: float,
+        metadata: dict[str, JsonValue],
+    ) -> None:
+        if not context.registry.has_component(
+            recipient_id,
+            MemoryComponent,
+        ):
+            return
+        source_event_type = metadata.get("event_type")
+        requested = context.events.emit(
+            "memory.requested",
+            simulation_tick=context.clock.tick,
+            simulation_time=context.clock.simulation_time,
+            agent_id=recipient_id,
+            payload={
+                "source_event_type": source_event_type,
+                "importance": importance,
+            },
+            causation_id=event.event_id,
+            correlation_id=event.correlation_id,
+        )
+        coordinator.enqueue(
+            MemoryWork(
+                agent_id=recipient_id,
+                text=text,
+                simulation_time=event.simulation_time,
+                importance=importance,
+                metadata=metadata,
+                requested_event_id=requested.event_id,
+                correlation_id=event.correlation_id,
+            )
+        )
 
 
 def _event_text(event: DomainEvent) -> str:
@@ -297,6 +329,17 @@ def _event_text(event: DomainEvent) -> str:
             f"{event.agent_id or 'Someone'} said: "
             f"{payload.get('text', '')}"
         )
+    if event.event_type == "engagement.capability_committed":
+        public_text = payload.get("public_text")
+        activity = payload.get("activity")
+        description = (
+            public_text
+            if isinstance(public_text, str)
+            else activity
+            if isinstance(activity, str)
+            else payload.get("capability", "engagement")
+        )
+        return f"{event.agent_id or 'Someone'}: {description}"
     if event.event_type.startswith("transaction."):
         return (
             f"Transaction event {event.event_type}: "
@@ -315,6 +358,90 @@ def _event_text(event: DomainEvent) -> str:
 
 def observation_metadata(source: str) -> dict[str, JsonValue]:
     return {"source": source, "event_type": "observation"}
+
+
+def _event_metadata(event: DomainEvent) -> dict[str, JsonValue]:
+    payload = (
+        {
+            key: event.payload[key]
+            for key in (
+                "capability",
+                "modality",
+                "disclosure",
+                "public_text",
+                "expression_band",
+                "activity",
+                "duration_band",
+                "duration_seconds",
+                "effort_band",
+                "mode",
+                "sound_band",
+                "sound_range",
+                "target_id",
+                "recipient_ids",
+            )
+            if key in event.payload
+        }
+        if event.event_type == "engagement.capability_committed"
+        else dict(event.payload)
+    )
+    return {
+        "event_id": event.event_id,
+        "event_type": event.event_type,
+        "payload": payload,
+    }
+
+
+def _grounded_engagement_delivery(
+    event: DomainEvent,
+) -> tuple[str, str, dict[str, JsonValue]] | None:
+    if event.event_type != "perception.delivered" or event.agent_id is None:
+        return None
+    fact = event.payload.get("fact")
+    if not isinstance(fact, dict) or fact.get("fact_type") not in {
+        "engagement_evidence_observed",
+        "engagement_evidence_heard",
+    }:
+        return None
+    properties = fact.get("properties")
+    if not isinstance(properties, dict):
+        return None
+    public_text = properties.get("public_text")
+    activity = properties.get("activity")
+    description = (
+        public_text
+        if isinstance(public_text, str)
+        else activity
+        if isinstance(activity, str)
+        else properties.get("capability", "engagement")
+    )
+    subject_id = fact.get("subject_id")
+    text = f"{subject_id if isinstance(subject_id, str) else 'Someone'}: {description}"
+    source_event_id = fact.get("event_id")
+    metadata_payload: dict[str, JsonValue] = {
+        "fact_id": fact.get("fact_id"),
+        "fact_type": fact.get("fact_type"),
+        "subject_id": subject_id,
+        "object_id": fact.get("object_id"),
+        "location_id": fact.get("location_id"),
+        "modality": fact.get("modality"),
+        "disclosure": fact.get("disclosure"),
+        "properties": dict(properties),
+    }
+    return (
+        event.agent_id,
+        text,
+        {
+            "event_id": (
+                source_event_id
+                if isinstance(source_event_id, str)
+                else event.event_id
+            ),
+            "event_type": "engagement.capability_committed",
+            "delivery_event_id": event.event_id,
+            "payload": metadata_payload,
+        },
+    )
 
 
 def _memory_recipients(event: DomainEvent) -> tuple[str, ...]:

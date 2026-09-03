@@ -17,6 +17,8 @@ so it remains runnable without this checkout.
 | `scenarios/system1-preemption.json` | Runnable System 1 interruption and recovery example |
 | `scenarios/environment-demo.json` | Current weather transitions, opening hours, and `check_environment` behavior |
 | `scenarios/provider-character-controller.json` | Opt-in external-provider character-controller example |
+| `scenarios/engagement-demo.json` | Fake-provider `engage` compilation with solo dancing, a loud warning, actual recipients, and structural hearing blocking |
+| `scenarios/text-content-demo.json` | Shared revision-safe documents, pseudonymous attribution, logical content endpoints, and deterministic in-world SMS mailboxes |
 | `scenarios/sparse-city-car-demo.json` | Sparse city, hierarchical location, and vehicle travel example |
 | `scenarios/greyford-rivermarket-exchange.json` | Deterministic staffed transaction and cross-building navigation example |
 | `scenarios/greyford-office-evening.json` | Large-city work, dining, and multimodal travel example |

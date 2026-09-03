@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "dddefe9ced990e5917a592462f20b2281aa5eb5be32b9199886dcf2743c409ca",
+        "content_hash": "0b9265194f581ad1ae61aff598b1678942444bc2c9983649a7920dd43c67542b",
         "id": "greyford-office-evening.map-greyford-quayline-cafe",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

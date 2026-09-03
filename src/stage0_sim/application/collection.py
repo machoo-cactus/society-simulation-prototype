@@ -1,9 +1,13 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from stage0_sim.application.data_capture import (
     DATASET_SCHEMA_VERSION,
     ActionId,
     DecisionId,
+    EngagementGroupId,
+    EngagementId,
+    EngagementInvocationId,
     GoalId,
     InteractionId,
     MemoryId,
@@ -44,9 +48,11 @@ from stage0_sim.domain.components import (
     PerceptionComponent,
     PositionComponent,
     SpatialLocationComponent,
+    TextContentPersistenceBinding,
     TransactionExecutionComponent,
     TransactionRequestComponent,
 )
+from stage0_sim.domain.content import TextContentRegistry
 from stage0_sim.domain.ecs import Registry
 from stage0_sim.domain.environment import (
     EnvironmentAvailabilityRegistry,
@@ -119,6 +125,76 @@ class _InteractionEpisode:
     initiating_decision_id: str | None = None
     initiating_action_id: str | None = None
     initiating_tool_call_id: str | None = None
+    initiating_engagement_id: str | None = None
+    record_visibility: RecordVisibility = RecordVisibility.PRIVATE_RESEARCH
+
+
+@dataclass(slots=True)
+class _EngagementInvocationProjection:
+    invocation_id: str
+    ordinal: int | None = None
+    capability: str | None = None
+    consequence_tier: int | None = None
+    subject_id: str | None = None
+    target_id: str | None = None
+    status: str = "pending"
+    private_proposal_arguments: dict[str, JsonValue] | None = None
+    private_normalized_arguments: dict[str, JsonValue] | None = None
+    private_result: dict[str, JsonValue] | None = None
+    grounded_outcome: dict[str, JsonValue] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class _EngagementGroupProjection:
+    group_id: str
+    ordinal: int | None = None
+    required_atomic: bool | None = None
+    validation_status: str = "unknown"
+    execution_status: str = "not_started"
+    status: str = "pending"
+    private_rejection_reason: str | None = None
+    failure_reason: str | None = None
+    private_issues: list[JsonValue] | None = None
+    private_proposal: dict[str, JsonValue] | None = None
+    grounded_outcome: dict[str, JsonValue] = field(default_factory=dict)
+    invocations: dict[str, _EngagementInvocationProjection] = field(
+        default_factory=dict
+    )
+
+
+@dataclass(slots=True)
+class _EngagementProjection:
+    engagement_id: str
+    actor_id: str
+    requested_tick: int
+    requested_at: float
+    action_id: str | None = None
+    plan_id: str | None = None
+    plan_revision: int | None = None
+    decision_id: str | None = None
+    tool_call_id: str | None = None
+    compiler_request_id: str | None = None
+    root_correlation_id: str | None = None
+    referenced_ids: tuple[str, ...] | None = None
+    scene_hash: str | None = None
+    scene_version: str | None = None
+    catalog_version: str | None = None
+    prompt_version: str | None = None
+    status: str = "requested"
+    compiler_status: str | None = None
+    private_intent: str | None = None
+    private_controller_reason: str | None = None
+    private_compiler_summary: str | None = None
+    private_proposal: dict[str, JsonValue] | None = None
+    private_result: dict[str, JsonValue] | None = None
+    started_tick: int | None = None
+    started_at: float | None = None
+    terminal_tick: int | None = None
+    terminal_at: float | None = None
+    terminal_outcome: str | None = None
+    groups: dict[str, _EngagementGroupProjection] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(slots=True)
@@ -155,6 +231,7 @@ class RunDataCollector:
         self._action_episodes: dict[str, _ActionEpisode] = {}
         self._decision_episodes: dict[str, _DecisionEpisode] = {}
         self._interaction_episodes: dict[str, _InteractionEpisode] = {}
+        self._engagements: dict[str, _EngagementProjection] = {}
         self._interaction_keys: dict[tuple[str, ...], str] = {}
         self._event_interactions: dict[str, tuple[str, ...]] = {}
         self._exposure_sequences: dict[tuple[str, ...], int] = {}
@@ -203,6 +280,17 @@ class RunDataCollector:
                 store,
                 self.run_id,
             )
+        if runner.registry.has_resource(TextContentRegistry):
+            text_content = runner.registry.get_resource(TextContentRegistry)
+            store.save_text_content_snapshot(
+                self.run_id,
+                text_content.to_dict(),
+            )
+            runner.registry.set_resource(
+                TextContentPersistenceBinding(
+                    store.save_text_content_snapshot
+                )
+            )
         runner.events.subscribe(self._collect)
         runner.research.subscribe(self._research_available)
         runner.subscribe_phase(self._capture_phase)
@@ -227,6 +315,10 @@ class RunDataCollector:
                 self.runner.clock.simulation_time,
                 source_event_id=None,
             )
+        self._close_open_engagements(
+            self.runner.clock.tick,
+            self.runner.clock.simulation_time,
+        )
         self._close_open_interactions(
             self.runner.clock.tick,
             self.runner.clock.simulation_time,
@@ -893,6 +985,7 @@ class RunDataCollector:
         if not isinstance(fact, dict) or not isinstance(fact_id, str):
             return
         fact_record_id = self._perception_fact_records.get(fact_id)
+        event_joins = self._resolved_event_joins(event)
         if fact_record_id is None:
             raw_subject_id = fact.get("subject_id")
             subject_id = (
@@ -927,7 +1020,12 @@ class RunDataCollector:
                 source=RecordSource.APPLICATION,
                 visibility=RecordVisibility.OPERATOR,
                 joins=RecordJoinIds(
-                    perception_fact_id=PerceptionFactId(fact_id)
+                    perception_fact_id=PerceptionFactId(fact_id),
+                    engagement_id=event_joins.engagement_id,
+                    engagement_group_id=event_joins.engagement_group_id,
+                    engagement_invocation_id=(
+                        event_joins.engagement_invocation_id
+                    ),
                 ),
                 causation_id=event.causation_id,
                 schema_id="stage0.perception.fact",
@@ -988,7 +1086,12 @@ class RunDataCollector:
             source=RecordSource.APPLICATION,
             visibility=RecordVisibility.OPERATOR,
             joins=RecordJoinIds(
-                perception_fact_id=PerceptionFactId(fact_id)
+                perception_fact_id=PerceptionFactId(fact_id),
+                engagement_id=event_joins.engagement_id,
+                engagement_group_id=event_joins.engagement_group_id,
+                engagement_invocation_id=(
+                    event_joins.engagement_invocation_id
+                ),
             ),
             causation_id=event.event_id,
             schema_id="stage0.perception.delivery",
@@ -1144,6 +1247,676 @@ class RunDataCollector:
             relation=payload,
         )
 
+    def _collect_engagement_event(self, event: DomainEvent) -> None:
+        engagement_id = event.payload.get("engagement_id")
+        actor_id = event.agent_id
+        if not isinstance(engagement_id, str) or actor_id is None:
+            return
+        engagement = self._engagements.get(engagement_id)
+        if engagement is None:
+            engagement = _EngagementProjection(
+                engagement_id=engagement_id,
+                actor_id=actor_id,
+                requested_tick=event.simulation_tick,
+                requested_at=event.simulation_time,
+            )
+            self._engagements[engagement_id] = engagement
+        self._update_engagement_lineage(engagement, event.payload)
+        event_type = event.event_type
+        if event_type == "engagement.requested":
+            engagement.status = "requested"
+            engagement.private_intent = _optional_string(
+                event.payload.get("intent")
+            )
+            engagement.private_controller_reason = _optional_string(
+                event.payload.get("reason")
+            )
+            engagement.referenced_ids = _optional_string_tuple(
+                event.payload.get("reference_ids")
+            )
+        elif event_type == "engagement.compilation_requested":
+            engagement.status = "compiling"
+            engagement.compiler_status = "requested"
+            self._update_engagement_versions(engagement, event.payload)
+        elif event_type == "engagement.compilation_completed":
+            engagement.status = "compiled"
+            engagement.compiler_status = "completed"
+            engagement.scene_hash = _optional_string(
+                event.payload.get("scene_hash")
+            )
+            engagement.private_compiler_summary = _optional_string(
+                event.payload.get("summary")
+            )
+            self._update_engagement_versions(engagement, event.payload)
+            self._project_compiled_groups(engagement, event.payload)
+        elif event_type == "engagement.compilation_failed":
+            engagement.status = "compilation_failed"
+            engagement.compiler_status = "failed"
+            engagement.private_result = dict(event.payload)
+            self._update_engagement_versions(engagement, event.payload)
+        elif event_type == "engagement.compilation_cancelled":
+            engagement.compiler_status = "cancelled"
+            engagement.private_result = dict(event.payload)
+        elif event_type == "engagement.started":
+            engagement.status = "running"
+            engagement.started_tick = event.simulation_tick
+            engagement.started_at = event.simulation_time
+        elif event_type in {
+            "engagement.group_completed",
+            "engagement.group_failed",
+        }:
+            self._project_engagement_group_event(engagement, event)
+        elif event_type == "engagement.capability_committed":
+            self._project_engagement_invocation_event(engagement, event)
+        if event_type in {
+            "engagement.completed",
+            "engagement.partial",
+            "engagement.failed",
+            "engagement.cancelled",
+        }:
+            engagement.status = event_type.removeprefix("engagement.")
+            engagement.terminal_outcome = engagement.status
+            engagement.terminal_tick = event.simulation_tick
+            engagement.terminal_at = event.simulation_time
+            self._project_terminal_group_statuses(
+                engagement,
+                event.payload,
+            )
+        private_event = event_payload_is_private(event.payload)
+        if private_event:
+            self._persist_engagement_feature(
+                engagement,
+                event.simulation_tick,
+                event.simulation_time,
+                event.event_id,
+                event.correlation_id,
+                include_private=True,
+                visibility=RecordVisibility.PRIVATE_RESEARCH,
+            )
+        else:
+            self._persist_engagement_feature(
+                engagement,
+                event.simulation_tick,
+                event.simulation_time,
+                event.event_id,
+                event.correlation_id,
+                include_private=True,
+                visibility=RecordVisibility.PRIVATE_RESEARCH,
+            )
+        if not private_event or event_type == "engagement.capability_committed":
+            self._persist_engagement_feature(
+                engagement,
+                event.simulation_tick,
+                event.simulation_time,
+                event.event_id,
+                event.correlation_id,
+                include_private=False,
+                visibility=RecordVisibility.OPERATOR,
+            )
+
+    @staticmethod
+    def _update_engagement_lineage(
+        engagement: _EngagementProjection,
+        payload: Mapping[str, JsonValue],
+    ) -> None:
+        for attribute, name in (
+            ("action_id", "action_id"),
+            ("plan_id", "plan_id"),
+            ("decision_id", "decision_id"),
+            ("tool_call_id", "tool_call_id"),
+            ("root_correlation_id", "root_correlation_id"),
+        ):
+            value = payload.get(name)
+            if isinstance(value, str):
+                setattr(engagement, attribute, value)
+        plan_revision = payload.get("plan_revision")
+        if isinstance(plan_revision, int) and not isinstance(
+            plan_revision,
+            bool,
+        ):
+            engagement.plan_revision = plan_revision
+
+    @staticmethod
+    def _update_engagement_versions(
+        engagement: _EngagementProjection,
+        payload: Mapping[str, JsonValue],
+    ) -> None:
+        for attribute, name in (
+            ("scene_version", "scene_version"),
+            ("catalog_version", "catalog_version"),
+            ("prompt_version", "prompt_version"),
+        ):
+            value = payload.get(name)
+            if isinstance(value, str):
+                setattr(engagement, attribute, value)
+
+    @staticmethod
+    def _project_compiled_groups(
+        engagement: _EngagementProjection,
+        payload: Mapping[str, JsonValue],
+    ) -> None:
+        valid_groups = payload.get("valid_groups")
+        if isinstance(valid_groups, list):
+            for group_value in valid_groups:
+                if not isinstance(group_value, dict):
+                    continue
+                group_id = group_value.get("group_id")
+                if not isinstance(group_id, str):
+                    continue
+                group = engagement.groups.setdefault(
+                    group_id,
+                    _EngagementGroupProjection(group_id),
+                )
+                group.ordinal = _optional_integer_value(
+                    group_value.get("ordinal")
+                )
+                group.required_atomic = _optional_boolean_value(
+                    group_value.get("required_atomic")
+                )
+                group.validation_status = "valid"
+                group.execution_status = "pending"
+                group.status = "pending"
+                group.private_proposal = dict(group_value)
+                invocations = group_value.get("invocations")
+                if not isinstance(invocations, list):
+                    continue
+                for invocation_value in invocations:
+                    if not isinstance(invocation_value, dict):
+                        continue
+                    invocation_id = invocation_value.get("invocation_id")
+                    if not isinstance(invocation_id, str):
+                        continue
+                    invocation = group.invocations.setdefault(
+                        invocation_id,
+                        _EngagementInvocationProjection(invocation_id),
+                    )
+                    invocation.ordinal = _optional_integer_value(
+                        invocation_value.get("ordinal")
+                    )
+                    invocation.capability = _optional_string(
+                        invocation_value.get("capability")
+                    )
+                    invocation.consequence_tier = _optional_integer_value(
+                        invocation_value.get("consequence_tier")
+                    )
+                    normalized_arguments = invocation_value.get("arguments")
+                    if isinstance(normalized_arguments, dict):
+                        invocation.private_normalized_arguments = dict(
+                            normalized_arguments
+                        )
+                        invocation.subject_id = _optional_string(
+                            normalized_arguments.get("subject_id")
+                        )
+                        invocation.target_id = _optional_string(
+                            normalized_arguments.get("target_id")
+                        )
+        rejected_groups = payload.get("rejected_groups")
+        if not isinstance(rejected_groups, list):
+            return
+        for group_value in rejected_groups:
+            if not isinstance(group_value, dict):
+                continue
+            group_id = group_value.get("group_id")
+            if not isinstance(group_id, str):
+                continue
+            group = engagement.groups.setdefault(
+                group_id,
+                _EngagementGroupProjection(group_id),
+            )
+            group.ordinal = _optional_integer_value(
+                group_value.get("ordinal")
+            )
+            group.validation_status = "rejected"
+            group.execution_status = "not_run"
+            group.status = "rejected"
+            issues = group_value.get("issues")
+            if isinstance(issues, list):
+                group.private_issues = list(issues)
+                group.private_rejection_reason = _first_issue_code(issues)
+            group.private_proposal = dict(group_value)
+
+    @staticmethod
+    def _project_engagement_group_event(
+        engagement: _EngagementProjection,
+        event: DomainEvent,
+    ) -> None:
+        group_id = event.payload.get("group_id")
+        if not isinstance(group_id, str):
+            return
+        group = engagement.groups.setdefault(
+            group_id,
+            _EngagementGroupProjection(group_id),
+        )
+        group.ordinal = (
+            _optional_integer_value(event.payload.get("group_ordinal"))
+            if group.ordinal is None
+            else group.ordinal
+        )
+        if group.required_atomic is None:
+            group.required_atomic = _optional_boolean_value(
+                event.payload.get("required_atomic")
+            )
+        group.validation_status = "valid"
+        group.execution_status = event.event_type.removeprefix(
+            "engagement.group_"
+        )
+        group.status = group.execution_status
+        group.failure_reason = _optional_string(event.payload.get("reason"))
+        group.grounded_outcome = _public_engagement_event_payload(event)
+        invocation_ids = _optional_string_tuple(
+            event.payload.get("invocation_ids")
+        )
+        for invocation_id in invocation_ids or ():
+            invocation = group.invocations.setdefault(
+                invocation_id,
+                _EngagementInvocationProjection(invocation_id),
+            )
+            if (
+                event.event_type == "engagement.group_failed"
+                and invocation.status != "committed"
+            ):
+                invocation.status = "failed"
+
+    @staticmethod
+    def _project_engagement_invocation_event(
+        engagement: _EngagementProjection,
+        event: DomainEvent,
+    ) -> None:
+        group_id = event.payload.get("group_id")
+        invocation_id = event.payload.get("invocation_id")
+        if not isinstance(group_id, str) or not isinstance(
+            invocation_id,
+            str,
+        ):
+            return
+        group = engagement.groups.setdefault(
+            group_id,
+            _EngagementGroupProjection(group_id),
+        )
+        group.validation_status = "valid"
+        if group.execution_status == "not_started":
+            group.execution_status = "running"
+            group.status = "running"
+        invocation = group.invocations.setdefault(
+            invocation_id,
+            _EngagementInvocationProjection(invocation_id),
+        )
+        invocation.ordinal = _optional_integer_value(
+            event.payload.get("invocation_ordinal")
+        )
+        invocation.capability = _optional_string(
+            event.payload.get("capability")
+        )
+        invocation.consequence_tier = _optional_integer_value(
+            event.payload.get("consequence_tier")
+        )
+        invocation.status = "committed"
+        invocation.private_result = dict(event.payload)
+        invocation.grounded_outcome = _public_engagement_event_payload(event)
+
+    @staticmethod
+    def _project_terminal_group_statuses(
+        engagement: _EngagementProjection,
+        payload: Mapping[str, JsonValue],
+    ) -> None:
+        statuses = payload.get("group_statuses")
+        if not isinstance(statuses, list):
+            return
+        for status_value in statuses:
+            if not isinstance(status_value, dict):
+                continue
+            group_id = status_value.get("group_id")
+            status = status_value.get("status")
+            if not isinstance(group_id, str) or not isinstance(status, str):
+                continue
+            group = engagement.groups.setdefault(
+                group_id,
+                _EngagementGroupProjection(group_id),
+            )
+            group.ordinal = (
+                _optional_integer_value(
+                    status_value.get("group_ordinal")
+                )
+                if group.ordinal is None
+                else group.ordinal
+            )
+            if group.required_atomic is None:
+                group.required_atomic = _optional_boolean_value(
+                    status_value.get("required_atomic")
+                )
+            group.validation_status = "valid"
+            group.execution_status = status
+            group.status = status
+            group.failure_reason = _optional_string(
+                status_value.get("failure_reason")
+            )
+            invocation_ids = _optional_string_tuple(
+                status_value.get("invocation_ids")
+            )
+            for invocation_id in invocation_ids or ():
+                invocation = group.invocations.setdefault(
+                    invocation_id,
+                    _EngagementInvocationProjection(invocation_id),
+                )
+                if invocation.status == "committed":
+                    continue
+                invocation.status = status
+
+    def _project_engagement_trace(
+        self,
+        trace: ResearchTrace,
+    ) -> None:
+        engagement_id = trace.joins.engagement_id
+        if engagement_id is None:
+            raw_engagement_id = trace.payload.get("engagement_id")
+            if isinstance(raw_engagement_id, str):
+                engagement_id = EngagementId(raw_engagement_id)
+        if engagement_id is None or trace.subject_id is None:
+            return
+        engagement = self._engagements.get(str(engagement_id))
+        if engagement is None:
+            engagement = _EngagementProjection(
+                engagement_id=str(engagement_id),
+                actor_id=trace.subject_id,
+                requested_tick=trace.simulation_tick,
+                requested_at=trace.simulation_time,
+            )
+            self._engagements[str(engagement_id)] = engagement
+        engagement.compiler_request_id = (
+            str(trace.joins.model_request_id)
+            if trace.joins.model_request_id is not None
+            else engagement.compiler_request_id
+        )
+        if trace.record_type == "engagement_compilation_result":
+            engagement.private_result = dict(trace.payload)
+            result = trace.payload.get("result")
+            if isinstance(result, dict):
+                engagement.private_compiler_summary = _optional_string(
+                    result.get("summary")
+                )
+                engagement.scene_hash = _optional_string(
+                    result.get("scene_hash")
+                )
+                model_turn = result.get("model_turn")
+                if isinstance(model_turn, dict):
+                    proposal = _engagement_proposal(model_turn)
+                    if proposal is not None:
+                        engagement.private_proposal = proposal
+                        self._apply_engagement_proposal_arguments(
+                            engagement,
+                            proposal,
+                        )
+        self._persist_engagement_feature(
+            engagement,
+            trace.simulation_tick,
+            trace.simulation_time,
+            None,
+            trace.correlation_id,
+            include_private=True,
+            visibility=RecordVisibility.PRIVATE_RESEARCH,
+        )
+        if engagement.status in {
+            "completed",
+            "partial",
+            "failed",
+            "cancelled",
+            "unfinished",
+        }:
+            self._persist_engagement_feature(
+                engagement,
+                trace.simulation_tick,
+                trace.simulation_time,
+                None,
+                trace.correlation_id,
+                include_private=False,
+                visibility=RecordVisibility.OPERATOR,
+            )
+
+    @staticmethod
+    def _apply_engagement_proposal_arguments(
+        engagement: _EngagementProjection,
+        proposal: dict[str, JsonValue],
+    ) -> None:
+        groups = proposal.get("groups")
+        if not isinstance(groups, list):
+            return
+        for group_value in groups:
+            if not isinstance(group_value, dict):
+                continue
+            group_id = group_value.get("group_id")
+            if not isinstance(group_id, str):
+                continue
+            group = engagement.groups.get(group_id)
+            if group is None:
+                continue
+            group.private_proposal = dict(group_value)
+            invocations = group_value.get("invocations")
+            if not isinstance(invocations, list):
+                continue
+            for invocation_value in invocations:
+                if not isinstance(invocation_value, dict):
+                    continue
+                invocation_id = invocation_value.get("invocation_id")
+                arguments = invocation_value.get("arguments")
+                if not isinstance(invocation_id, str) or not isinstance(
+                    arguments,
+                    dict,
+                ):
+                    continue
+                invocation = group.invocations.get(invocation_id)
+                if invocation is not None:
+                    invocation.private_proposal_arguments = dict(arguments)
+
+    def _persist_engagement_feature(
+        self,
+        engagement: _EngagementProjection,
+        tick: int,
+        simulation_time: float,
+        source_event_id: str | None,
+        correlation_id: str | None,
+        *,
+        include_private: bool,
+        visibility: RecordVisibility,
+    ) -> None:
+        engagement_payload: dict[str, JsonValue] = {
+            "engagement_id": engagement.engagement_id,
+            "actor_id": engagement.actor_id,
+            "action_id": engagement.action_id,
+            "plan_id": engagement.plan_id,
+            "plan_revision": engagement.plan_revision,
+            "decision_id": engagement.decision_id,
+            "tool_call_id": engagement.tool_call_id,
+            "root_correlation_id": engagement.root_correlation_id,
+            "status": engagement.status,
+            "compiler_status": engagement.compiler_status,
+            "requested_tick": engagement.requested_tick,
+            "requested_at": engagement.requested_at,
+            "started_tick": engagement.started_tick,
+            "started_at": engagement.started_at,
+            "terminal_tick": engagement.terminal_tick,
+            "terminal_at": engagement.terminal_at,
+            "terminal_outcome": engagement.terminal_outcome,
+        }
+        if include_private:
+            engagement_payload.update(
+                {
+                    "compiler_request_id": engagement.compiler_request_id,
+                    "referenced_ids": (
+                        list(engagement.referenced_ids)
+                        if engagement.referenced_ids is not None
+                        else None
+                    ),
+                    "scene_hash": engagement.scene_hash,
+                    "scene_version": engagement.scene_version,
+                    "catalog_version": engagement.catalog_version,
+                    "prompt_version": engagement.prompt_version,
+                    "private_intent": engagement.private_intent,
+                    "private_controller_reason": (
+                        engagement.private_controller_reason
+                    ),
+                    "private_compiler_summary": (
+                        engagement.private_compiler_summary
+                    ),
+                    "private_proposal": engagement.private_proposal,
+                    "private_result": engagement.private_result,
+                }
+            )
+        group_payloads: list[JsonValue] = [
+            self._engagement_group_payload(group, include_private)
+            for group in sorted(
+                engagement.groups.values(),
+                key=lambda item: (
+                    item.ordinal if item.ordinal is not None else 1_000_000,
+                    item.group_id,
+                ),
+            )
+            if include_private or _group_has_public_execution(group)
+        ]
+        payload: dict[str, JsonValue] = {
+            "feature_schema": "stage0.feature.engagement.v1",
+            "engagement": engagement_payload,
+            "groups": group_payloads,
+        }
+        record = self._append(
+            "engagement_feature",
+            tick,
+            simulation_time,
+            engagement.actor_id,
+            payload,
+            source_event_id,
+            category=RecordCategory.ENGAGEMENT,
+            source=RecordSource.DERIVED,
+            visibility=visibility,
+            joins=RecordJoinIds(
+                action_id=(
+                    ActionId(engagement.action_id)
+                    if engagement.action_id is not None
+                    else None
+                ),
+                plan_id=(
+                    PlanId(engagement.plan_id)
+                    if engagement.plan_id is not None
+                    else None
+                ),
+                decision_id=(
+                    DecisionId(engagement.decision_id)
+                    if engagement.decision_id is not None
+                    else None
+                ),
+                tool_call_id=(
+                    ToolCallId(engagement.tool_call_id)
+                    if engagement.tool_call_id is not None
+                    else None
+                ),
+                model_request_id=(
+                    ModelRequestId(engagement.compiler_request_id)
+                    if include_private
+                    and engagement.compiler_request_id is not None
+                    else None
+                ),
+                engagement_id=EngagementId(engagement.engagement_id),
+            ),
+            correlation_id=(
+                correlation_id
+                or engagement.root_correlation_id
+                or engagement.engagement_id
+            ),
+            schema_id="stage0.feature.engagement",
+            schema_version="1",
+        )
+        _persist_engagement_feature_payload(self.store, record, payload)
+
+    @staticmethod
+    def _engagement_group_payload(
+        group: _EngagementGroupProjection,
+        include_private: bool,
+    ) -> dict[str, JsonValue]:
+        payload: dict[str, JsonValue] = {
+            "engagement_group_id": group.group_id,
+            "ordinal": group.ordinal,
+            "required_atomic": group.required_atomic,
+            "validation_status": group.validation_status,
+            "execution_status": group.execution_status,
+            "status": group.status,
+            "failure_reason": group.failure_reason,
+            "grounded_outcome": group.grounded_outcome,
+        }
+        if include_private:
+            payload.update(
+                {
+                    "private_rejection_reason": (
+                        group.private_rejection_reason
+                    ),
+                    "private_issues": group.private_issues,
+                    "private_proposal": group.private_proposal,
+                }
+            )
+        payload["invocations"] = [
+            _engagement_invocation_payload(invocation, include_private)
+            for invocation in sorted(
+                group.invocations.values(),
+                key=lambda item: (
+                    item.ordinal if item.ordinal is not None else 1_000_000,
+                    item.invocation_id,
+                ),
+            )
+            if include_private or invocation.status == "committed"
+        ]
+        return payload
+
+    def _close_open_engagements(
+        self,
+        terminal_tick: int,
+        terminal_at: float,
+    ) -> None:
+        for engagement in sorted(
+            self._engagements.values(),
+            key=lambda item: item.engagement_id,
+        ):
+            if engagement.status in {
+                "completed",
+                "partial",
+                "failed",
+                "cancelled",
+                "unfinished",
+            }:
+                continue
+            engagement.status = "unfinished"
+            engagement.terminal_outcome = "unfinished"
+            engagement.terminal_tick = terminal_tick
+            engagement.terminal_at = terminal_at
+            for group in engagement.groups.values():
+                if group.validation_status != "valid":
+                    continue
+                if group.execution_status not in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                }:
+                    group.execution_status = "unfinished"
+                    group.status = "unfinished"
+                for invocation in group.invocations.values():
+                    if invocation.status != "committed":
+                        invocation.status = "unfinished"
+            self._persist_engagement_feature(
+                engagement,
+                terminal_tick,
+                terminal_at,
+                None,
+                engagement.root_correlation_id,
+                include_private=True,
+                visibility=RecordVisibility.PRIVATE_RESEARCH,
+            )
+            self._persist_engagement_feature(
+                engagement,
+                terminal_tick,
+                terminal_at,
+                None,
+                engagement.root_correlation_id,
+                include_private=False,
+                visibility=RecordVisibility.OPERATOR,
+            )
+
     def _collect_interaction_event(self, event: DomainEvent) -> None:
         interaction_ids: list[str] = []
         event_type = event.event_type
@@ -1153,6 +1926,8 @@ class RunDataCollector:
             interaction_ids.extend(self._transaction_interactions(event))
         if event_type.startswith("interaction."):
             interaction_ids.extend(self._physical_interactions(event))
+        if event_type.startswith("engagement."):
+            interaction_ids.extend(self._engagement_interactions(event))
         if (
             event_type == "affordance.failed"
             and event.payload.get("reason") == "station_at_capacity"
@@ -1163,7 +1938,10 @@ class RunDataCollector:
             interaction_ids.append(self._contention_interaction(event))
         unique_ids = tuple(dict.fromkeys(interaction_ids))
         for interaction_id in unique_ids:
-            if interaction_id in self._interaction_episodes:
+            if (
+                interaction_id in self._interaction_episodes
+                and not event_type.startswith("engagement.")
+            ):
                 self._append_interaction_constituent(interaction_id, event)
         self._event_interactions[event.event_id] = unique_ids
         terminal_status = {
@@ -1176,6 +1954,10 @@ class RunDataCollector:
             "interaction.completed": "completed",
             "interaction.failed": "failed",
             "interaction.cancelled": "cancelled",
+            "engagement.completed": "completed",
+            "engagement.partial": "partial",
+            "engagement.failed": "failed",
+            "engagement.cancelled": "cancelled",
         }.get(event_type)
         if terminal_status is not None:
             for interaction_id in unique_ids:
@@ -1188,9 +1970,88 @@ class RunDataCollector:
                         "terminal_event_id": event.event_id,
                         "terminal_event_type": event.event_type,
                         "reason": event.payload.get("reason"),
-                        "payload": dict(event.payload),
+                        "payload": (
+                            _public_engagement_event_payload(event)
+                            if event.event_type.startswith("engagement.")
+                            else dict(event.payload)
+                        ),
                     },
                 )
+
+    def _engagement_interactions(
+        self,
+        event: DomainEvent,
+    ) -> tuple[str, ...]:
+        engagement_id = event.payload.get("engagement_id")
+        if not isinstance(engagement_id, str):
+            return ()
+        interaction_id = f"interaction:engagement:{engagement_id}"
+        key = ("engagement", engagement_id)
+        if event.event_type == "engagement.requested":
+            self._start_interaction(
+                interaction_id,
+                "engagement",
+                key,
+                (self._participant(event.agent_id, "actor"),),
+                "OPERATOR",
+                event=event,
+                context={
+                    "interaction_type": "engagement",
+                    "engagement_id": engagement_id,
+                    "actor_id": event.agent_id,
+                    "reference_count": _string_array_length(
+                        event.payload.get("reference_ids")
+                    ),
+                },
+                initial_status="requested",
+                actor_id=event.agent_id,
+                record_visibility=RecordVisibility.OPERATOR,
+                include_event_payload=False,
+            )
+        existing = self._interaction_keys.get(key)
+        if existing is None:
+            return ()
+        episode = self._interaction_episodes.get(existing)
+        if episode is None:
+            return ()
+        status = {
+            "engagement.started": "active",
+            "engagement.completed": "completed",
+            "engagement.partial": "partial",
+            "engagement.failed": "failed",
+            "engagement.cancelled": "cancelled",
+        }.get(event.event_type)
+        if status is not None:
+            episode.status = status
+        if (
+            not event_payload_is_private(event.payload)
+            or event.event_type == "engagement.requested"
+            or event.event_type == "engagement.capability_committed"
+        ):
+            self._append_interaction_constituent(
+                existing,
+                event,
+                payload_override=_public_engagement_event_payload(event),
+                visibility=RecordVisibility.OPERATOR,
+            )
+        self.store.append_interaction(
+            run_id=self.run_id,
+            interaction_id=existing,
+            record_id=episode.record_id,
+            interaction_type=episode.interaction_type,
+            start_tick=episode.start_tick,
+            end_tick=None,
+            status=episode.status,
+            context=episode.context,
+            actor_id=episode.actor_id,
+            goal_id=episode.initiating_goal_id,
+            action_id=episode.initiating_action_id,
+            decision_id=episode.initiating_decision_id,
+            tool_call_id=episode.initiating_tool_call_id,
+            engagement_id=episode.initiating_engagement_id,
+            correlation_id=episode.correlation_id,
+        )
+        return (existing,)
 
     def _speech_interactions(self, event: DomainEvent) -> tuple[str, ...]:
         if event.event_type == "speech.delivered" and event.causation_id:
@@ -1525,6 +2386,10 @@ class RunDataCollector:
         target_id: str | None = None,
         destination_id: str | None = None,
         slot_id: str | None = None,
+        record_visibility: RecordVisibility = (
+            RecordVisibility.PRIVATE_RESEARCH
+        ),
+        include_event_payload: bool = True,
     ) -> None:
         if interaction_id in self._interaction_episodes:
             return
@@ -1547,10 +2412,13 @@ class RunDataCollector:
                 self.runner.clock.simulation_time
             ),
         }
-        if event is not None:
+        if event is not None and include_event_payload:
             payload_context["initiating_event_type"] = event.event_type
             payload_context["initiating_event_id"] = event.event_id
             payload_context["event_payload"] = dict(event.payload)
+        elif event is not None:
+            payload_context["initiating_event_type"] = event.event_type
+            payload_context["initiating_event_id"] = event.event_id
         if context is not None:
             payload_context.update(context)
         episode = _InteractionEpisode(
@@ -1597,6 +2465,12 @@ class RunDataCollector:
                 if joins.tool_call_id is not None
                 else None
             ),
+            initiating_engagement_id=(
+                str(joins.engagement_id)
+                if joins.engagement_id is not None
+                else None
+            ),
+            record_visibility=record_visibility,
         )
         self._interaction_episodes[interaction_id] = episode
         self._interaction_keys[key] = interaction_id
@@ -1627,13 +2501,16 @@ class RunDataCollector:
             event.event_id if event is not None else None,
             category=RecordCategory.INTERACTION,
             source=RecordSource.DERIVED,
-            visibility=RecordVisibility.PRIVATE_RESEARCH,
+            visibility=record_visibility,
             joins=RecordJoinIds(
                 goal_id=joins.goal_id,
                 action_id=joins.action_id,
                 decision_id=joins.decision_id,
                 tool_call_id=joins.tool_call_id,
                 interaction_id=InteractionId(interaction_id),
+                engagement_id=joins.engagement_id,
+                engagement_group_id=joins.engagement_group_id,
+                engagement_invocation_id=joins.engagement_invocation_id,
                 transaction_request_id=joins.transaction_request_id,
             ),
             correlation_id=episode.correlation_id,
@@ -1675,6 +2552,11 @@ class RunDataCollector:
                 if joins.tool_call_id is not None
                 else None
             ),
+            engagement_id=(
+                str(joins.engagement_id)
+                if joins.engagement_id is not None
+                else None
+            ),
             correlation_id=episode.correlation_id,
         )
         for participant in ordered_participants:
@@ -1690,6 +2572,9 @@ class RunDataCollector:
         self,
         interaction_id: str,
         event: DomainEvent,
+        *,
+        payload_override: dict[str, JsonValue] | None = None,
+        visibility: RecordVisibility = RecordVisibility.PRIVATE_RESEARCH,
     ) -> None:
         episode = self._interaction_episodes[interaction_id]
         if any(
@@ -1703,7 +2588,11 @@ class RunDataCollector:
             "simulation_tick": event.simulation_tick,
             "simulation_time": event.simulation_time,
             "agent_id": event.agent_id,
-            "payload": dict(event.payload),
+            "payload": (
+                payload_override
+                if payload_override is not None
+                else dict(event.payload)
+            ),
         }
         episode.constituent_events.append(item)
         joins = self._resolved_event_joins(event)
@@ -1720,13 +2609,16 @@ class RunDataCollector:
             event.event_id,
             category=RecordCategory.INTERACTION,
             source=RecordSource.DERIVED,
-            visibility=RecordVisibility.PRIVATE_RESEARCH,
+            visibility=visibility,
             joins=RecordJoinIds(
                 interaction_id=InteractionId(interaction_id),
                 goal_id=joins.goal_id,
                 action_id=joins.action_id,
                 decision_id=joins.decision_id,
                 tool_call_id=joins.tool_call_id,
+                engagement_id=joins.engagement_id,
+                engagement_group_id=joins.engagement_group_id,
+                engagement_invocation_id=joins.engagement_invocation_id,
                 transaction_request_id=joins.transaction_request_id,
             ),
             causation_id=event.event_id,
@@ -1798,7 +2690,7 @@ class RunDataCollector:
         participants_payload: list[JsonValue] = list(episode.participants)
         events_payload: list[JsonValue] = list(episode.constituent_events)
         payload: dict[str, JsonValue] = {
-            "feature_schema": "stage0.feature.interaction_episode.v1",
+            "feature_schema": "stage0.feature.interaction_episode.v2",
             "interaction_id": interaction_id,
             "interaction_type": episode.interaction_type,
             "interaction_verb": episode.interaction_verb,
@@ -1817,6 +2709,7 @@ class RunDataCollector:
             "initiating_decision_id": episode.initiating_decision_id,
             "initiating_action_id": episode.initiating_action_id,
             "initiating_tool_call_id": episode.initiating_tool_call_id,
+            "initiating_engagement_id": episode.initiating_engagement_id,
             "content_visibility": episode.content_visibility,
             "participants": participants_payload,
             "constituent_events": events_payload,
@@ -1841,7 +2734,7 @@ class RunDataCollector:
             ),
             category=RecordCategory.INTERACTION,
             source=RecordSource.DERIVED,
-            visibility=RecordVisibility.PRIVATE_RESEARCH,
+            visibility=episode.record_visibility,
             joins=RecordJoinIds(
                 goal_id=(
                     GoalId(episode.initiating_goal_id)
@@ -1864,6 +2757,11 @@ class RunDataCollector:
                     else None
                 ),
                 interaction_id=InteractionId(interaction_id),
+                engagement_id=(
+                    EngagementId(episode.initiating_engagement_id)
+                    if episode.initiating_engagement_id is not None
+                    else None
+                ),
             ),
             correlation_id=episode.correlation_id,
             related_entity_ids=tuple(
@@ -1871,7 +2769,7 @@ class RunDataCollector:
                 for item in episode.participants[1:]
             ),
             schema_id="stage0.feature.interaction_episode",
-            schema_version="1",
+            schema_version="2",
         )
         self.store.append_interaction(
             run_id=self.run_id,
@@ -1892,6 +2790,7 @@ class RunDataCollector:
             action_id=episode.initiating_action_id,
             decision_id=episode.initiating_decision_id,
             tool_call_id=episode.initiating_tool_call_id,
+            engagement_id=episode.initiating_engagement_id,
             correlation_id=episode.correlation_id,
         )
         self.store.append_interaction_episode(
@@ -1909,6 +2808,7 @@ class RunDataCollector:
             initiating_decision_id=episode.initiating_decision_id,
             initiating_action_id=episode.initiating_action_id,
             initiating_tool_call_id=episode.initiating_tool_call_id,
+            initiating_engagement_id=episode.initiating_engagement_id,
             content_visibility=episode.content_visibility,
             episode=payload,
             interaction_verb=episode.interaction_verb,
@@ -2247,6 +3147,8 @@ class RunDataCollector:
             self._project_decision_trace(record, trace)
         elif trace.record_type in {"model_request", "model_turn", "model_error"}:
             self._project_model_trace(record, trace)
+        elif trace.record_type.startswith("engagement_compilation_"):
+            self._project_engagement_trace(trace)
         elif (
             trace.record_type.startswith("memory_")
             or trace.record_type.startswith("embedding_")
@@ -2673,6 +3575,8 @@ class RunDataCollector:
         if event.event_type.startswith("tool."):
             self._project_tool_event(event)
         self._collect_lineage(event)
+        if event.event_type.startswith("engagement."):
+            self._collect_engagement_event(event)
         self._collect_interaction_event(event)
         if event.event_type.startswith("perception."):
             self._collect_perception_event(event)
@@ -2696,6 +3600,8 @@ class RunDataCollector:
             record_type = "transaction"
         elif event.event_type.startswith("interaction."):
             record_type = "interaction"
+        elif event.event_type.startswith("engagement."):
+            record_type = "engagement"
         elif event.event_type.startswith("memory."):
             record_type = "memory_reference"
         elif event.event_type.startswith("information."):
@@ -3302,6 +4208,15 @@ class RunDataCollector:
             ),
             tool_call_id=direct.tool_call_id or inherited.tool_call_id,
             interaction_id=direct.interaction_id or inherited.interaction_id,
+            engagement_id=direct.engagement_id or inherited.engagement_id,
+            engagement_group_id=(
+                direct.engagement_group_id
+                or inherited.engagement_group_id
+            ),
+            engagement_invocation_id=(
+                direct.engagement_invocation_id
+                or inherited.engagement_invocation_id
+            ),
             perception_fact_id=(
                 direct.perception_fact_id or inherited.perception_fact_id
             ),
@@ -3343,6 +4258,21 @@ class RunDataCollector:
             tool_call_id=(
                 ToolCallId(value) if (value := text("tool_call_id")) else None
             ),
+            engagement_id=(
+                EngagementId(value)
+                if (value := text("engagement_id"))
+                else None
+            ),
+            engagement_group_id=(
+                EngagementGroupId(value)
+                if (value := text("group_id"))
+                else None
+            ),
+            engagement_invocation_id=(
+                EngagementInvocationId(value)
+                if (value := text("invocation_id"))
+                else None
+            ),
             transaction_request_id=(
                 TransactionRequestId(value)
                 if (value := text("request_id"))
@@ -3361,6 +4291,8 @@ class RunDataCollector:
             return RecordCategory.ACTION
         if event.event_type.startswith("interaction."):
             return RecordCategory.INTERACTION
+        if event.event_type.startswith("engagement."):
+            return RecordCategory.ENGAGEMENT
         if event.event_type.startswith("tool."):
             return RecordCategory.TOOL
         if event.event_type.startswith("goal."):
@@ -3817,6 +4749,421 @@ def _event_visibility(event: DomainEvent) -> RecordVisibility:
     if event_payload_is_private(event.payload):
         return RecordVisibility.PRIVATE_RESEARCH
     return RecordVisibility.OPERATOR
+
+
+def _persist_engagement_feature_payload(
+    store: DatasetCaptureRepository,
+    record: DatasetRecord,
+    payload: dict[str, JsonValue],
+) -> None:
+    engagement_value = payload.get("engagement")
+    if not isinstance(engagement_value, dict):
+        raise TypeError("engagement feature must contain an engagement object")
+    engagement_id = _required_string(
+        engagement_value.get("engagement_id"),
+        "engagement_id",
+    )
+    actor_id = _required_string(
+        engagement_value.get("actor_id"),
+        "actor_id",
+    )
+    referenced_ids = _optional_string_tuple(
+        engagement_value.get("referenced_ids")
+    )
+    private_proposal = engagement_value.get("private_proposal")
+    if private_proposal is not None and not isinstance(
+        private_proposal,
+        dict,
+    ):
+        raise TypeError("private_proposal must be an object")
+    private_result = engagement_value.get("private_result")
+    if private_result is not None and not isinstance(private_result, dict):
+        raise TypeError("private_result must be an object")
+    store.append_engagement(
+        run_id=record.run_id,
+        engagement_id=engagement_id,
+        record_id=record.record_id,
+        actor_id=actor_id,
+        action_id=_optional_string(engagement_value.get("action_id")),
+        plan_id=_optional_string(engagement_value.get("plan_id")),
+        plan_revision=_optional_integer_value(
+            engagement_value.get("plan_revision")
+        ),
+        decision_id=_optional_string(engagement_value.get("decision_id")),
+        tool_call_id=_optional_string(engagement_value.get("tool_call_id")),
+        compiler_request_id=_optional_string(
+            engagement_value.get("compiler_request_id")
+        ),
+        root_correlation_id=_optional_string(
+            engagement_value.get("root_correlation_id")
+        ),
+        referenced_ids=referenced_ids,
+        scene_hash=_optional_string(engagement_value.get("scene_hash")),
+        scene_version=_optional_string(
+            engagement_value.get("scene_version")
+        ),
+        catalog_version=_optional_string(
+            engagement_value.get("catalog_version")
+        ),
+        prompt_version=_optional_string(
+            engagement_value.get("prompt_version")
+        ),
+        status=_required_string(engagement_value.get("status"), "status"),
+        compiler_status=_optional_string(
+            engagement_value.get("compiler_status")
+        ),
+        private_intent=_optional_string(
+            engagement_value.get("private_intent")
+        ),
+        private_controller_reason=_optional_string(
+            engagement_value.get("private_controller_reason")
+        ),
+        private_compiler_summary=_optional_string(
+            engagement_value.get("private_compiler_summary")
+        ),
+        private_proposal=private_proposal,
+        private_result=private_result,
+        requested_tick=_required_integer_value(
+            engagement_value.get("requested_tick"),
+            "requested_tick",
+        ),
+        requested_at=_required_number_value(
+            engagement_value.get("requested_at"),
+            "requested_at",
+        ),
+        started_tick=_optional_integer_value(
+            engagement_value.get("started_tick")
+        ),
+        started_at=_optional_number_value(
+            engagement_value.get("started_at")
+        ),
+        terminal_tick=_optional_integer_value(
+            engagement_value.get("terminal_tick")
+        ),
+        terminal_at=_optional_number_value(
+            engagement_value.get("terminal_at")
+        ),
+        terminal_outcome=_optional_string(
+            engagement_value.get("terminal_outcome")
+        ),
+    )
+    groups_value = payload.get("groups")
+    if not isinstance(groups_value, list):
+        raise TypeError("engagement feature groups must be an array")
+    for group_value in groups_value:
+        if not isinstance(group_value, dict):
+            raise TypeError("engagement feature group must be an object")
+        group_id = _required_string(
+            group_value.get("engagement_group_id"),
+            "engagement_group_id",
+        )
+        private_issues = group_value.get("private_issues")
+        if private_issues is not None and not isinstance(
+            private_issues,
+            list,
+        ):
+            raise TypeError("private_issues must be an array")
+        group_private_proposal = group_value.get("private_proposal")
+        if group_private_proposal is not None and not isinstance(
+            group_private_proposal,
+            dict,
+        ):
+            raise TypeError("group private_proposal must be an object")
+        grounded_outcome = group_value.get("grounded_outcome", {})
+        if not isinstance(grounded_outcome, dict):
+            raise TypeError("group grounded_outcome must be an object")
+        store.append_engagement_group(
+            run_id=record.run_id,
+            engagement_id=engagement_id,
+            engagement_group_id=group_id,
+            record_id=record.record_id,
+            ordinal=_optional_integer_value(group_value.get("ordinal")),
+            required_atomic=_optional_boolean_value(
+                group_value.get("required_atomic")
+            ),
+            validation_status=_required_string(
+                group_value.get("validation_status"),
+                "validation_status",
+            ),
+            execution_status=_required_string(
+                group_value.get("execution_status"),
+                "execution_status",
+            ),
+            status=_required_string(group_value.get("status"), "status"),
+            private_rejection_reason=_optional_string(
+                group_value.get("private_rejection_reason")
+            ),
+            failure_reason=_optional_string(
+                group_value.get("failure_reason")
+            ),
+            private_issues=private_issues,
+            private_proposal=group_private_proposal,
+            grounded_outcome=grounded_outcome,
+        )
+        invocations_value = group_value.get("invocations")
+        if not isinstance(invocations_value, list):
+            raise TypeError("engagement invocations must be an array")
+        for invocation_value in invocations_value:
+            if not isinstance(invocation_value, dict):
+                raise TypeError(
+                    "engagement feature invocation must be an object"
+                )
+            proposal_arguments_value = invocation_value.get(
+                "private_proposal_arguments"
+            )
+            normalized_arguments_value = invocation_value.get(
+                "private_normalized_arguments"
+            )
+            invocation_private_result_value = invocation_value.get(
+                "private_result"
+            )
+            for name, value in (
+                ("private_proposal_arguments", proposal_arguments_value),
+                (
+                    "private_normalized_arguments",
+                    normalized_arguments_value,
+                ),
+                ("private_result", invocation_private_result_value),
+            ):
+                if value is not None and not isinstance(value, dict):
+                    raise TypeError(f"{name} must be an object")
+            proposal_arguments = (
+                proposal_arguments_value
+                if isinstance(proposal_arguments_value, dict)
+                else None
+            )
+            normalized_arguments = (
+                normalized_arguments_value
+                if isinstance(normalized_arguments_value, dict)
+                else None
+            )
+            invocation_private_result = (
+                invocation_private_result_value
+                if isinstance(invocation_private_result_value, dict)
+                else None
+            )
+            invocation_outcome = invocation_value.get(
+                "grounded_outcome",
+                {},
+            )
+            if not isinstance(invocation_outcome, dict):
+                raise TypeError(
+                    "invocation grounded_outcome must be an object"
+                )
+            store.append_engagement_invocation(
+                run_id=record.run_id,
+                engagement_id=engagement_id,
+                engagement_group_id=group_id,
+                engagement_invocation_id=_required_string(
+                    invocation_value.get("engagement_invocation_id"),
+                    "engagement_invocation_id",
+                ),
+                record_id=record.record_id,
+                ordinal=_optional_integer_value(
+                    invocation_value.get("ordinal")
+                ),
+                capability=_optional_string(
+                    invocation_value.get("capability")
+                ),
+                consequence_tier=_optional_integer_value(
+                    invocation_value.get("consequence_tier")
+                ),
+                subject_id=_optional_string(
+                    invocation_value.get("subject_id")
+                ),
+                target_id=_optional_string(
+                    invocation_value.get("target_id")
+                ),
+                status=_required_string(
+                    invocation_value.get("status"),
+                    "status",
+                ),
+                private_proposal_arguments=proposal_arguments,
+                private_normalized_arguments=normalized_arguments,
+                private_result=invocation_private_result,
+                grounded_outcome=invocation_outcome,
+            )
+
+
+def _engagement_invocation_payload(
+    invocation: _EngagementInvocationProjection,
+    include_private: bool,
+) -> dict[str, JsonValue]:
+    payload: dict[str, JsonValue] = {
+        "engagement_invocation_id": invocation.invocation_id,
+        "ordinal": invocation.ordinal,
+        "capability": invocation.capability,
+        "consequence_tier": invocation.consequence_tier,
+        "subject_id": invocation.subject_id,
+        "status": invocation.status,
+        "grounded_outcome": invocation.grounded_outcome,
+    }
+    if include_private:
+        payload.update(
+            {
+                "target_id": invocation.target_id,
+                "private_proposal_arguments": (
+                    invocation.private_proposal_arguments
+                ),
+                "private_normalized_arguments": (
+                    invocation.private_normalized_arguments
+                ),
+                "private_result": invocation.private_result,
+            }
+        )
+    return payload
+
+
+def _public_engagement_event_payload(
+    event: DomainEvent,
+) -> dict[str, JsonValue]:
+    safe_names = (
+        "engagement_id",
+        "action_id",
+        "plan_id",
+        "plan_revision",
+        "decision_id",
+        "tool_call_id",
+        "root_correlation_id",
+        "group_id",
+        "group_ordinal",
+        "required_atomic",
+        "invocation_id",
+        "invocation_ordinal",
+        "invocation_ids",
+        "capability",
+        "consequence_tier",
+        "modality",
+        "disclosure",
+        "public_text",
+        "expression_band",
+        "activity",
+        "duration_band",
+        "duration_seconds",
+        "effort_band",
+        "mode",
+        "sound_band",
+        "sound_range",
+        "group_count",
+        "rejected_group_count",
+        "completed_group_count",
+        "failed_group_count",
+        "group_statuses",
+    )
+    payload = {
+        name: event.payload[name]
+        for name in safe_names
+        if name in event.payload
+    }
+    if event.event_type not in {
+        "engagement.requested",
+        "engagement.compilation_requested",
+        "engagement.compilation_completed",
+        "engagement.compilation_failed",
+        "engagement.compilation_cancelled",
+    }:
+        reason = event.payload.get("reason")
+        if isinstance(reason, str):
+            payload["reason"] = reason
+    payload["event_type"] = event.event_type
+    return payload
+
+
+def _engagement_proposal(
+    model_turn: dict[str, JsonValue],
+) -> dict[str, JsonValue] | None:
+    tool_calls = model_turn.get("tool_calls")
+    if not isinstance(tool_calls, list) or not tool_calls:
+        return None
+    first = tool_calls[0]
+    if not isinstance(first, dict):
+        return None
+    arguments = first.get("arguments")
+    return dict(arguments) if isinstance(arguments, dict) else None
+
+
+def _group_has_public_execution(
+    group: _EngagementGroupProjection,
+) -> bool:
+    return group.validation_status == "valid" and (
+        group.execution_status
+        not in {"not_started", "pending"}
+        or any(
+            invocation.status == "committed"
+            for invocation in group.invocations.values()
+        )
+    )
+
+
+def _first_issue_code(issues: list[JsonValue]) -> str | None:
+    for issue in issues:
+        if isinstance(issue, dict):
+            code = issue.get("code")
+            if isinstance(code, str):
+                return code
+    return None
+
+
+def _optional_string(value: JsonValue | object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _required_string(value: JsonValue | object, name: str) -> str:
+    result = _optional_string(value)
+    if result is None:
+        raise TypeError(f"{name} must be a string")
+    return result
+
+
+def _optional_string_tuple(
+    value: JsonValue | object,
+) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) for item in value
+    ):
+        return None
+    return tuple(value)
+
+
+def _string_array_length(value: JsonValue | object) -> int:
+    values = _optional_string_tuple(value)
+    return len(values) if values is not None else 0
+
+
+def _optional_integer_value(value: JsonValue | object) -> int | None:
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool)
+        else None
+    )
+
+
+def _required_integer_value(value: JsonValue | object, name: str) -> int:
+    result = _optional_integer_value(value)
+    if result is None:
+        raise TypeError(f"{name} must be an integer")
+    return result
+
+
+def _optional_boolean_value(value: JsonValue | object) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _optional_number_value(value: JsonValue | object) -> float | None:
+    return (
+        float(value)
+        if isinstance(value, int | float) and not isinstance(value, bool)
+        else None
+    )
+
+
+def _required_number_value(value: JsonValue | object, name: str) -> float:
+    result = _optional_number_value(value)
+    if result is None:
+        raise TypeError(f"{name} must be numeric")
+    return result
 
 
 def _required_object(

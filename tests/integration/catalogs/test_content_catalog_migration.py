@@ -103,7 +103,7 @@ def test_catalog_write_creates_backup_and_updates_sources(tmp_path: Path) -> Non
     )["schema_version"] == 1
     assert json.loads(
         (source / "elements/legacy-object.json").read_text(encoding="utf-8")
-    )["schema_version"] == 3
+    )["schema_version"] == 4
 
 
 def test_invalid_catalog_never_writes_or_creates_backup(tmp_path: Path) -> None:

@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "b8f6f61406eb7b92834ce68c6375b88024cf306405aa95735333c3dc3d992158",
+        "content_hash": "7dc40475b2f1adc5df3348ebfdf2ea677fe2f4e2054525d67bb9072bbcbdb8c0",
         "id": "greyford-office-evening.map-greyford-northbank-pharmacy",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "a831871d3693fbf01159abef2ae2ef27d33d10d073324a499cfa7a519e554e6d",
+        "content_hash": "67866492b080e9c47c4e402199ec284892a669319aca4ca9bda197033f63e993",
         "id": "greyford-office-evening.station-greyford-capital-stadium-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

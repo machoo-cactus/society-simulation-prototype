@@ -477,7 +477,7 @@ def test_catalog_filters_newest_first_cursor_and_metadata(tmp_path: Path) -> Non
             persisted_statuses=("completed",),
             effective_statuses=("completed",),
             scenario_name="Alpha",
-            dataset_schema_version="stage0.dataset.v4",
+            dataset_schema_version="stage0.dataset.v6",
             capture_complete=True,
             started_at_or_after=base,
             started_before=base + timedelta(days=3),

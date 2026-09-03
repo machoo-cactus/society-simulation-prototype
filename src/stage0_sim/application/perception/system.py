@@ -31,6 +31,9 @@ from stage0_sim.domain.perception import (
     PerceptibleFact,
     sensory_sweep,
 )
+from stage0_sim.domain.perception.auditory import (
+    resolve_auditory_recipients,
+)
 from stage0_sim.domain.systems import SystemContext
 from stage0_sim.domain.systems.interactions import physical_object_is_exposed
 from stage0_sim.domain.systems.spatial_context import local_world_for_agent
@@ -109,6 +112,19 @@ class PerceptionSystem:
                 self._route_movement(context, event, observers)
             elif event.event_type in {"activity.changed", "affordance.started"}:
                 self._route_visual_event(context, event, observers)
+            elif event.event_type in {
+                "text.read_started",
+                "text.write_started",
+            }:
+                self._route_text_activity(context, event, observers)
+            elif event.event_type == "text.delivery_completed":
+                self._route_text_delivery(context, event)
+            elif event.event_type == "engagement.capability_committed":
+                self._route_engagement_evidence(
+                    context,
+                    event,
+                    observers,
+                )
             elif event.event_type in {
                 "interaction.started",
                 "interaction.completed",
@@ -636,6 +652,100 @@ class PerceptionSystem:
                 salience=0.8,
             )
 
+    def _route_text_activity(
+        self,
+        context: SystemContext,
+        event: DomainEvent,
+        observers: tuple[str, ...],
+    ) -> None:
+        if event.agent_id is None:
+            return
+        target_id = _string_value(event.payload.get("target_id"))
+        if target_id is None:
+            return
+        activity = (
+            "reading"
+            if event.event_type == "text.read_started"
+            else "writing"
+        )
+        for observer_id in observers:
+            perception = context.registry.get_component(
+                observer_id, PerceptionComponent
+            )
+            if observer_id != event.agent_id and (
+                event.agent_id not in perception.visible_now
+                or target_id not in perception.visible_objects_now
+            ):
+                continue
+            self._deliver(
+                context,
+                observer_id,
+                self._fact(
+                    context,
+                    "text_activity_observed",
+                    Modality.VISUAL,
+                    DisclosureClass.LOCAL_VISUAL,
+                    subject_id=event.agent_id,
+                    object_id=target_id,
+                    event_id=event.event_id,
+                    properties={
+                        "activity": activity,
+                        "display_name": _display_name(
+                            context, event.agent_id
+                        ),
+                        "target_name": _display_name(context, target_id),
+                    },
+                ),
+                salience=0.7,
+            )
+
+    def _route_text_delivery(
+        self,
+        context: SystemContext,
+        event: DomainEvent,
+    ) -> None:
+        from stage0_sim.domain.content import TextContentError, TextContentRegistry
+
+        address_id = _string_value(
+            event.payload.get("recipient_address_id")
+        )
+        if (
+            address_id is None
+            or not context.registry.has_resource(TextContentRegistry)
+        ):
+            return
+        try:
+            address = context.registry.get_resource(
+                TextContentRegistry
+            ).address(address_id)
+        except TextContentError:
+            return
+        if address.owner.kind.value != "character":
+            return
+        recipient_id = address.owner.id
+        if not context.registry.has_component(
+            recipient_id, PerceptionComponent
+        ):
+            return
+        self._deliver(
+            context,
+            recipient_id,
+            self._fact(
+                context,
+                "text_arrived",
+                Modality.SELF,
+                DisclosureClass.SELF,
+                subject_id=recipient_id,
+                event_id=event.event_id,
+                properties={
+                    "address_id": address.id,
+                    "display_label": address.display_label,
+                    "unread_count": event.payload.get("unread_count"),
+                },
+            ),
+            salience=0.8,
+        )
+
     def _route_visual_event(
         self,
         context: SystemContext,
@@ -679,6 +789,144 @@ class PerceptionSystem:
                         "display_name": _display_name(context, event.agent_id),
                     },
                 ),
+            )
+
+    def _route_engagement_evidence(
+        self,
+        context: SystemContext,
+        event: DomainEvent,
+        observers: tuple[str, ...],
+    ) -> None:
+        actor_id = event.agent_id
+        if actor_id is None or not context.registry.has_component(
+            actor_id,
+            PositionComponent,
+        ):
+            return
+        modality = event.payload.get("modality")
+        if modality == "auditory":
+            self._route_auditory_engagement(
+                context,
+                event,
+                observers,
+            )
+            return
+        if modality != "visual":
+            return
+        public_properties = {
+            key: event.payload[key]
+            for key in (
+                "capability",
+                "public_text",
+                "expression_band",
+                "activity",
+                "duration_band",
+                "duration_seconds",
+                "effort_band",
+            )
+            if key in event.payload
+        }
+        public_properties["display_name"] = _display_name(
+            context,
+            actor_id,
+        )
+        for observer_id in observers:
+            perception = context.registry.get_component(
+                observer_id,
+                PerceptionComponent,
+            )
+            if actor_id not in perception.visible_now:
+                continue
+            observer_world = local_world_for_agent(
+                context.registry,
+                observer_id,
+            )
+            if observer_world is None:
+                continue
+            self._deliver(
+                context,
+                observer_id,
+                self._fact(
+                    context,
+                    "engagement_evidence_observed",
+                    Modality.VISUAL,
+                    DisclosureClass.LOCAL_VISUAL,
+                    subject_id=actor_id,
+                    location_id=_zone_id(
+                        observer_world,
+                        context.registry.get_component(
+                            actor_id,
+                            PositionComponent,
+                        ).coordinate,
+                    ),
+                    event_id=event.event_id,
+                    properties=public_properties,
+                ),
+                salience=0.7,
+            )
+
+    def _route_auditory_engagement(
+        self,
+        context: SystemContext,
+        event: DomainEvent,
+        observers: tuple[str, ...],
+    ) -> None:
+        actor_id = event.agent_id
+        raw_recipients = event.payload.get("recipient_ids")
+        if actor_id is None or not isinstance(raw_recipients, list):
+            return
+        recipients = frozenset(
+            recipient_id
+            for recipient_id in raw_recipients
+            if isinstance(recipient_id, str)
+        )
+        public_text = event.payload.get("public_text")
+        if not isinstance(public_text, str):
+            return
+        public_properties = {
+            key: event.payload[key]
+            for key in (
+                "capability",
+                "public_text",
+                "mode",
+                "sound_band",
+                "sound_range",
+            )
+            if key in event.payload
+        }
+        public_properties["display_name"] = _display_name(
+            context,
+            actor_id,
+        )
+        for observer_id in observers:
+            if observer_id not in recipients:
+                continue
+            observer_world = local_world_for_agent(
+                context.registry,
+                observer_id,
+            )
+            if observer_world is None:
+                continue
+            self._deliver(
+                context,
+                observer_id,
+                self._fact(
+                    context,
+                    "engagement_evidence_heard",
+                    Modality.AUDITORY,
+                    DisclosureClass.LOCAL_AUDITORY,
+                    subject_id=actor_id,
+                    location_id=_zone_id(
+                        observer_world,
+                        context.registry.get_component(
+                            actor_id,
+                            PositionComponent,
+                        ).coordinate,
+                    ),
+                    event_id=event.event_id,
+                    properties=public_properties,
+                ),
+                salience=0.9,
             )
 
     def _route_time_update(
@@ -858,55 +1106,26 @@ class PerceptionSystem:
             or not context.registry.has_component(speaker_id, PositionComponent)
         ):
             return
-        source = context.registry.get_component(
-            speaker_id, PositionComponent
-        ).coordinate
         base_range = (
             configuration.whisper_range
             if channel == "whisper"
             else configuration.voice_range
         )
-        recipients: list[str] = []
-        for observer_id in observers:
-            if observer_id == speaker_id:
-                continue
-            if not _same_local_place(context, speaker_id, observer_id):
-                continue
+        recipients = [
+            recipient.entity_id
+            for recipient in resolve_auditory_recipients(
+                context.registry,
+                speaker_id,
+                maximum_range=base_range,
+                listener_ids=observers,
+            )
+        ]
+        for observer_id in recipients:
             observer_world = local_world_for_agent(
                 context.registry, observer_id
             )
             if observer_world is None:
                 continue
-            senses = _effective_senses(context.registry, observer_id)
-            target = context.registry.get_component(
-                observer_id, PositionComponent
-            ).coordinate
-            maximum = min(base_range, senses.hearing_range)
-            result = sensory_sweep(
-                observer_world.grid,
-                room_id=_room_id(context, observer_id),
-                origin_cells=_entity_cells(
-                    context.registry,
-                    speaker_id,
-                    source,
-                ),
-                target_cells=_entity_cells(
-                    context.registry,
-                    observer_id,
-                    target,
-                ),
-                maximum_range=maximum,
-                modality=SenseModality.HEARING,
-                spatial_index=(
-                    context.registry.get_resource(SpatialIndex)
-                    if context.registry.has_resource(SpatialIndex)
-                    else None
-                ),
-                ignored_entity_ids=frozenset({speaker_id, observer_id}),
-            )
-            if not result.clear:
-                continue
-            recipients.append(observer_id)
             self._deliver(
                 context,
                 observer_id,

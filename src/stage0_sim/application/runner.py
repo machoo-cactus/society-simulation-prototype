@@ -13,7 +13,7 @@ from stage0_sim.application.data_capture import (
 )
 from stage0_sim.domain.clock import SimulationClock
 from stage0_sim.domain.ecs import Registry
-from stage0_sim.domain.events import DomainEvent, EventBus
+from stage0_sim.domain.events import DomainEvent, EventBus, JsonValue
 from stage0_sim.domain.npcs import NpcControlMode
 from stage0_sim.domain.systems import SystemContext, SystemExecutor
 
@@ -138,9 +138,19 @@ class SimulationRunner:
         if self._advancing:
             self._stop_requested = True
             from stage0_sim.application.agents import AgentWorkCoordinator
+            from stage0_sim.application.engagements import (
+                EngagementWorkCoordinator,
+            )
 
             if self.registry.has_resource(AgentWorkCoordinator):
                 self.registry.get_resource(AgentWorkCoordinator).cancel_all(
+                    self.context,
+                    "simulation_stopped",
+                )
+            if self.registry.has_resource(EngagementWorkCoordinator):
+                self.registry.get_resource(
+                    EngagementWorkCoordinator
+                ).cancel_all(
                     self.context,
                     "simulation_stopped",
                 )
@@ -155,11 +165,91 @@ class SimulationRunner:
 
     def _prepare_stop(self) -> None:
         from stage0_sim.application.agents import AgentWorkCoordinator
+        from stage0_sim.application.engagements import EngagementWorkCoordinator
+        from stage0_sim.domain.components import (
+            ActionType,
+            EngagementExecutionComponent,
+            EngagementProgramComponent,
+            PendingEngagementComponent,
+            PlanComponent,
+            TextActionRequestComponent,
+        )
+        from stage0_sim.domain.lineage import clear_plan_lineage
+        from stage0_sim.domain.systems.engagements import (
+            cancel_engagement_state,
+        )
+        from stage0_sim.domain.systems.text_actions import cancel_text_action
 
         if self.registry.has_resource(AgentWorkCoordinator):
             coordinator = self.registry.get_resource(AgentWorkCoordinator)
             coordinator.cancel_all(self.context, "simulation_stopped")
             coordinator.close()
+        if self.registry.has_resource(EngagementWorkCoordinator):
+            engagement_coordinator = self.registry.get_resource(
+                EngagementWorkCoordinator
+            )
+            engagement_coordinator.cancel_all(
+                self.context,
+                "simulation_stopped",
+            )
+            engagement_coordinator.close()
+        engagement_actor_ids = sorted(
+            {
+                *(
+                    actor_id
+                    for actor_id, _ in self.registry.query(
+                        PendingEngagementComponent
+                    )
+                ),
+                *(
+                    actor_id
+                    for actor_id, _ in self.registry.query(
+                        EngagementProgramComponent
+                    )
+                ),
+                *(
+                    actor_id
+                    for actor_id, _ in self.registry.query(
+                        EngagementExecutionComponent
+                    )
+                ),
+            }
+        )
+        for actor_id in engagement_actor_ids:
+            if self.registry.has_component(actor_id, PlanComponent):
+                plan = self.registry.get_component(actor_id, PlanComponent)
+                has_engagement_action = (
+                    plan.current is not None
+                    and plan.current.action is ActionType.ENGAGE
+                ) or any(
+                    action.action is ActionType.ENGAGE
+                    for action in plan.queue
+                )
+                if has_engagement_action:
+                    clear_plan_lineage(
+                        self.context,
+                        actor_id,
+                        plan,
+                        reason="simulation_stopped",
+                    )
+                    continue
+            if any(
+                self.registry.has_component(actor_id, component_type)
+                for component_type in (
+                    PendingEngagementComponent,
+                    EngagementProgramComponent,
+                    EngagementExecutionComponent,
+                )
+            ):
+                cancel_engagement_state(
+                    self.context,
+                    actor_id,
+                    "simulation_stopped",
+                )
+        for actor_id in tuple(
+            self.registry.query_entities(TextActionRequestComponent)
+        ):
+            cancel_text_action(self.context, actor_id, "simulation_stopped")
         self.flush_pending_memory()
 
     def flush_pending_memory(self) -> None:
@@ -271,8 +361,29 @@ class SimulationRunner:
             AgentWorkCoordinator
         ).pending_decision_ids
 
+    @property
+    def cognition_pending_engagement_ids(self) -> tuple[str, ...]:
+        from stage0_sim.application.engagements import (
+            EngagementWorkCoordinator,
+        )
+
+        if not self.registry.has_resource(EngagementWorkCoordinator):
+            return ()
+        return self.registry.get_resource(
+            EngagementWorkCoordinator
+        ).pending_engagement_ids
+
+    @property
+    def cognition_pending_count(self) -> int:
+        return len(self.cognition_pending_decision_ids) + len(
+            self.cognition_pending_engagement_ids
+        )
+
     async def advance_one_tick(self) -> bool:
         from stage0_sim.application.agents import AgentWorkCoordinator
+        from stage0_sim.application.engagements import (
+            EngagementWorkCoordinator,
+        )
         from stage0_sim.application.memory_recording import MemoryWorkCoordinator
 
         self._advancing = True
@@ -288,6 +399,11 @@ class SimulationRunner:
                 if self.registry.has_resource(AgentWorkCoordinator)
                 else None
             )
+            engagement_coordinator = (
+                self.registry.get_resource(EngagementWorkCoordinator)
+                if self.registry.has_resource(EngagementWorkCoordinator)
+                else None
+            )
             has_barrier_work = (
                 (
                     self.registry.has_resource(MemoryWorkCoordinator)
@@ -300,6 +416,10 @@ class SimulationRunner:
                     coordinator is not None
                     and coordinator.pending_count > 0
                 )
+                or (
+                    engagement_coordinator is not None
+                    and engagement_coordinator.pending_count > 0
+                )
             )
             if has_barrier_work:
                 self.cognition_phase = CognitionPhase.WAITING
@@ -309,14 +429,31 @@ class SimulationRunner:
                     if coordinator is not None
                     else ()
                 )
+                batch_engagement_ids = (
+                    engagement_coordinator.pending_engagement_ids
+                    if engagement_coordinator is not None
+                    else ()
+                )
                 self._emit(
                     "cognition.barrier_started",
                     {
-                        "pending_count": len(batch_decision_ids),
+                        "pending_count": (
+                            len(batch_decision_ids)
+                            + len(batch_engagement_ids)
+                        ),
+                        "pending_decision_count": len(batch_decision_ids),
+                        "pending_engagement_count": len(
+                            batch_engagement_ids
+                        ),
+                        "pending_decision_ids": list(batch_decision_ids),
+                        "pending_engagement_ids": list(
+                            batch_engagement_ids
+                        ),
                     },
                 )
             else:
                 batch_decision_ids = ()
+                batch_engagement_ids = ()
             if (
                 not self._stop_requested
                 and self.registry.has_resource(MemoryWorkCoordinator)
@@ -343,6 +480,20 @@ class SimulationRunner:
                     self.context,
                     on_applying=self._mark_cognition_applying,
                 )
+            if engagement_coordinator is not None:
+                batch_engagement_ids = (
+                    engagement_coordinator.pending_engagement_ids
+                )
+            if (
+                not self._stop_requested
+                and engagement_coordinator is not None
+                and engagement_coordinator.pending_count > 0
+            ):
+                self.cognition_phase = CognitionPhase.WAITING
+                await engagement_coordinator.drain_and_wait(
+                    self.context,
+                    on_applying=self._mark_cognition_applying,
+                )
             self.cognition_phase = CognitionPhase.IDLE
             self._cognition_wait_started_at = None
             if has_barrier_work:
@@ -350,6 +501,11 @@ class SimulationRunner:
                     "cognition.barrier_settled",
                     {
                         "decision_count": len(batch_decision_ids),
+                        "engagement_count": len(
+                            batch_engagement_ids
+                        ),
+                        "decision_ids": list(batch_decision_ids),
+                        "engagement_ids": list(batch_engagement_ids),
                         "cancelled": self._stop_requested,
                     },
                 )
@@ -379,7 +535,7 @@ class SimulationRunner:
     def _emit(
         self,
         event_type: str,
-        payload: dict[str, bool | int | float | str | None] | None = None,
+        payload: dict[str, JsonValue] | None = None,
     ) -> DomainEvent:
         return self.events.emit(
             event_type,

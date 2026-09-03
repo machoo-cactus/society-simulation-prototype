@@ -27,12 +27,30 @@ def _read(path: Path) -> dict[str, Any]:
 def test_registry_has_one_deterministic_path_to_every_current_version() -> None:
     assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.CHARACTER, 1) == (1, 2)
     assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.CHARACTER, 2) == (2,)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 1) == (1, 2, 3)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 2) == (2, 3)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 3) == (3,)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 4) == (4, 5, 6)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 5) == (5, 6)
-    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 6) == (6,)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 1) == (1, 2, 3, 4)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 2) == (2, 3, 4)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 3) == (3, 4)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.ELEMENT, 4) == (4,)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 4) == (
+        4,
+        5,
+        6,
+        7,
+        8,
+    )
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 5) == (
+        5,
+        6,
+        7,
+        8,
+    )
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 6) == (
+        6,
+        7,
+        8,
+    )
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 7) == (7, 8)
+    assert CONTENT_MIGRATION_REGISTRY.path(ResourceKind.SCENARIO, 8) == (8,)
     CONTENT_MIGRATION_REGISTRY.validate_integrity()
 
 
@@ -99,7 +117,7 @@ def test_all_element_v1_kinds_match_exact_golden_outputs() -> None:
     assert placement["placement"]["anchor"] == {"x": 4, "y": 4}
 
 
-def test_scenario_v4_to_v6_rewrites_all_element_hashes_exactly() -> None:
+def test_scenario_v4_to_v8_rewrites_all_element_hashes_exactly() -> None:
     context = _expected_element_context()
     raw = _read(FIXTURES / "legacy/scenarios/legacy-city.json")
     expected = _read(CURRENT / "scenarios/legacy-city.json")
@@ -116,6 +134,96 @@ def test_scenario_v4_to_v6_rewrites_all_element_hashes_exactly() -> None:
     assert "$.world.city_zones[0].buildings[0].element.content_hash" in (
         result.changed_paths
     )
+
+
+def test_scenario_v6_to_v7_adds_engage_only_to_the_previous_default() -> None:
+    default = {
+        "schema_version": 6,
+        "name": "Default tools",
+        "cognition": {
+            "tool_allowlist": [
+                "navigate_to",
+                "perform",
+                "say",
+                "wait",
+                "skip",
+                "transact",
+                "check_environment",
+            ]
+        },
+    }
+    migrated_default = CONTENT_MIGRATION_REGISTRY.migrate(
+        ResourceKind.SCENARIO,
+        "default-tools",
+        default,
+    )
+    assert migrated_default.succeeded, migrated_default.errors
+    assert migrated_default.canonical_json is not None
+    assert "engage" in migrated_default.canonical_json["cognition"]["tool_allowlist"]
+
+    restricted = {
+        "schema_version": 6,
+        "name": "Restricted tools",
+        "cognition": {"tool_allowlist": ["say", "wait"]},
+    }
+    migrated_restricted = CONTENT_MIGRATION_REGISTRY.migrate(
+        ResourceKind.SCENARIO,
+        "restricted-tools",
+        restricted,
+    )
+    assert migrated_restricted.succeeded, migrated_restricted.errors
+    assert migrated_restricted.canonical_json is not None
+    assert migrated_restricted.canonical_json["cognition"]["tool_allowlist"] == [
+        "say",
+        "wait",
+    ]
+
+
+def test_scenario_v7_to_v8_adds_text_tools_only_to_previous_defaults() -> None:
+    default_tools = [
+        "navigate_to",
+        "perform",
+        "say",
+        "engage",
+        "wait",
+        "skip",
+        "transact",
+        "check_environment",
+    ]
+    result = CONTENT_MIGRATION_REGISTRY.migrate(
+        ResourceKind.SCENARIO,
+        "text-tools",
+        {
+            "schema_version": 7,
+            "name": "Text tools",
+            "cognition": {"tool_allowlist": default_tools},
+            "entities": [
+                {
+                    "id": "actor",
+                    "components": {
+                        "controller": {"tool_allowlist": default_tools}
+                    },
+                }
+            ],
+        },
+    )
+
+    assert result.succeeded, result.errors
+    assert result.canonical_json is not None
+    assert result.canonical_json["schema_version"] == 8
+    assert result.canonical_json["text_content"] == {
+        "artifacts": [],
+        "collections": [],
+        "addresses": [],
+        "groups": [],
+    }
+    assert result.canonical_json["cognition"]["tool_allowlist"][-2:] == [
+        "read_text",
+        "write_text",
+    ]
+    assert result.canonical_json["entities"][0]["components"]["controller"][
+        "tool_allowlist"
+    ][-2:] == ["read_text", "write_text"]
 
 
 def test_current_version_check_is_a_canonical_noop() -> None:

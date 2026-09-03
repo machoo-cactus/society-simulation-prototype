@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "103aa7f72fd9a29deac790c854229e143985454cfd941292a6675cc600304b3d",
+        "content_hash": "1973599fc404b4e38cf521754575f7ab7c050ab0cb04f3164f22baba297d2db4",
         "id": "greyford-office-evening.station-greyford-air-cargo-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

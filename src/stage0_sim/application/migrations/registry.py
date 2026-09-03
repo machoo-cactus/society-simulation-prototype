@@ -547,6 +547,135 @@ def _scenario_v5_to_v6(
     )
 
 
+def _scenario_v6_to_v7(
+    raw: JsonObject,
+    context: MigrationContext,
+) -> _StepOutput:
+    del context
+    payload = copy.deepcopy(raw)
+    changed = ["$.schema_version"]
+    old_default_tools = [
+        "navigate_to",
+        "perform",
+        "say",
+        "wait",
+        "skip",
+        "transact",
+        "check_environment",
+    ]
+    cognition = payload.get("cognition")
+    if cognition is not None:
+        if not isinstance(cognition, dict):
+            raise ValueError("version 6 scenario cognition must be an object")
+        tool_allowlist = cognition.get("tool_allowlist")
+        if tool_allowlist is None or tool_allowlist == old_default_tools:
+            cognition["tool_allowlist"] = [
+                "navigate_to",
+                "perform",
+                "say",
+                "engage",
+                "wait",
+                "skip",
+                "transact",
+                "check_environment",
+            ]
+            changed.append("$.cognition.tool_allowlist")
+    payload["schema_version"] = 7
+    return _StepOutput(payload, changed_paths=tuple(changed))
+
+
+def _element_v3_to_v4(
+    raw: JsonObject,
+    context: MigrationContext,
+) -> _StepOutput:
+    del context
+    payload = copy.deepcopy(raw)
+    changed = ["$.schema_version"]
+    if payload.get("kind") == "object":
+        physical = payload.get("physical")
+        if not isinstance(physical, dict):
+            raise ValueError("version 3 object requires physical data")
+        capabilities = physical.get("capabilities")
+        if not isinstance(capabilities, dict):
+            raise ValueError(
+                "version 3 object physical.capabilities must be an object"
+            )
+        capabilities.setdefault("content_endpoints", [])
+        changed.append("$.physical.capabilities.content_endpoints")
+    payload["schema_version"] = 4
+    return _StepOutput(payload, changed_paths=tuple(changed))
+
+
+def _scenario_v7_to_v8(
+    raw: JsonObject,
+    context: MigrationContext,
+) -> _StepOutput:
+    del context
+    payload = copy.deepcopy(raw)
+    changed = ["$.schema_version"]
+    old_default_tools = [
+        "navigate_to",
+        "perform",
+        "say",
+        "engage",
+        "wait",
+        "skip",
+        "transact",
+        "check_environment",
+    ]
+    new_default_tools = [
+        *old_default_tools,
+        "read_text",
+        "write_text",
+    ]
+    cognition = payload.get("cognition")
+    if cognition is not None:
+        if not isinstance(cognition, dict):
+            raise ValueError("version 7 scenario cognition must be an object")
+        tool_allowlist = cognition.get("tool_allowlist")
+        if tool_allowlist is None or tool_allowlist == old_default_tools:
+            cognition["tool_allowlist"] = new_default_tools
+            changed.append("$.cognition.tool_allowlist")
+    entities = payload.get("entities", [])
+    if not isinstance(entities, list):
+        raise ValueError("version 7 scenario entities must be an array")
+    for index, entity in enumerate(entities):
+        if not isinstance(entity, dict):
+            raise ValueError(
+                f"version 7 scenario entity {index} must be an object"
+            )
+        components = entity.get("components", {})
+        if not isinstance(components, dict):
+            raise ValueError(
+                f"version 7 scenario entity {index} components must be an object"
+            )
+        controller = components.get("controller")
+        if controller is None:
+            continue
+        if not isinstance(controller, dict):
+            raise ValueError(
+                f"version 7 scenario entity {index} controller must be an object"
+            )
+        tool_allowlist = controller.get("tool_allowlist")
+        if tool_allowlist is None or tool_allowlist == old_default_tools:
+            controller["tool_allowlist"] = new_default_tools
+            changed.append(
+                f"$.entities[{index}].components.controller.tool_allowlist"
+            )
+    payload.setdefault(
+        "text_content",
+        {
+            "artifacts": [],
+            "collections": [],
+            "addresses": [],
+            "groups": [],
+        },
+    )
+    changed.append("$.text_content")
+    payload["schema_version"] = 8
+    return _StepOutput(payload, changed_paths=tuple(changed))
+
+
 def _rewrite_element_references(
     value: Any,
     hashes: dict[str, str],
@@ -603,6 +732,12 @@ CONTENT_MIGRATION_REGISTRY.register(
     _element_v2_to_v3,
 )
 CONTENT_MIGRATION_REGISTRY.register(
+    ResourceKind.ELEMENT,
+    3,
+    4,
+    _element_v3_to_v4,
+)
+CONTENT_MIGRATION_REGISTRY.register(
     ResourceKind.SCENARIO,
     4,
     5,
@@ -613,5 +748,17 @@ CONTENT_MIGRATION_REGISTRY.register(
     5,
     6,
     _scenario_v5_to_v6,
+)
+CONTENT_MIGRATION_REGISTRY.register(
+    ResourceKind.SCENARIO,
+    6,
+    7,
+    _scenario_v6_to_v7,
+)
+CONTENT_MIGRATION_REGISTRY.register(
+    ResourceKind.SCENARIO,
+    7,
+    8,
+    _scenario_v7_to_v8,
 )
 CONTENT_MIGRATION_REGISTRY.validate_integrity()

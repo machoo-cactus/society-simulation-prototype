@@ -177,7 +177,7 @@ def test_object_capabilities_are_closed_and_staffed_objects_require_roles() -> N
 def test_scenario_source_is_an_explicit_break_from_schema_v2() -> None:
     source = ScenarioSourceDefinition.model_validate(
         {
-            "schema_version": 6,
+            "schema_version": 8,
             "name": "Reference scenario",
             "world": {
                 "type": "city",
@@ -203,8 +203,8 @@ def test_scenario_source_is_an_explicit_break_from_schema_v2() -> None:
         }
     )
 
-    assert source.schema_version == 6
-    with pytest.raises(ValidationError, match="6"):
+    assert source.schema_version == 8
+    with pytest.raises(ValidationError, match="8"):
         ScenarioSourceDefinition.model_validate(
             {"schema_version": 2, "name": "Legacy"}
         )

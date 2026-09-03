@@ -21,7 +21,7 @@
   "objects": [
     {
       "element": {
-        "content_hash": "faa85edff2a6618b67d0ba32915e56ce7e9ca81d1c4f5ca7c4aed2aa8a88940e",
+        "content_hash": "30c053c73d698592983665fa7a8b01be9c115bf1f3285fd3b119ef780cf8390f",
         "id": "greyford-office-evening.station-greyford-rivermarket-grocer-primary",
         "kind": "object"
       },
@@ -47,7 +47,7 @@
     },
     {
       "element": {
-        "content_hash": "f93cbdf488f6fd9e39087ec08de718c11aa620d4df6cf0e921dc3bdd017aff62",
+        "content_hash": "24fc6e8a95e5aa3d1a4d396cbbaa3dabbfd902da127df1f88a170d433645e74a",
         "id": "greyford-office-evening.transaction-point-greyford-rivermarket-checkout",
         "kind": "object"
       },
@@ -76,7 +76,7 @@
     }
   ],
   "room_type": "INTERIOR",
-  "schema_version": 3,
+  "schema_version": 4,
   "spatial_metric": {
     "microcells_per_legacy_cell": 9
   },

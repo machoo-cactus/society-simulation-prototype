@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "5f658bbb92c0b3a7b8870e906301bf8fdb33402dc883cdee7ae6f908049983ad",
+        "content_hash": "b875b6646bc54c026749d21c248565393c89313d7fa2794863e62a5b90249fff",
         "id": "greyford-office-evening.map-greyford-quayside-metro-station",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

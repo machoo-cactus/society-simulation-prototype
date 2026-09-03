@@ -24,7 +24,7 @@
   "rooms": [
     {
       "element": {
-        "content_hash": "29e1b49a83b5173631583e059359cc598ac6657e682114fbf7f509ae2312b8e7",
+        "content_hash": "2234ea2e330dc6177e569d2b465676acdb0fd1471a827d686e895829a967bdc9",
         "id": "greyford-office-evening.map-greyford-lakeside-townhouses",
         "kind": "room"
       },
@@ -35,5 +35,5 @@
       }
     }
   ],
-  "schema_version": 3
+  "schema_version": 4
 }

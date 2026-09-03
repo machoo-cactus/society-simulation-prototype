@@ -10,7 +10,7 @@ provider routes in the simulation process.
 
 1. Manage reusable source resources through `/characters`, `/scenarios`, and
    `/elements`.
-2. `POST /simulation/scenarios` with a schema-version-6 source plus assignment
+2. `POST /simulation/scenarios` with a schema-version-8 source plus assignment
    choices as applicable. References are validated, resolved, and frozen.
 3. `POST /simulation/runs` with the prepared scenario ID.
 4. Inspect `/simulation/runs/{run_id}` or `/snapshot`.
@@ -31,8 +31,20 @@ cardinal orientation, local footprint offsets, occupied cells, effective
 movement/vision obstruction, open/locked state, capabilities, visible slot
 occupancy, visible parent/custody/held relations, interaction anchors, and
 index membership. Agents expose their body footprint, posture/support, hands,
+
+Content-capable targets expose endpoint labels, kinds, supported operations,
+access modes, and authorized artifact headers/revisions. Ordinary snapshots
+and websocket telemetry never include text bodies, deleted revisions, mailbox
+contents, or the authoritative actor behind reader-visible anonymous text. Agents expose their body footprint, posture/support, hands,
 held objects, and current interaction request/execution; operator projections
 also expose compact microcell movement/path state.
+
+Selected-agent operator snapshots also expose privacy-safe engagement state:
+one pending, compiled, or active engagement; action/plan/decision/tool lineage;
+reference and participant IDs; current group; group progress/status; grounded
+capability evidence; and up to five recent terminal outcomes. Raw intent,
+private controller reason, compiler scene/summary/response, rejected proposal
+details, and private normalized arguments are not rendered.
 
 The ordinary API projection omits descriptive private ownership and
 controller-private reasons. It excludes an object, relation, or slot occupant
@@ -63,7 +75,8 @@ The same shape applies to characters, scenarios, and elements:
 | Event history | `GET /simulation/runs/{run_id}/events` |
 | World inspection | `GET /simulation/runs/{run_id}/world/city`, `/city-zones/{id}`, `/buildings/{id}`, `/rooms/{id}`, `/objects/{id}`, `/neighborhoods/{id}` |
 | External telemetry | `WS /simulation/runs/{run_id}/stream` |
-| Research | `/data*` and `/exports/*` as documented in [Research data](DATA_COLLECTION.md) |
+| Engagement research | `GET /simulation/runs/{run_id}/data/engagements`, `/engagement-groups`, `/engagement-invocations` |
+| Other research/export | `/data*` and `/exports/*` as documented in [Research data](DATA_COLLECTION.md) |
 
 Abbreviated suffixes in a table row retain the complete prefix shown by that
 row.
@@ -95,17 +108,27 @@ saved library scenario. Staging never starts a run. Start, pause, resume,
 single-step, speed, vital mutation, stop, map/view changes, and event clearing
 remain distinct labeled forms.
 
+The operator event filter has an `Engagement` family for all `engagement.*`
+events. Event rows and the selected-character engagement inspector show only
+privacy-safe projected fields and committed evidence, including actual
+auditory recipients. Compiler choice is not displayed as successful world
+state. The inspector distinguishes pending compilation, compiled work, active
+group progress, completed/failed/cancelled groups, partial terminal outcomes,
+and recent history without relying on color.
+
 The authoring pages use content hashes for optimistic concurrency. Scenario and
 element drafts are server-side and tab-scoped; malformed or incomplete values
 survive validation redirects without becoming global state.
 
-The descriptor-driven scenario-version-6 and element-version-3 forms cover
+The descriptor-driven scenario-version-8 and element-version-4 forms cover
 physical footprints, semantic intrinsics, movement and per-sense obstruction,
 wearable/scent capabilities and slots, initial
 open/locked/ownership/custody state, room metric, placement
 anchor/orientation/relation/slot, and entrance/portal door links. Physical
 objects are presented separately from compatibility station and transaction
-views.
+views. Version 7 also exposes separate engagement compiler settings and
+top-level engagement validation/effect bands. Validating or staging these
+settings does not start or advance a run.
 
 ## UI architecture
 

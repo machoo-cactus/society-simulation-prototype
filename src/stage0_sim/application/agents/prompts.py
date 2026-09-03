@@ -6,7 +6,7 @@ from stage0_sim.application.agents.contracts import (
     ModelMessage,
 )
 
-PROMPT_VERSION = "tool-controller-v5"
+PROMPT_VERSION = "tool-controller-v6"
 
 GENERAL_CHARACTER_CONTROLLER_PROMPT = (
     "You are the executive controller for one embodied character in a "
@@ -25,7 +25,15 @@ GENERAL_CHARACTER_CONTROLLER_PROMPT = (
     "environment information marked unavailable. Give only a short decision "
     "reason, never hidden reasoning. Use interact_with only for an interaction "
     "advertised on an observable physical target; navigating near an object "
-    "does not itself interact with it."
+    "does not itself interact with it. Use read_text and write_text only with "
+    "advertised content endpoints, artifact and block IDs, and exact observed "
+    "revisions. A completed_text_reads entry is private text the character "
+    "finished reading before this decision; do not treat unread mailbox item "
+    "metadata as body text."
+    " Prefer a specific available action tool whenever it accurately expresses "
+    "the intention. Otherwise use engage as the fully supported free-form "
+    "action; describe only the attempted behavior and do not prescribe its "
+    "outcome or another character's private response."
 )
 
 NPC_CONTROLLER_PROMPT = (
@@ -48,6 +56,18 @@ def build_messages(request: CharacterDecisionRequest) -> tuple[ModelMessage, ...
         "memories": list(request.memories),
         "information_query": request.information_query,
         "allowed_tools": list(request.allowed_tools),
+        "completed_text_reads": [
+            {
+                "artifact_id": receipt.artifact_id,
+                "artifact_revision": receipt.artifact_revision,
+                "block_ids": list(receipt.block_ids),
+                "text": receipt.rendered_text,
+                "endpoint_id": receipt.endpoint_id,
+                "target_id": receipt.target_id,
+                "content_hash": receipt.content_hash,
+            }
+            for receipt in request.completed_text_reads
+        ],
     }
     profile_metadata = (
         f"profile={request.profile_id}, "

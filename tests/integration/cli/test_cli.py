@@ -18,7 +18,7 @@ def test_scenario_loader_bootstraps_entities(tmp_path: Path) -> None:
     scenario_path.write_text(
         json.dumps(
             {
-                "schema_version": 6,
+                "schema_version": 8,
                 "name": "test",
                 "seed": 7,
                 "entities": [
@@ -44,7 +44,7 @@ def test_scenario_loader_bootstraps_entities(tmp_path: Path) -> None:
 def test_scenario_loader_rejects_duplicate_entities(tmp_path: Path) -> None:
     scenario_path = tmp_path / "invalid.json"
     scenario_path.write_text(
-        '{"schema_version":6,"name":"invalid",'
+        '{"schema_version":8,"name":"invalid",'
         '"entities":[{"id":"same"},{"id":"same"}]}',
         encoding="utf-8",
     )
@@ -100,7 +100,7 @@ def test_cli_rejects_schema_v2_user_input(
 
     assert exit_code == 2
     error = capsys.readouterr().err
-    assert "scenario schema version 6 is required" in error
+    assert "scenario schema version 8 is required" in error
     assert "stage0-sim migrate content" in error
 
 
